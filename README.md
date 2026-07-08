@@ -8,6 +8,8 @@ control panel with a safe preview-before-you-go-live workflow.
 Built with Electron + Express + WebSockets. Runs entirely on your own
 machine — no cloud services, no accounts, no external server.
 
+**[⬇ Download the latest Windows installer](https://github.com/bos-tn/widener-stream-control-app/releases/latest)**
+
 ## Features
 
 - **One overlay URL, forever.** Point an OBS Browser Source at
