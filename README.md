@@ -1,201 +1,179 @@
+<div align="center">
+
+<img src="app/public/control/assets/logo.png" alt="Widener Esports" width="96">
+
 # Widener Esports Stream Control
 
-A desktop app for running Widener Esports' Twitch/stream overlays. It
-replaces a folder of 16 near-duplicate per-game overlay HTML files with a
-single overlay, one stable OBS Browser Source URL, and a live-editable
-control panel with a safe preview-before-you-go-live workflow.
+**One overlay. One URL. Nothing goes live until you say so.**
 
-Built with Electron + Express + WebSockets. Runs entirely on your own
-machine — no cloud services, no accounts, no external server.
+A desktop control room for Widener Esports' stream overlays — replace a folder of
+16 hand-edited HTML files with a single live-editable overlay, a trustworthy
+preview, and a one-click curtain-wipe push to stream.
+
+[![Latest release](https://img.shields.io/github/v/release/bos-tn/widener-stream-control-app?label=download&color=0054B8)](https://github.com/bos-tn/widener-stream-control-app/releases/latest)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-F0B310)
+![Runs local](https://img.shields.io/badge/runs-100%25%20local-3ddc84)
 
 **[⬇ Download the latest Windows installer](https://github.com/bos-tn/widener-stream-control-app/releases/latest)**
 
-## Features
+</div>
 
-- **One overlay URL, forever.** Point an OBS Browser Source at
-  `http://localhost:4310/overlay` once and never touch it again. Which
-  game, which moment (Starting Soon / Post-Match / Rosters), and NECC
-  bracket/match graphics are all switched via the control panel, not by
-  changing URLs or re-adding sources.
-- **Draft vs. Live.** Every edit you make lands in a "draft" that only the
-  control panel's own preview pane can see. Nothing goes out to OBS until
-  you click **Push Live**, so you can safely stage text, countdowns, and
-  rosters mid-broadcast without anyone seeing the edit in progress.
-- **Full-screen roster view** for two-team lineups, with player rows that
-  automatically scale to fit however many players are selected.
-- **NECC / LeagueOS match import** — paste a match or bracket link and pull
-  in team names, logos, and rosters automatically, or fill everything in
-  by hand.
-- **Configurable countdown, socials, montage clip, logo, and layout**, all
-  editable live from one panel.
-- **Packaged as a normal Windows app** (installer + portable unpacked
-  build) via electron-builder — no Node.js install required to run it.
+---
 
-## Requirements
+## Why this exists
 
-- Windows 10/11 (the packaged build targets Windows; the dev server itself
-  is cross-platform)
-- [Node.js](https://nodejs.org/) 18+ (developed against v22) if you want to
-  run from source or build the installer
-- OBS Studio (or any tool that supports a Browser Source / embedded web
-  view) to actually display the overlay on stream
+Before this app, every game and every stream moment (starting soon, post-match,
+rosters…) was its own overlay HTML file — sixteen near-identical copies, edited
+by hand mid-broadcast, each one a separate OBS Browser Source waiting to be
+pointed at the wrong file. Now it's one app, one overlay, and one URL you paste
+into OBS exactly once.
 
-## Quick start (running from source)
+Everything runs on your own machine — a local web server bundled inside an
+Electron app. No cloud, no accounts, no internet dependency on game day.
+
+## Highlights
+
+- **One OBS URL, forever.** Point a Browser Source at
+  `http://localhost:4310/overlay` and never touch it again. Games, moments, and
+  NECC graphics are all switched from the control panel — never by editing OBS.
+- **Preview everything before it airs.** Every edit — text, countdowns, rosters,
+  even *which overlay is showing* — lands in a draft that only your preview pane
+  can see. The stream doesn't change until you click **Push Live**.
+- **Impossible to lose track.** Push Live glows gold whenever the preview has
+  unpushed changes, and **Revert** snaps the preview back to whatever is
+  currently on stream.
+- **Curtain-wipe transitions.** Pushing plays the Widener curtain stinger on the
+  live overlay and swaps your changes in while the screen is covered — every
+  push looks like a produced scene change. (Toggleable, of course.)
+- **NECC / LeagueOS import.** Paste a match link and pull in both teams' names,
+  logos, and rosters. Click player chips to pick who's actually playing, and
+  switch to NECC's own bracket/match graphics right from the overlay dropdown.
+- **A real roster view.** Full-screen two-team lineup that scales player rows to
+  fit however many are selected.
+- **Live-sized preview.** The preview renders at a true 1920×1080 and scales
+  down, so proportions always match what viewers see.
+
+## Setting up OBS (once)
+
+1. Install the app and launch it.
+2. Copy the **OBS Browser Source URL** from the top of the control panel.
+3. In OBS, add a **Browser Source** to each scene that needs the overlay:
+   paste the URL, set width **1920**, height **1080**.
+
+That's the whole integration. The URL never changes — not for a new game, a new
+week, or a new season.
+
+> **Never** paste the preview pane's own URL (it ends in `?preview=1`) into OBS.
+> That page mirrors your unsaved edits instantly. If a red **PREVIEW — NOT
+> LIVE** badge ever shows on stream, that's what happened — re-copy the real URL.
+
+## Running the show
+
+1. **Pick a game** and an **overlay** — Starting Soon, Post-Match, Rosters, or a
+   NECC graphic. Switching overlays previews first, like every other edit, and
+   auto-fills sensible titles and countdowns for the moment you picked.
+2. **Edit text, countdown, socials, logo, montage clip.** Everything autosaves
+   to the draft and shows in the preview pane instantly.
+3. **Importing a match?** Paste the NECC/LeagueOS link, hit Fetch, and toggle
+   the player chips for tonight's lineup.
+4. **Push Live.** Your draft goes to the stream exactly as previewed — behind
+   the curtain stinger if the checkbox is on, instantly if it's not.
+5. Changed your mind? **Revert** discards the draft and re-syncs the preview
+   and form to what's live.
+
+Tip: pushing with no pending changes just fires the stinger — a free manual
+transition whenever you want one.
+
+## For developers
+
+Requirements: [Node.js](https://nodejs.org/) 18+ (developed on v22).
 
 ```bash
 cd app
 npm install
-npm run server      # starts the Express/WS server only, on http://localhost:4310
+npm start        # full Electron app (control panel window)
+npm run server   # or: just the server, http://localhost:4310
+npm run dist     # build the Windows installer (bump "version" first!)
 ```
 
-or run it as the full Electron app (opens the control panel in its own
-window):
+`npm run dist` produces the NSIS installer at
+`app/dist/Widener Esports Stream Control Setup <version>.exe`, plus a portable
+copy in `app/dist/win-unpacked/` that's handy for smoke tests. **Always test
+the packaged exe** before shipping — dev mode reads files off disk, the
+packaged app reads from a bundled archive, and they can disagree (see
+`PROJECT_NOTES.md`).
 
-```bash
-cd app
-npm install
-npm start
-```
-
-Then in OBS, add a **Browser Source** pointed at:
+### How it works
 
 ```
-http://localhost:4310/overlay
+OBS Browser Source ──▶ /overlay ─── subscribes to ──▶ "live" state
+Control panel      ──▶ /control ── every edit hits ──▶ "draft" state
+Preview pane       ──▶ /overlay?preview=1 ─ mirrors ─▶ "draft" state
+
+                 Push Live: draft ──copied verbatim──▶ live
 ```
 
-Width 1920, height 1080. That's it — this URL never needs to change again,
-even when you switch games or overlay modes.
+The server (Express + WebSockets, bundled in the app) holds two copies of the
+overlay state. Edits only ever touch `draft`; **Push Live** copies `draft` to
+`live` and broadcasts it to every connected overlay. After each change the
+server compares the two channels and tells the panel whether the preview is
+"dirty" — that's what drives the gold button and the Revert control.
 
-## Building a distributable installer
+The curtain stinger is the same side-by-side track-matte file used for OBS
+scene transitions (fill left, luminance matte right). The overlay composites
+it in real time with a WebGL shader and applies the pushed state at the exact
+moment the fill fully covers the frame — measured from the video itself, so
+the swap is never visible. If WebGL or the video is unavailable, pushes simply
+apply instantly.
 
-```bash
-cd app
-npm run dist
-```
-
-Produces `app/dist/Widener Esports Stream Control Setup <version>.exe`
-(NSIS installer) plus an unpacked, no-install copy at
-`app/dist/win-unpacked/Widener Esports Stream Control.exe` that's handy for
-quick local testing.
-
-**Bump the `version` field in `app/package.json` before every build** —
-the installer filename and the app's "About" info are both derived from it.
-
-## Using the control panel
-
-1. **Copy the OBS Browser Source URL** from the top of the panel and paste
-   it into an OBS Browser Source once. Do not use the preview pane's own
-   URL (it has a `?preview=1` query string) — that one is only for the
-   control panel's own preview and will make OBS mirror your unsaved edits
-   instantly instead of waiting for Push Live. If you ever see a red
-   "PREVIEW — NOT LIVE" badge on your actual stream, the wrong URL got
-   pasted into OBS.
-2. **Pick a game** from the dropdown (fills in the game name) and choose
-   an **Overlay** mode — Starting Soon, Post-Match, Rosters, or a NECC
-   graphic. Like every other edit, switching this dropdown only changes
-   the preview; the stream keeps showing the previous overlay until you
-   click **Push Live**. Switching to Starting Soon or Post-Match also
-   auto-fills that moment's default title, status, and countdown into the
-   form (still preview-only).
-3. **Edit text, countdown, socials, logo, and montage clip** in the
-   settings column. Every change is auto-saved to the draft and reflected
-   in the live-sized preview pane on the right — but nothing changes on
-   stream until you click **Push Live**.
-4. **Rosters mode**: import a match via the NECC/LeagueOS link field, or
-   fill in team names/logos by hand. Click player chips to toggle who's
-   actually playing; only selected players render on the overlay.
-5. **Push Live** copies your current draft to the live overlay exactly as
-   shown in the preview. The button turns gold and pulses whenever the
-   preview has unpushed changes; **Revert** throws the draft away and
-   snaps the preview (and the form) back to whatever is currently live.
-6. **Curtain stinger on push** (checkbox above Push Live, on by default)
-   plays the Widener curtain-wipe stinger on the live overlay whenever you
-   push: the curtain sweeps in, the new content is swapped in while the
-   screen is fully covered, and the curtain opens onto it. Uncheck it for
-   instant, invisible pushes. You can also fire the stinger manually by
-   pushing with no pending changes.
-
-## How it works
+### Repo layout
 
 ```
-app/                          the Electron app (this is what ships)
-  main.js                     Electron entry: starts server.js, opens the control panel window
-  server.js                   Express + ws server: state model, WebSocket protocol, NECC import route
-  necc.js                     LeagueOS API client (match/roster import, overlay URL construction)
+app/                 the Electron app (this is what ships)
+  main.js            Electron entry: starts the server, opens the panel window
+  server.js          Express + ws server: state model, WS protocol, NECC import
+  necc.js            LeagueOS API client (match/roster import, overlay URLs)
   templates/
-    overlay.html              the overlay itself — single file, all games, all modes
-    games.json                the games list used by the Game dropdown
-  public/control/              the control panel UI (index.html / control.css / control.js)
-  build/                       icon source + generated icon files
-  data/                        dev-only local state (gitignored; the packaged app uses its own userData folder)
+    overlay.html     THE overlay — single file, all games, all modes
+    games.json       games list for the Game dropdown
+  public/
+    control/         control panel UI
+    overlay-assets/  curtain stinger video
+  build/             icon source + generated icons
 
-Stream/                        legacy per-game overlay files, superseded — not part of the shipped app
-archive/                       the 16 old per-game HTML files this project replaced, kept for reference
+Stream/, archive/    the 16 legacy per-game files this app replaced (reference only)
+PROJECT_NOTES.md     architecture notes + session history for future development
 ```
 
-**Draft vs. live, in more detail:** the server holds two copies of the
-overlay's state — `live` (what every OBS Browser Source sees) and `draft`
-(what the control panel's own preview iframe sees). Editing a field only
-ever touches `draft`. Clicking **Push Live** copies `draft` → `live`
-verbatim and broadcasts it over WebSocket to any connected overlays. The
-overlay page (`templates/overlay.html`) subscribes to `live` by default;
-it only subscribes to `draft` when loaded with a `?preview=1` query string,
-which only the control panel's preview pane uses.
+### NECC / LeagueOS import
 
-There are no exceptions: switching overlay modes (Starting Soon /
-Post-Match / Rosters / NECC) is an ordinary draft edit too, so a mode
-switch can be previewed and staged just like a text change. The server
-also compares the two channels after every change and tells the control
-panel whether the preview differs from live, which drives the "unpushed
-changes" indicator and the Revert button.
-
-## NECC / LeagueOS import
-
-`necc.js` talks to `api.leagueos.gg`, an unofficial API reverse-engineered
-from LeagueOS's own web client (no login or API key — just headers their
-own site computes for anonymous visitors). If LeagueOS changes their
-internal contract, the import feature will fail gracefully and you can
-still fill in team/roster info by hand; nothing else in the app depends on
-it.
+`necc.js` talks to `api.leagueos.gg` — an unofficial API reverse-engineered
+from LeagueOS's own web client (no login or key; just the headers their site
+computes for anonymous visitors). If LeagueOS changes their internals the
+import fails gracefully and everything can still be entered by hand; nothing
+else depends on it.
 
 ## Troubleshooting
 
-- **OBS shows an old version of the overlay after an update.** OBS's
-  embedded browser can cache pages aggressively. The `/overlay` route is
-  served with `Cache-Control: no-store` specifically to prevent this, but
-  if you still see stale content, right-click the source in OBS and
-  refresh/reload it, or remove and re-add the Browser Source.
-- **OBS is changing before you press Push Live.** Almost always means the
-  URL pasted into the OBS Browser Source has `?preview=1` on the end —
-  re-copy the URL from the control panel's "OBS Browser Source URL" field
-  and replace it in OBS. A red "PREVIEW — NOT LIVE" badge appearing on the
-  overlay is a giveaway that this is the issue.
-- **The packaged app crashes on launch with a "Cannot find module" error.**
-  A new top-level `app/*.js` file was added but not whitelisted in
-  `build.files` in `app/package.json` — dev mode reads files straight off
-  disk so this only shows up in the packaged build. Add the file there and
-  rebuild.
-- **Always test the actual packaged exe**
-  (`app/dist/win-unpacked/Widener Esports Stream Control.exe`) before
-  calling a change done — dev mode and the packaged app don't always
-  behave identically (file bundling, local data storage path, read-only
-  install directory).
+| Symptom | Fix |
+| --- | --- |
+| OBS shows a stale overlay after an update | The `/overlay` route is served with `Cache-Control: no-store`, but OBS's browser can still cling to old pages — right-click the source and refresh, or remove/re-add it. |
+| Stream changes *before* you press Push Live | The OBS source URL has `?preview=1` on it. Re-copy the real URL from the panel. The red **PREVIEW — NOT LIVE** badge is the giveaway. |
+| "Port 4310 is already in use" on launch | Another copy of the app (or an older version) is still running — close it first. Launching a second copy normally just focuses the first window. |
+| Packaged app crashes with `Cannot find module` | A new top-level `app/*.js` file wasn't added to `build.files` in `app/package.json`. Dev mode won't catch this — only the packaged build will. |
+| Pushes apply instantly with no stinger | The checkbox may be off — or the overlay's browser has no WebGL (in OBS, check that hardware acceleration is enabled). |
 
-## Tech stack
+## Tech
 
-- [Electron](https://www.electronjs.org/) — desktop shell
-- [Express](https://expressjs.com/) — local HTTP server
-- [ws](https://github.com/websockets/ws) — WebSocket state sync between
-  the control panel, preview, and live overlay
-- [electron-builder](https://www.electron.build/) — packaging/installer
+[Electron](https://www.electronjs.org/) ·
+[Express](https://expressjs.com/) ·
+[ws](https://github.com/websockets/ws) ·
+[electron-builder](https://www.electron.build/)
 
-## Status
-
-No automated test suite — this app is small and has been verified
-manually each session (see `PROJECT_NOTES.md` for a detailed build/session
-history and architectural notes if you're picking up development).
+No automated tests — the app is small and every change is verified by hand
+against the real overlay (see `PROJECT_NOTES.md` for history and gotchas).
 
 ## License
 
-Internal project for Widener University Esports. Not currently licensed
-for outside use or redistribution.
+Internal project for Widener University Esports. Not licensed for outside use
+or redistribution.
