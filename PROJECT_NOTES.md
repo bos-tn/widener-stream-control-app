@@ -1,7 +1,8 @@
 # Widener Esports Stream Control App — Project Notes
 
-Handoff doc for picking this up in a future session. Written at **v0.4.2**.
-If you're starting a new chat, read this whole file before touching code.
+Handoff doc for picking this up in a future session. Written at **v0.4.2**,
+updated through **v0.6.0**. If you're starting a new chat, read this whole
+file before touching code.
 
 ## What this is
 
@@ -56,13 +57,30 @@ widener-stream-control-app-icon.png   - source logo file the user dropped in (us
    makes the preview pane trustworthy - it shows exactly what will go out,
    and nothing goes out until you say so.
 
-   Exception: the **Overlay dropdown** (mode/NECC switching) bypasses the
-   draft-then-push flow entirely via a dedicated `set-mode` WS message that
-   updates a small surgical set of fields (`mode`, plus `title`/`status`/
-   `durationSec` for Widener modes or `neccUrl` for NECC modes) on **both**
-   channels immediately - it's a scene switch, not a content edit, so it
-   doesn't wait for Push Live and doesn't drag along whatever text edits
-   happen to be mid-draft.
+   As of v0.5.0 there are **no exceptions** to this. The Overlay dropdown
+   (mode/NECC switching) used to bypass draft-then-push via a dedicated
+   `set-mode` WS message that hit both channels immediately - the user
+   reported that as broken ("preview hold doesn't work when switching
+   overlays") and it was removed. Mode is now just another draft field:
+   `gatherForm()` always includes `mode`/`neccUrl`/`neccType`, the dropdown
+   handler edits the form + sends an immediate (undebounced) draft update,
+   and Push Live is what takes it to stream. Do not reintroduce `set-mode`.
+
+   Supporting pieces added with that change:
+   - Server compares draft vs live after every update/push/revert
+     (`isDirty()`, key-order-independent, ignores the derived `end`
+     timestamp unless countdownMode is 'at') and broadcasts
+     `{type:'dirty'}` to draft subscribers - drives the control panel's
+     gold pulsing Push Live button + status line.
+   - `{type:'revert'}` WS message: server copies live → draft and
+     rebroadcasts; the panel sets `repopulateOnNextDraft` so that one
+     draft broadcast repopulates the whole form.
+   - `neccType` is a persisted state field so the dropdown can restore
+     which NECC overlay is selected after an app restart; the imported
+     overlay URL map also persists in localStorage
+     (`widener-necc-overlay-urls`).
+   - On WS reconnect (not first connect) the panel re-sends `gatherForm()`
+     so edits made while disconnected aren't lost.
 
 3. **`overlay.html` has three-ish visual states, controlled by `state.mode`:**
    - `starting-soon` / `post-match` - the original title/subtitle/countdown/
@@ -98,6 +116,41 @@ widener-stream-control-app-icon.png   - source logo file the user dropped in (us
    (rows) layout - the JS drag handler checks `matchMedia('(max-width:980px)')`
    and drags height (`--preview-height`) instead of width (`--preview-width`)
    accordingly. Both persist to localStorage.
+
+## Curtain stinger transition (v0.6.0)
+
+Push Live can play the Widener curtain-wipe stinger on the live overlay
+(control panel checkbox "Curtain stinger on push", localStorage
+`widener-stinger-on-push`, default on). Details that matter:
+
+- The video is the same **side-by-side track-matte** file used in OBS
+  (`app/public/overlay-assets/curtain-stinger.webm`, copied from
+  `Stream/General/Widener_Curtain_Wipe_Stinger.webm`): 3840x1080\@60,
+  3.0s, yuv420p (no alpha). Left half = curtain fill, right half =
+  luminance matte. Served via the `/overlay-assets` static route.
+- OBS semantics (verified against obs-studio source + Elgato docs): the
+  matte crossfades old scene -> new scene per pixel (black=old, white=new)
+  and the fill plays on top. This file's fill **ends on solid black over a
+  full-white matte** - the "curtain opening" is the fill fading away, not
+  the matte.
+- The overlay reproduces that with a WebGL shader in `overlay.html`:
+  `alpha = matte_luma * smoothstep(0.02, 0.07, maxRGB(fill))` - i.e. the
+  matte gates visibility AND near-black fill is luma-keyed transparent.
+  Without the luma key the ending would be an opaque black pop.
+- Timing was **measured from the file with ffmpeg** (signalstats): the
+  fill has zero near-black pixels only from 1.083s to 1.667s (the
+  full-bleed W cover). `STINGER_SWAP_TIME = 1.4` applies the new state
+  dead-center in that window, so the content swap is never visible. If
+  the stinger video is ever replaced, re-measure and update that constant
+  (and re-check the 0.02/0.07 luma-key thresholds).
+- Server side: the push WS message optionally carries
+  `transition: 'stinger'`; the live-channel broadcast passes it through as
+  a side-channel field on the state message. Draft/preview never plays it.
+- Overlay side fallbacks: no WebGL (OBS with hardware accel off), missing
+  file, decode error, or autoplay rejection all apply the state
+  immediately; a `STINGER_MAX_MS` (4s) safety timeout guarantees a push is
+  never delayed longer than the stinger. A repush mid-stinger just swaps
+  the pending state.
 
 ## NECC / LeagueOS integration (`necc.js`)
 
@@ -137,14 +190,9 @@ toggle who's actually playing, and only selected players get sent in the
 ## Two real bugs found during this build (both fixed, worth knowing about)
 
 1. **`set-mode` server handler only ever applied `mode`, silently dropping
-   the rest of `data`.** This meant the "auto-fill title/status when
-   switching Starting Soon ↔ Post-Match" behavior (and later `neccUrl`) was
-   broken from the moment `set-mode` was introduced, despite the client
-   sending the right payload. Server now does
-   `{ mode, ...data }` merge. If you add new fields to what `set-mode` should
-   carry, they need to actually be in the `data` object sent from
-   `control.js`'s `overlaySelect` handler - the server just merges whatever
-   arrives.
+   the rest of `data`.** (Historical - `set-mode` no longer exists as of
+   v0.5.0; mode switching goes through the normal draft update flow. Kept
+   here as context for why the old design was abandoned.)
 
 2. **Packaging omission**: `necc.js` was added as a new top-level file but
    not added to `package.json`'s `build.files` whitelist, so it worked
@@ -168,7 +216,8 @@ persistence, asar read-only-ness).
   mode, game, team, title, status, subtitle, next,
   countdownMode: 'duration'|'at', durationSec, end,   // end is always the computed absolute ISO timestamp
   layout: 'left'|'right', clip, logo, montage: bool,
-  neccUrl,                                              // only meaningful when mode === 'necc'
+  neccUrl, neccType,                                    // only meaningful when mode === 'necc';
+                                                        // neccType is the dropdown key (e.g. 'stageBracket')
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
 }

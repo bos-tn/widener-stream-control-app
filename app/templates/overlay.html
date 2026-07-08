@@ -193,6 +193,16 @@
   .necc-frame.active{ display:block; }
   .necc-frame iframe{ width:100%; height:100%; border:0; display:block; }
 
+  /* Curtain stinger transition: drawn over everything (including the NECC
+     iframe) while a Push Live transition plays. The canvas is transparent
+     wherever the stinger's matte/luma-key says so; content underneath is
+     swapped while the curtain fully covers the screen. */
+  #stinger-canvas{
+    display:none; position:fixed; inset:0; width:100vw; height:100vh;
+    z-index:950; pointer-events:none;
+  }
+  #stinger-canvas.active{ display:block; }
+
   /* Only ever rendered when this page was loaded with ?preview=1 (the control
      panel's own preview iframe). If this is ever visible in OBS, the Browser
      Source URL is wrong - it should be the plain /overlay URL with no query
@@ -212,6 +222,8 @@
   <div class="stripes"></div>
   <div class="bg-gradient"></div>
   <div class="preview-flag">Preview — not live</div>
+
+  <canvas id="stinger-canvas" width="1920" height="1080"></canvas>
 
   <div class="necc-frame" id="necc-frame">
     <iframe id="necc-iframe" title="NECC overlay" src="about:blank"></iframe>
@@ -404,10 +416,10 @@
     logoEl.src = state.logo || defaultLogo;
     if(state.brand) $('#brand-line1').textContent = state.brand;
     if(state.team !== undefined) $('#brand-line2').textContent = state.team || '';
-    if(state.title) $('#title').textContent = state.title;
+    if(state.title !== undefined) $('#title').textContent = state.title || '';
     if(state.subtitle !== undefined) $('#subtitle').textContent = state.subtitle || '';
     if(state.next !== undefined) $('#next').textContent = state.next || '';
-    if(state.status) $('#status-text').textContent = state.status;
+    if(state.status !== undefined) $('#status-text').textContent = state.status || '';
     if(state.end) countdownEnd = new Date(state.end);
     if(state.socials) renderSocials(state.socials);
     if(state.clip !== undefined) applyClip(state.clip);
@@ -442,22 +454,163 @@
     if(state.teamB) renderRosterTeam('b', state.teamB);
   }
 
+  // Which channel this page mirrors: live (OBS) or draft (the control
+  // panel's preview pane, loaded with ?preview=1).
+  const isPreview = new URLSearchParams(location.search).get('preview') === '1';
+  const channel = isPreview ? 'draft' : 'live';
+  if(isPreview) document.body.dataset.preview = '1';
+
+  // --- Curtain stinger transition -----------------------------------------
+  //
+  // The stinger video is the same side-by-side track-matte file used in OBS:
+  // left half = the curtain animation (no alpha channel), right half = a
+  // luminance matte. A WebGL shader composites it live: alpha = matte luma x
+  // a luma-key on the fill (near-black fill pixels are transparent, matching
+  // how the file is authored - its tail fades to black over a white matte,
+  // which is the curtain "opening" to reveal the new content underneath).
+  //
+  // Timing (measured from the actual file): the fill has zero near-black
+  // pixels only between 1.083s and 1.667s - the full-bleed W graphic that
+  // completely covers the screen. New state is applied at 1.4s, dead center
+  // of that window, so the swap is never visible.
+  const STINGER_URL = '/overlay-assets/curtain-stinger.webm';
+  const STINGER_SWAP_TIME = 1.4;
+  const STINGER_MAX_MS = 4000; // hard safety: new state is never delayed past this
+
+  const stingerCanvas = $('#stinger-canvas');
+  let stingerVideo = null;
+  let stingerGL = null;      // { gl, tex } once initialized; false if WebGL unavailable
+  let stingerActive = false;
+  let stingerPending = null; // state waiting to be applied at the swap point
+
+  function initStingerGL(){
+    if(stingerGL !== null) return stingerGL;
+    try {
+      const gl = stingerCanvas.getContext('webgl', { alpha: true, premultipliedAlpha: true });
+      if(!gl) throw new Error('no webgl');
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2(p.x*0.5+0.5, 0.5-p.y*0.5); gl_Position = vec4(p,0.,1.); }');
+      gl.compileShader(vs);
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, `
+        precision mediump float; varying vec2 uv; uniform sampler2D tex;
+        void main(){
+          vec3 fill  = texture2D(tex, vec2(uv.x*0.5, uv.y)).rgb;
+          vec3 matte = texture2D(tex, vec2(0.5+uv.x*0.5, uv.y)).rgb;
+          float m = dot(matte, vec3(0.2126, 0.7152, 0.0722));
+          float k = smoothstep(0.02, 0.07, max(fill.r, max(fill.g, fill.b)));
+          float a = m * k;
+          gl_FragColor = vec4(fill * a, a);
+        }`);
+      gl.compileShader(fs);
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+      gl.useProgram(prog);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p');
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      stingerGL = { gl, tex };
+    } catch (e) {
+      stingerGL = false; // WebGL unavailable (e.g. OBS with hardware accel off) - transitions become instant
+    }
+    return stingerGL;
+  }
+
+  function getStingerVideo(){
+    if(stingerVideo) return stingerVideo;
+    stingerVideo = document.createElement('video');
+    stingerVideo.muted = true;
+    stingerVideo.playsInline = true;
+    stingerVideo.preload = 'auto';
+    stingerVideo.src = STINGER_URL;
+    return stingerVideo;
+  }
+  // Preload immediately so the first push doesn't stall on a network fetch.
+  if(!isPreview) getStingerVideo();
+
+  // Play the curtain stinger, applying `data` while the screen is covered.
+  // Every failure path (no WebGL, video missing, decode error, autoplay
+  // rejection) falls back to applying the state immediately - a push must
+  // never be lost or delayed past STINGER_MAX_MS.
+  function stingerTransition(data){
+    if(stingerActive){ stingerPending = data; return; } // mid-play repush: swap in the newer state
+    const glc = initStingerGL();
+    const video = getStingerVideo();
+    if(!glc || !video){ applyState(data); return; }
+
+    stingerPending = data;
+    stingerActive = true;
+    let raf = 0;
+    const finish = () => {
+      if(!stingerActive) return;
+      stingerActive = false;
+      cancelAnimationFrame(raf);
+      clearTimeout(safety);
+      applyPending(); // no-op if already applied at the swap point
+      stingerCanvas.classList.remove('active');
+      video.pause();
+    };
+    const applyPending = () => {
+      if(stingerPending){ const d = stingerPending; stingerPending = null; applyState(d); }
+    };
+    const safety = setTimeout(finish, STINGER_MAX_MS);
+
+    const { gl, tex } = glc;
+    const draw = () => {
+      if(!stingerActive) return;
+      if(video.readyState >= 2){
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+      if(video.currentTime >= STINGER_SWAP_TIME) applyPending();
+      if(video.ended){ finish(); return; }
+      raf = requestAnimationFrame(draw);
+    };
+
+    video.currentTime = 0;
+    video.onended = finish;
+    video.onerror = finish;
+    const p = video.play();
+    if(p && p.catch) p.catch(finish);
+    // Clear before first frame so a previous run's last frame never flashes.
+    gl.clearColor(0,0,0,0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    stingerCanvas.classList.add('active');
+    raf = requestAnimationFrame(draw);
+  }
+
   // Live updates pushed from the control app's local server. There is exactly
   // one overlay URL for every game and both moments (starting-soon /
   // post-match) - it never needs to change in OBS. The one exception is the
   // control panel's own preview pane, which loads this same page with
   // ?preview=1 so it renders the in-progress draft instead of what's
   // actually live on stream.
-  const isPreview = new URLSearchParams(location.search).get('preview') === '1';
-  const channel = isPreview ? 'draft' : 'live';
-  if(isPreview) document.body.dataset.preview = '1';
   (function connect(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', channel })));
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
-        if (msg.type === 'state' && msg.channel === channel) applyState(msg.data);
+        if (msg.type === 'state' && msg.channel === channel) {
+          // Pushes flagged with the stinger transition play the curtain wipe
+          // and swap content while covered; everything else applies instantly.
+          // The control panel's preview pane never plays it - it mirrors the
+          // draft in real time.
+          if (msg.transition === 'stinger' && !isPreview) stingerTransition(msg.data);
+          else applyState(msg.data);
+        }
       } catch (e) {}
     });
     ws.addEventListener('close', () => setTimeout(connect, 2000));

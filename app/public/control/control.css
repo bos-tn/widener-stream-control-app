@@ -151,14 +151,38 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 .seg-btn.active{ background:var(--widener-blue); color:#fff; font-weight:600; }
 .seg-btn:not(.active):hover{ background:#161f30; color:var(--text); }
 
+.stinger-check{flex:0 0 auto; font-size:13px !important; color:var(--muted) !important;}
+
+.push-row{display:flex; gap:10px; flex:0 0 auto;}
+
 .push-btn{
   background:linear-gradient(90deg, var(--widener-blue), #0069e6);
   color:#fff; border:none; border-radius:10px; padding:16px; font-size:16px; font-weight:700;
   letter-spacing:.03em; cursor:pointer; box-shadow:0 8px 20px rgba(0,84,184,.35);
-  flex:0 0 auto;
+  flex:1 1 auto;
 }
 .push-btn:hover{filter:brightness(1.08)}
 .push-btn:active{transform:translateY(1px)}
+
+/* The preview differs from what's live - make Push Live impossible to miss. */
+.push-btn.dirty{
+  background:linear-gradient(90deg, #b8860b, var(--widener-gold));
+  color:#101010;
+  box-shadow:0 8px 20px rgba(240,179,16,.35);
+  animation:pushPulse 1.6s ease-in-out infinite;
+}
+@keyframes pushPulse{
+  0%,100%{ box-shadow:0 8px 20px rgba(240,179,16,.35); }
+  50%{ box-shadow:0 8px 28px rgba(240,179,16,.65); }
+}
+
+.revert-btn{
+  background:#1b2436; border:1px solid var(--panel-border); color:var(--text);
+  padding:0 18px; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600;
+  flex:0 0 auto;
+}
+.revert-btn:hover:not(:disabled){background:#232f47; border-color:var(--bad); color:#ff8a8e}
+.revert-btn:disabled{opacity:.35; cursor:not-allowed}
 
 .push-status{text-align:center; font-size:13px; color:var(--muted); min-height:18px; flex:0 0 auto;}
 
@@ -166,6 +190,9 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 .necc-status{ font-size:13px; color:var(--muted); min-height:16px; margin-top:2px; }
 .necc-status.error{ color:var(--bad); }
 .necc-teams{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+/* display:grid on the class would otherwise beat the UA stylesheet's
+   [hidden]{display:none}, leaving an empty teams box visible pre-import. */
+.necc-teams[hidden]{ display:none; }
 @media (max-width: 1300px){ .necc-teams{ grid-template-columns:1fr; } }
 .necc-team{ background:#0d1420; border:1px solid var(--panel-border); border-radius:10px; padding:12px; }
 .necc-team-header{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }

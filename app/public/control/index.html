@@ -36,7 +36,7 @@
             <select id="gameSelect"></select>
           </label>
           <label class="grow">
-            Overlay <span class="hint">(what's showing in OBS right now)</span>
+            Overlay <span class="hint">(previews first — goes live when you push)</span>
             <select id="overlaySelect">
               <optgroup label="Widener">
                 <option value="widener:starting-soon">Starting Soon</option>
@@ -197,7 +197,14 @@
           </div>
         </div>
       </div>
-      <button id="pushBtn" class="push-btn" type="button">Push Live</button>
+      <label class="checkbox stinger-check" title="Play the Widener curtain wipe on the live overlay whenever you push, hiding the switch">
+        <input type="checkbox" id="stingerInput" checked>
+        Curtain stinger on push
+      </label>
+      <div class="push-row">
+        <button id="pushBtn" class="push-btn" type="button">Push Live</button>
+        <button id="revertBtn" class="revert-btn" type="button" disabled title="Discard preview changes and match what's currently live">Revert</button>
+      </div>
       <div class="push-status" id="pushStatus"></div>
     </aside>
   </div>

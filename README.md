@@ -91,9 +91,12 @@ the installer filename and the app's "About" info are both derived from it.
    "PREVIEW — NOT LIVE" badge on your actual stream, the wrong URL got
    pasted into OBS.
 2. **Pick a game** from the dropdown (fills in the game name) and choose
-   an **Overlay** mode — Starting Soon, Post-Match, or Rosters. Switching
-   this dropdown takes effect on stream immediately (it's a scene switch,
-   not a content edit), independent of Push Live.
+   an **Overlay** mode — Starting Soon, Post-Match, Rosters, or a NECC
+   graphic. Like every other edit, switching this dropdown only changes
+   the preview; the stream keeps showing the previous overlay until you
+   click **Push Live**. Switching to Starting Soon or Post-Match also
+   auto-fills that moment's default title, status, and countdown into the
+   form (still preview-only).
 3. **Edit text, countdown, socials, logo, and montage clip** in the
    settings column. Every change is auto-saved to the draft and reflected
    in the live-sized preview pane on the right — but nothing changes on
@@ -102,7 +105,15 @@ the installer filename and the app's "About" info are both derived from it.
    fill in team names/logos by hand. Click player chips to toggle who's
    actually playing; only selected players render on the overlay.
 5. **Push Live** copies your current draft to the live overlay exactly as
-   shown in the preview.
+   shown in the preview. The button turns gold and pulses whenever the
+   preview has unpushed changes; **Revert** throws the draft away and
+   snaps the preview (and the form) back to whatever is currently live.
+6. **Curtain stinger on push** (checkbox above Push Live, on by default)
+   plays the Widener curtain-wipe stinger on the live overlay whenever you
+   push: the curtain sweeps in, the new content is swapped in while the
+   screen is fully covered, and the curtain opens onto it. Uncheck it for
+   instant, invisible pushes. You can also fire the stinger manually by
+   pushing with no pending changes.
 
 ## How it works
 
@@ -131,10 +142,12 @@ overlay page (`templates/overlay.html`) subscribes to `live` by default;
 it only subscribes to `draft` when loaded with a `?preview=1` query string,
 which only the control panel's preview pane uses.
 
-The one exception is the **Overlay dropdown** (switching between Starting
-Soon / Post-Match / Rosters / NECC modes) — that's treated as a scene
-switch, not a content edit, so it updates both channels immediately rather
-than waiting for Push Live.
+There are no exceptions: switching overlay modes (Starting Soon /
+Post-Match / Rosters / NECC) is an ordinary draft edit too, so a mode
+switch can be previewed and staged just like a text change. The server
+also compares the two channels after every change and tells the control
+panel whether the preview differs from live, which drives the "unpushed
+changes" indicator and the Revert button.
 
 ## NECC / LeagueOS import
 

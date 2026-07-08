@@ -39,6 +39,8 @@ const neccStatus = document.getElementById('neccStatus');
 const neccTeams = document.getElementById('neccTeams');
 
 const pushBtn = document.getElementById('pushBtn');
+const revertBtn = document.getElementById('revertBtn');
+const stingerInput = document.getElementById('stingerInput');
 const pushStatus = document.getElementById('pushStatus');
 const connDot = document.getElementById('connDot');
 const connText = document.getElementById('connText');
@@ -51,8 +53,17 @@ const MODE_DEFAULTS = {
 let ws = null;
 let games = [];
 let currentMode = 'starting-soon';
+// Which NECC overlay the draft points at (only meaningful when currentMode is
+// 'necc'). Both ride along in every draft update, so switching overlays obeys
+// the same preview-then-push flow as any text edit.
+let currentNeccUrl = '';
+let currentNeccType = '';
 let applyingRemote = false;
 let receivedInitialDraft = false;
+// Set when we ask the server to revert the draft to live - the next draft
+// broadcast is the reverted state and should repopulate the whole form.
+let repopulateOnNextDraft = false;
+let lastPushedAt = null;
 
 // The two teams built from a NECC import - each player has {id, name, gamertag,
 // active, position, selected}. "selected" (which players are actually playing)
@@ -61,8 +72,10 @@ let neccTeamA = null;
 let neccTeamB = null;
 // Overlay asset URLs (bracket, matchPreview, etc.) resolved by the last
 // successful import, keyed by NECC type - what the Overlay dropdown's NECC
-// options actually point OBS at when selected.
+// options actually point at when selected. Persisted to localStorage so the
+// dropdown keeps working after an app restart without re-importing.
 let lastImportedOverlayUrls = {};
+const NECC_URLS_KEY = 'widener-necc-overlay-urls';
 
 function toDatetimeLocalValue(isoString) {
   const d = new Date(isoString);
@@ -93,6 +106,9 @@ function teamPayload(team) {
 
 function gatherForm() {
   const data = {
+    mode: currentMode,
+    neccUrl: currentNeccUrl,
+    neccType: currentNeccType,
     game: gameSelect.value,
     team: teamInput.value,
     title: titleInput.value,
@@ -125,7 +141,23 @@ function gatherForm() {
 function populateForm(state) {
   applyingRemote = true;
   currentMode = state.mode || 'starting-soon';
-  overlaySelect.value = `widener:${currentMode}`;
+  currentNeccUrl = state.neccUrl || '';
+  currentNeccType = state.neccType || '';
+  if (currentMode === 'necc' && currentNeccType) {
+    // Make sure the saved NECC type has an option to select, even if the
+    // operator has since unchecked it in settings - the dropdown should
+    // always reflect what the draft is actually showing.
+    if (!Array.from(overlaySelect.options).some((o) => o.value === `necc:${currentNeccType}`)) {
+      const t = NECC_TYPES.find((x) => x.key === currentNeccType);
+      const opt = document.createElement('option');
+      opt.value = `necc:${currentNeccType}`;
+      opt.textContent = t ? t.label : currentNeccType;
+      neccOptGroup.appendChild(opt);
+    }
+    overlaySelect.value = `necc:${currentNeccType}`;
+  } else {
+    overlaySelect.value = `widener:${currentMode}`;
+  }
   toggleLayoutVisibility();
   teamInput.value = state.team || '';
   titleInput.value = state.title || '';
@@ -168,11 +200,36 @@ function pushDraft() {
   }, 150);
 }
 
+// Immediate (undebounced) draft update - used for discrete actions like
+// switching overlays, where the preview should react instantly.
+function sendDraftNow() {
+  if (applyingRemote) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  clearTimeout(draftDebounce);
+  ws.send(JSON.stringify({ type: 'update', channel: 'draft', data: gatherForm() }));
+}
+
+// "Unpushed changes" indicator, driven by the server comparing draft vs live.
+function setDirty(dirty) {
+  pushBtn.classList.toggle('dirty', dirty);
+  revertBtn.disabled = !dirty;
+  if (dirty) {
+    pushStatus.textContent = 'Preview has unpushed changes';
+  } else {
+    pushStatus.textContent = lastPushedAt ? `Pushed live at ${lastPushedAt}` : 'Preview matches live';
+  }
+}
+
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   ws.addEventListener('open', () => {
     setConnStatus(true);
     ws.send(JSON.stringify({ type: 'subscribe', channel: 'draft' }));
+    // On a reconnect (not first connect), the form is the source of truth -
+    // re-send it so edits made while disconnected aren't silently lost.
+    if (receivedInitialDraft) {
+      ws.send(JSON.stringify({ type: 'update', channel: 'draft', data: gatherForm() }));
+    }
   });
   ws.addEventListener('close', () => {
     setConnStatus(false);
@@ -181,23 +238,41 @@ function connect() {
   ws.addEventListener('message', (ev) => {
     try {
       const msg = JSON.parse(ev.data);
-      // Only sync the form from the server once, right after connecting (to
-      // restore whatever draft was in progress last time). After that, this
-      // panel is the only thing that ever writes to "draft" - applying our
-      // own broadcast echoes back onto the form would race live edits.
-      if (msg.type === 'state' && msg.channel === 'draft' && !receivedInitialDraft) {
+      // Only sync the form from the server on first connect (restoring the
+      // draft from last time) or right after asking for a revert. Otherwise
+      // this panel is the only writer to "draft" - applying our own broadcast
+      // echoes back onto the form would race live edits.
+      if (msg.type === 'state' && msg.channel === 'draft' && (!receivedInitialDraft || repopulateOnNextDraft)) {
         receivedInitialDraft = true;
+        repopulateOnNextDraft = false;
         populateForm(msg.data);
       }
+      if (msg.type === 'dirty') setDirty(msg.dirty);
     } catch (e) {}
   });
 }
 
+// Whether Push Live plays the curtain stinger on the live overlay. Persisted
+// locally - it's an operator preference, not overlay content.
+const STINGER_KEY = 'widener-stinger-on-push';
+stingerInput.checked = localStorage.getItem(STINGER_KEY) !== 'off';
+stingerInput.addEventListener('change', () => {
+  localStorage.setItem(STINGER_KEY, stingerInput.checked ? 'on' : 'off');
+});
+
 pushBtn.addEventListener('click', () => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: 'update', channel: 'draft', data: gatherForm() }));
-  ws.send(JSON.stringify({ type: 'push' }));
-  pushStatus.textContent = `Pushed live at ${new Date().toLocaleTimeString()}`;
+  ws.send(JSON.stringify({ type: 'push', transition: stingerInput.checked ? 'stinger' : undefined }));
+  lastPushedAt = new Date().toLocaleTimeString();
+  pushStatus.textContent = `Pushed live at ${lastPushedAt}`;
+});
+
+revertBtn.addEventListener('click', () => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  clearTimeout(draftDebounce);
+  repopulateOnNextDraft = true;
+  ws.send(JSON.stringify({ type: 'revert' }));
 });
 
 gameSelect.addEventListener('change', () => {
@@ -239,52 +314,49 @@ function wireBrowse(button, fileInput, textInput) {
 wireBrowse(browseLogoBtn, logoFile, logoInput);
 wireBrowse(browseClipBtn, clipFile, clipInput);
 
-// --- Overlay dropdown: switches which overlay is showing in OBS -----------
+// --- Overlay dropdown: switches which overlay the preview is showing -------
 //
 // Both Widener options (Starting Soon / Post-Match / Rosters) and NECC
-// options (Bracket, Match Preview, etc) take effect immediately via the
-// server's dedicated set-mode message, without waiting for Push Live and
-// without dragging along whatever other content edits are mid-draft. NECC
-// overlays render inside our own /overlay page as a full-bleed iframe - OBS
-// never needs to know anything changed, since the URL it's pointed at never
-// changes either way.
-
-function widenerModeExtra(mode) {
-  const d = MODE_DEFAULTS[mode];
-  return d ? { title: d.title, status: d.status, durationSec: d.durationSec } : {};
-}
+// options (Bracket, Match Preview, etc) are ordinary draft edits: the preview
+// pane updates instantly, the stream doesn't change until Push Live. Widener
+// mode switches also auto-fill sensible title/status/countdown defaults into
+// the form (still draft-only - push to send them out). NECC overlays render
+// inside our own /overlay page as a full-bleed iframe, so OBS never needs to
+// know anything changed either way.
 
 overlaySelect.addEventListener('change', () => {
   const [kind, key] = overlaySelect.value.split(':');
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   if (kind === 'widener') {
     currentMode = key;
+    currentNeccType = '';
+    currentNeccUrl = '';
     toggleLayoutVisibility();
-    const extra = widenerModeExtra(key);
-    if (extra.title) {
-      titleInput.value = extra.title;
-      statusInput.value = extra.status;
-      durationInput.value = extra.durationSec;
+    const d = MODE_DEFAULTS[key];
+    if (d) {
+      titleInput.value = d.title;
+      statusInput.value = d.status;
+      durationInput.value = d.durationSec;
       modeDuration.checked = true; modeAt.checked = false;
       durationField.style.display = ''; atField.style.display = 'none';
     }
-    ws.send(JSON.stringify({ type: 'set-mode', mode: key, data: { ...extra, neccUrl: '' } }));
+    sendDraftNow();
     return;
   }
 
-  // kind === 'necc' - rendered inside our own overlay via an iframe, so this
-  // is just another mode switch like the Widener ones. No OBS connection,
-  // no separate source to retarget - same URL, same mechanism.
+  // kind === 'necc'
   const url = lastImportedOverlayUrls[key];
   if (!url) {
     neccStatus.textContent = 'Import a match first to get this overlay link';
     neccStatus.classList.add('error');
-    overlaySelect.value = `widener:${currentMode}`;
+    overlaySelect.value = currentMode === 'necc' && currentNeccType ? `necc:${currentNeccType}` : `widener:${currentMode}`;
     return;
   }
   neccStatus.classList.remove('error');
-  ws.send(JSON.stringify({ type: 'set-mode', mode: 'necc', data: { neccUrl: url } }));
+  currentMode = 'necc';
+  currentNeccType = key;
+  currentNeccUrl = url;
+  sendDraftNow();
 });
 
 // --- NECC / LeagueOS import ---------------------------------------------
@@ -306,6 +378,12 @@ function loadNeccTypeSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(NECC_TYPES_KEY));
     if (Array.isArray(saved) && saved.length) enabledNeccTypes = new Set(saved);
+  } catch (e) {}
+  // Restore the overlay links from the last successful import, so the NECC
+  // dropdown options keep working across app restarts without re-fetching.
+  try {
+    const savedUrls = JSON.parse(localStorage.getItem(NECC_URLS_KEY));
+    if (savedUrls && typeof savedUrls === 'object') lastImportedOverlayUrls = savedUrls;
   } catch (e) {}
 }
 function saveNeccTypeSettings() {
@@ -386,6 +464,7 @@ neccFetchBtn.addEventListener('click', async () => {
     neccTeamA = { ...data.teams[0], players: (data.teams[0]?.players || []).map((p) => ({ ...p, selected: p.position >= 0 })) };
     neccTeamB = { ...data.teams[1], players: (data.teams[1]?.players || []).map((p) => ({ ...p, selected: p.position >= 0 })) };
     lastImportedOverlayUrls = data.overlayUrls || {};
+    localStorage.setItem(NECC_URLS_KEY, JSON.stringify(lastImportedOverlayUrls));
 
     neccTeams.hidden = false;
     renderNeccTeam('A', neccTeamA);

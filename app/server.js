@@ -30,6 +30,7 @@ const DEFAULT_STATE = {
   logo: '',
   montage: true,
   neccUrl: '',
+  neccType: '',
   socials: {
     twitch: DEFAULT_SOCIAL,
     twitter: DEFAULT_SOCIAL,
@@ -111,16 +112,52 @@ function createServer(port, opts = {}) {
     return merged;
   }
 
-  // Push Live: draft becomes live, verbatim, so preview and stream match exactly.
+  // Push Live: draft becomes live, verbatim, so preview and stream match
+  // exactly. Deep copy so later draft edits can never alias into live.
   function pushLive() {
-    live = { ...draft };
+    live = JSON.parse(JSON.stringify(draft));
     savePersisted();
     return live;
+  }
+
+  // Revert: throw away the in-progress draft and snap the preview back to
+  // whatever is currently live on stream.
+  function revertDraft() {
+    draft = JSON.parse(JSON.stringify(live));
+    savePersisted();
+    return draft;
+  }
+
+  // Key-order-independent stringify so live/draft comparison never produces a
+  // false "dirty" just because two equal objects were assembled differently.
+  function stableStringify(v) {
+    if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+
+  // Does the preview differ from what's live? Powers the control panel's
+  // "unpushed changes" indicator. In duration countdown mode `end` is a
+  // derived timestamp recomputed on every draft edit, so it would always
+  // mismatch - ignore it unless someone is actually editing an absolute
+  // target time ('at' mode), where `end` IS the content.
+  function isDirty() {
+    const a = { ...live };
+    const b = { ...draft };
+    if (a.countdownMode === 'duration' && b.countdownMode === 'duration') {
+      delete a.end;
+      delete b.end;
+    }
+    return stableStringify(a) !== stableStringify(b);
   }
 
   const app = express();
   app.use(express.json());
   app.use('/control', express.static(CONTROL_DIR));
+  // Media the overlay itself loads (stinger transition video, etc).
+  app.use('/overlay-assets', express.static(path.join(__dirname, 'public', 'overlay-assets')));
 
   app.get('/games.json', (req, res) => {
     res.sendFile(path.join(TEMPLATES_DIR, 'games.json'));
@@ -157,10 +194,22 @@ function createServer(port, opts = {}) {
 
   const wss = new WebSocketServer({ server, path: '/ws' });
 
-  function broadcast(channel, data) {
-    const payload = JSON.stringify({ type: 'state', channel, data });
+  // `extra` lets a broadcast carry side-channel fields alongside the state -
+  // currently just { transition: 'stinger' } on a Push Live, which tells live
+  // overlays to play the curtain stinger and swap content mid-cover.
+  function broadcast(channel, data, extra) {
+    const payload = JSON.stringify({ type: 'state', channel, data, ...(extra || {}) });
     wss.clients.forEach((client) => {
       if (client.readyState === 1 && client.subscribedChannel === channel) client.send(payload);
+    });
+  }
+
+  // Tell every control panel (draft subscriber) whether the preview currently
+  // differs from live, after anything that could have changed either channel.
+  function broadcastDirty() {
+    const payload = JSON.stringify({ type: 'dirty', dirty: isDirty() });
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1 && client.subscribedChannel === 'draft') client.send(payload);
     });
   }
 
@@ -174,40 +223,35 @@ function createServer(port, opts = {}) {
       if (msg.type === 'subscribe') {
         ws.subscribedChannel = msg.channel === 'draft' ? 'draft' : 'live';
         ws.send(JSON.stringify({ type: 'state', channel: ws.subscribedChannel, data: ws.subscribedChannel === 'draft' ? draft : live }));
+        if (ws.subscribedChannel === 'draft') ws.send(JSON.stringify({ type: 'dirty', dirty: isDirty() }));
         return;
       }
 
+      // Every edit - including switching which overlay/mode is showing via
+      // the Overlay dropdown - only ever touches draft. Nothing reaches the
+      // stream until an explicit Push Live.
       if (msg.type === 'update') {
         const channel = msg.channel === 'draft' ? 'draft' : 'live';
         const newState = updateChannel(channel, msg.data || {});
         broadcast(channel, newState);
+        broadcastDirty();
         return;
       }
 
       if (msg.type === 'push') {
         const newLive = pushLive();
-        broadcast('live', newLive);
+        broadcast('live', newLive, msg.transition === 'stinger' ? { transition: 'stinger' } : undefined);
         broadcast('draft', draft);
+        broadcastDirty();
         return;
       }
 
-      // Switching which overlay/mode is showing (via the control panel's
-      // Overlay dropdown) takes effect immediately on both channels - unlike
-      // other fields, it doesn't wait for Push Live, and it does NOT drag
-      // along whatever other unsaved draft edits happen to be pending. `data`
-      // carries the small set of fields that define the moment alongside
-      // mode itself (title/status/durationSec for Widener modes, neccUrl for
-      // NECC ones) - nothing else gets touched.
-      if (msg.type === 'set-mode' && typeof msg.mode === 'string') {
-        const patch = { mode: msg.mode, ...(msg.data || {}) };
-        if (patch.durationSec != null && patch.durationSec !== '') {
-          patch.end = new Date(Date.now() + Number(patch.durationSec) * 1000).toISOString();
-        }
-        live = { ...live, ...patch };
-        draft = { ...draft, ...patch };
-        savePersisted();
-        broadcast('live', live);
-        broadcast('draft', draft);
+      // Discard the draft: snap the preview (and the control panel form,
+      // which repopulates from the draft broadcast) back to the live state.
+      if (msg.type === 'revert') {
+        const newDraft = revertDraft();
+        broadcast('draft', newDraft);
+        broadcastDirty();
       }
     });
   });
