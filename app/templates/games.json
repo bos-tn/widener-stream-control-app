@@ -1,0 +1,10 @@
+[
+  { "id": "cod",   "name": "Call of Duty" },
+  { "id": "lol",   "name": "League of Legends" },
+  { "id": "mr",    "name": "Marvel Rivals" },
+  { "id": "ow",    "name": "Overwatch" },
+  { "id": "r6",    "name": "Rainbow Six Siege" },
+  { "id": "rl",    "name": "Rocket League" },
+  { "id": "smash", "name": "Super Smash Brothers Ultimate" },
+  { "id": "val",   "name": "VALORANT" }
+]

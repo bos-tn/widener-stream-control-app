@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widener Esports — Stream Overlay</title>
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Kanit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --widener-blue:#0054B8;
+    --widener-gold:#F0B310;
+    --bg1:#071022;
+    --bg2:#0a1b36;
+    --text:#eaf2ff;
+    --muted:#a9b7d6;
+  }
+  html,body{height:100%;margin:0}
+  body{
+    font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color:var(--text);
+    overflow:hidden;
+    background: radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%);
+  }
+  .bg-gradient{
+    position:fixed; inset:0;
+    background: linear-gradient(120deg, rgba(0,0,0,0) 0%, rgba(255,255,255,0.06) 50%, rgba(0,0,0,0) 100%);
+    mix-blend-mode: overlay;
+    animation: sweep 9s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes sweep{ 0%{transform:translateX(-50%)} 100%{transform:translateX(50%)} }
+  .stripes{
+    position:fixed; inset:-20vh -20vw; opacity:.15; pointer-events:none;
+    background:
+      repeating-linear-gradient(-12deg,
+        var(--widener-blue) 0 18px,
+        transparent 18px 48px,
+        var(--widener-gold) 48px 66px,
+        transparent 66px 96px);
+    animation: drift 40s linear infinite;
+    filter: blur(2px);
+  }
+  @keyframes drift{ from{transform:translate3d(-5vw,-2vh,0) scale(1.1)} to{transform:translate3d(5vw,2vh,0) scale(1.1)} }
+
+  .wrap{ position:relative; height:100%; width:100%; display:grid; align-items:center; justify-items:center; padding:3.5vh 4vw; box-sizing:border-box; }
+  .frame:before, .frame:after{ content:""; position:absolute; inset:30px; border:2px solid rgba(255,255,255,.06); border-radius:24px; pointer-events:none; }
+  .frame:after{ inset:22px; border:1px solid rgba(255,255,255,.08); border-radius:28px; }
+
+  .topbar{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; align-items:center; gap:16px;
+    padding:34px 48px;
+    background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,0));
+    box-sizing:border-box;
+  }
+  .logo{ height:72px; width:auto; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
+  .brand{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; letter-spacing:.5px; font-size:34px; line-height:1; }
+  .brand small{ display:block; font-weight:600; font-size:14px; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; }
+
+  .bar{
+    position:absolute; top:108px; left:0; right:0; height:6px;
+    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+    box-shadow:0 10px 25px rgba(0,0,0,.35);
+    transform-origin: left center; animation: widen 1.2s ease-out 0.2s both;
+    overflow:hidden;
+  }
+  @keyframes widen{ from{ transform:scaleX(0) } to{ transform:scaleX(1) } }
+  .bar::after{
+    content:""; position:absolute; inset:0; width:18%;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.6), rgba(255,255,255,0));
+    mix-blend-mode:screen; opacity:.45; transform:skewX(-10deg);
+    animation: barloop 5.5s linear 1.2s infinite;
+  }
+  @keyframes barloop{ from{ left:-20% } to{ left:120% } }
+
+  .montage-wrap{ position:absolute; top:160px; bottom:140px; width:min(44vw, 780px); display:grid; align-items:center; justify-items:center; pointer-events:none; }
+  .montage-right{ right:48px; }
+  .montage-left{ left:48px; }
+  .montage{
+    width:100%; aspect-ratio:16/9; border-radius:18px; overflow:hidden;
+    background: rgba(0,0,0,.2);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow: 0 18px 40px rgba(0,0,0,.45);
+    position:relative; backdrop-filter: blur(4px);
+  }
+  .montage::after{
+    content:""; position:absolute; inset:-1px; border-radius:18px; padding:1px;
+    background: linear-gradient(90deg,var(--widener-blue),var(--widener-gold),var(--widener-blue));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: borderflow 6s linear infinite; opacity:.45;
+  }
+  @keyframes borderflow{ to { background-position: 400% 0 } }
+  .montage video, .montage iframe{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:auto; }
+  .placeholder{
+    position:absolute; inset:0; display:grid; place-items:center; color:var(--muted);
+    font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    background: repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 8px, rgba(0,0,0,0) 8px 16px);
+  }
+  .placeholder small{ font-weight:400; opacity:.8; margin-top:6px; text-transform:none }
+
+  .content{ display:grid; gap:16px; margin-top:6vh; }
+  .content-left{
+    margin-left:48px;
+    margin-right: calc(min(44vw, 780px) + 64px);
+    text-align:left; justify-items:start;
+    max-width: calc(100vw - (min(44vw, 780px) + 160px));
+  }
+  .content-right{
+    margin-right:48px;
+    margin-left: calc(min(44vw, 780px) + 64px);
+    text-align:right; justify-items:end;
+    max-width: calc(100vw - (min(44vw, 780px) + 160px));
+  }
+  .title{
+    font-family:'Kanit', system-ui, sans-serif;
+    font-size: min(10vw, 80px);
+    line-height:.95;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform:uppercase;
+    text-shadow: 0 10px 40px rgba(0,0,0,.55);
+  }
+  body[data-mode="starting-soon"] .title{ font-size: min(10vw, 100px); }
+  .subtitle{ font-size: min(3.4vw, 32px); color: var(--muted); margin-top:6px; }
+  .pill{
+    display:inline-flex; align-items:center; gap:12px;
+    background: rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08);
+    padding:14px 18px; border-radius:999px; font-weight:600; letter-spacing:.03em;
+    backdrop-filter: blur(6px);
+  }
+  .dot{width:10px; height:10px; border-radius:50%; background:var(--widener-gold); box-shadow:0 0 12px var(--widener-gold);}
+  .count{ font-variant-numeric: tabular-nums; font-family:'Kanit', system-ui, sans-serif; font-size:min(6vw, 64px); letter-spacing:.02em; }
+  .soonPulse{ animation: glow 1.6s ease-in-out infinite; }
+  @keyframes glow{ 0%,100%{ text-shadow:0 0 0 rgba(240,179,16,0) } 50%{ text-shadow:0 0 24px rgba(240,179,16,.55) } }
+  .socials{ position:absolute; bottom:36px; left:48px; right:48px; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; }
+  .handles{display:flex; flex-wrap:wrap; gap:10px 14px;}
+  .tag{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:999px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.06); font-weight:600; letter-spacing:.02em; }
+  .tag svg{width:18px; height:18px; opacity:.9}
+  .badge{ background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:800; font-family:'Kanit', system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+  .next{ font-weight:600; color:var(--muted); }
+
+  .roster-view{
+    position:absolute; inset:160px 48px 140px 48px;
+    display:none; grid-template-columns: 1fr auto 1fr; gap:32px; align-items:center;
+  }
+  .roster-view.active{ display:grid; }
+  .roster-team{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; min-width:0; }
+  .roster-team-header{ display:flex; align-items:center; justify-content:center; gap:14px; }
+  .roster-logo{ width:56px; height:56px; border-radius:12px; object-fit:cover; background:rgba(0,0,0,.3); flex-shrink:0; }
+  .roster-team-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:clamp(20px,2.4vw,30px); text-transform:uppercase; line-height:1.05; }
+  .roster-team-tag{ color:var(--muted); font-weight:600; letter-spacing:.12em; font-size:13px; text-transform:uppercase; }
+  /* --roster-count is set per team by JS to the number of currently active
+     players - fewer players means bigger rows, more means a tighter fit, so
+     the list always reads well instead of looking sparse or overflowing. */
+  .roster-players{
+    display:flex; flex-direction:column; width:100%;
+    gap: clamp(4px, calc(60px / var(--roster-count, 5)), 12px);
+  }
+  .roster-player{
+    display:flex; align-items:center; justify-content:center; gap:10px; background: rgba(0,0,0,.3);
+    border:1px solid rgba(255,255,255,.08); border-radius:10px;
+    padding: clamp(6px, calc(90px / var(--roster-count, 5)), 16px) 14px;
+  }
+  .roster-player .gamertag{ font-weight:700; font-size:clamp(14px, calc(170px / var(--roster-count, 5)), 28px); }
+  .roster-player .realname{ color:var(--muted); font-size:clamp(10px, calc(90px / var(--roster-count, 5)), 14px); }
+  .roster-vs{
+    align-self:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800;
+    font-size:clamp(24px,3vw,40px); color:var(--widener-gold);
+    text-shadow:0 4px 16px rgba(0,0,0,.5);
+  }
+
+  @media (max-width: 1200px){
+    .content{ max-width: 92vw }
+    .content-left, .content-right{
+      text-align:center; justify-items:center;
+      margin-left:0; margin-right:0;
+      max-width: none;
+    }
+    .montage-wrap{ position:static; width:92vw; margin-top:20px }
+    .roster-view{ position:static; inset:auto; margin-top:20px; grid-template-columns:1fr; gap:20px; }
+  }
+  @media (max-width: 700px){
+    .logo{ height:54px }
+    .topbar{ padding:28px 36px }
+    .socials{ left:36px; right:36px; bottom:28px }
+  }
+
+  /* NECC/LeagueOS mode: a full-bleed passthrough to their own overlay page
+     (bracket, match preview, etc). Nothing of ours draws on top of it - it's
+     already a finished graphic, not something we're adding decoration to. */
+  .necc-frame{ display:none; position:fixed; inset:0; z-index:50; background:#000; }
+  .necc-frame.active{ display:block; }
+  .necc-frame iframe{ width:100%; height:100%; border:0; display:block; }
+
+  /* Only ever rendered when this page was loaded with ?preview=1 (the control
+     panel's own preview iframe). If this is ever visible in OBS, the Browser
+     Source URL is wrong - it should be the plain /overlay URL with no query
+     string, not this preview one, which mirrors the draft instantly on every
+     keystroke instead of waiting for Push Live. */
+  .preview-flag{
+    display:none; position:fixed; top:14px; left:14px; z-index:999;
+    background:#c0392b; color:#fff; font-family:'Kanit', system-ui, sans-serif;
+    font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+    font-size:13px; padding:6px 12px; border-radius:6px;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+  }
+  body[data-preview="1"] .preview-flag{ display:block; }
+</style>
+</head>
+<body data-mode="starting-soon">
+  <div class="stripes"></div>
+  <div class="bg-gradient"></div>
+  <div class="preview-flag">Preview — not live</div>
+
+  <div class="necc-frame" id="necc-frame">
+    <iframe id="necc-iframe" title="NECC overlay" src="about:blank"></iframe>
+  </div>
+
+  <div class="wrap frame" id="widener-frame">
+    <div class="bar"></div>
+
+    <header class="topbar">
+      <img class="logo" id="logo-img" alt="Widener Esports logo">
+      <div class="brand">
+        <span id="brand-line1">Widener Esports</span>
+        <small id="brand-line2"></small>
+      </div>
+    </header>
+
+    <section class="montage-wrap montage-right" id="montage-wrap" aria-label="Highlight clips">
+      <div class="montage" id="montage">
+        <div class="placeholder" id="placeholder">
+          <div style="text-align:center">
+            <div id="placeholder-title">Montage Area</div>
+            <small>Set a clip in the control panel, or align an OBS Media Source under this overlay.</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="content content-left" id="content">
+      <div class="pill soonPulse"><span class="dot"></span><span id="status-text">Starting Soon</span></div>
+      <div class="title" id="title">Stream Starting Soon</div>
+      <div class="subtitle" id="subtitle"></div>
+      <div class="count" id="countdown">09:52</div>
+    </main>
+
+    <section class="roster-view" id="roster-view" aria-label="Team rosters">
+      <div class="roster-team" id="roster-team-a">
+        <div class="roster-team-header">
+          <img class="roster-logo" id="roster-logo-a" alt="">
+          <div>
+            <div class="roster-team-name" id="roster-name-a"></div>
+            <div class="roster-team-tag" id="roster-tag-a"></div>
+          </div>
+        </div>
+        <div class="roster-players" id="roster-players-a"></div>
+      </div>
+      <div class="roster-vs">VS</div>
+      <div class="roster-team right" id="roster-team-b">
+        <div class="roster-team-header">
+          <img class="roster-logo" id="roster-logo-b" alt="">
+          <div>
+            <div class="roster-team-name" id="roster-name-b"></div>
+            <div class="roster-team-tag" id="roster-tag-b"></div>
+          </div>
+        </div>
+        <div class="roster-players" id="roster-players-b"></div>
+      </div>
+    </section>
+
+    <footer class="socials">
+      <div class="handles" id="handles"></div>
+      <div class="right">
+        <div class="badge">Pride · Blue &amp; Gold</div>
+        <div class="next" id="next"></div>
+      </div>
+    </footer>
+  </div>
+
+<script>
+  const $ = sel => document.querySelector(sel);
+
+  const defaultLogo = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fcdn2-sr-application.sportsrecruits.com%2Ffiles%2Fimages%2Fcollege_profile%2F587_Widener_University.png%3Ftimestamp%3D1663087049&f=1&nofb=1&ipt=dd04276753660be198709c21720cf7d68bfca614906ca2703c531a07d08596b1";
+  const logoEl = $('#logo-img');
+  const handles = $('#handles');
+  const el = $('#countdown');
+  const montage = $('#montage');
+  const placeholder = $('#placeholder');
+  const placeholderTitle = $('#placeholder-title');
+  const wrap = $('#montage-wrap');
+  const content = $('#content');
+  const rosterView = $('#roster-view');
+  const widenerFrame = $('#widener-frame');
+  const neccFrame = $('#necc-frame');
+  const neccIframe = $('#necc-iframe');
+  const rosterEls = {
+    a: { logo: $('#roster-logo-a'), name: $('#roster-name-a'), tag: $('#roster-tag-a'), players: $('#roster-players-a') },
+    b: { logo: $('#roster-logo-b'), name: $('#roster-name-b'), tag: $('#roster-tag-b'), players: $('#roster-players-b') },
+  };
+  let videoEl = null;
+  let countdownEnd = new Date(Date.now() + 10 * 60 * 1000);
+
+  const icons = {
+    twitch: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h17v12l-5 5h-4l-3 3H7v-3H3V4a2 2 0 0 1 1-2Zm3 3v9h3v3l3-3h4l2-2V5H7Zm8 2h2v5h-2V7Zm-5 0h2v5h-2V7Z"/></svg>',
+    twitter: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 5.8c-.7.3-1.5.6-2.3.7.8-.5 1.4-1.2 1.7-2.1-.7.4-1.6.8-2.5 1a4 4 0 0 0-6.8 3.6A11.5 11.5 0 0 1 3 4.9a4 4 0 0 0 1.3 5.4c-.6 0-1.1-.2-1.6-.4v.1a4 4 0 0 0 3.2 3.9c-.5.1-1 .2-1.5.1a4 4 0 0 0 3.8 2.9A8.1 8.1 0 0 1 2 19a11.4 11.4 0 0 0 6.2 1.8c7.4 0 11.5-6.1 11.5-11.5v-.5c.8-.5 1.4-1.2 1.9-2Z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm11 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2.2A2.8 2.8 0 1 0 12 15.8 2.8 2.8 0 0 0 12 9.2Z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 12c0-2.3-.2-3.9-.6-4.9-.3-.8-.9-1.4-1.7-1.7C19.7 5 12 5 12 5s-7.7 0-8.7.4c-.8.3-1.4.9-1.7 1.7C1.2 8.1 1 9.7 1 12s.2 3.9.6 4.9c.3.8.9 1.4 1.7 1.7C4.3 19 12 19 12 19s7.7 0 8.7-.4c.8-.3 1.4-.9 1.7-1.7.4-1 .6-2.6.6-4.9ZM10 9l5 3-5 3V9Z"/></svg>'
+  };
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  function renderSocials(socials){
+    handles.innerHTML = '';
+    if(!socials) return;
+    ['twitch','twitter','instagram','youtube'].forEach(key => {
+      const v = socials[key];
+      if(v){
+        const a = document.createElement('div');
+        a.className = 'tag';
+        a.innerHTML = icons[key] + '<span>/' + v + '</span>';
+        handles.appendChild(a);
+      }
+    });
+  }
+
+  function normalizeClipPath(s){
+    if(!s) return s;
+    if (/^[a-zA-Z]:\\/.test(s)){ s = 'file:///' + s.replace(/\\/g,'/'); }
+    return s.replace(/ /g, '%20');
+  }
+
+  function applyClip(clip){
+    if(clip){
+      const src = normalizeClipPath(clip);
+      if(!videoEl){
+        videoEl = document.createElement('video');
+        videoEl.autoplay = true; videoEl.loop = true; videoEl.muted = true; videoEl.playsInline = true;
+        montage.appendChild(videoEl);
+      }
+      if(videoEl.getAttribute('src') !== src) videoEl.src = src;
+      if(placeholder) placeholder.style.display = 'none';
+    } else {
+      if(videoEl){ videoEl.remove(); videoEl = null; }
+      if(placeholder) placeholder.style.display = '';
+    }
+  }
+
+  function renderRosterTeam(key, team){
+    const els = rosterEls[key];
+    if(!team) return;
+    if(team.logoUrl){ els.logo.src = team.logoUrl; els.logo.style.visibility = 'visible'; }
+    else { els.logo.removeAttribute('src'); els.logo.style.visibility = 'hidden'; }
+    els.name.textContent = team.name || '';
+    els.tag.textContent = team.tag || '';
+    els.players.innerHTML = '';
+    els.players.style.setProperty('--roster-count', String(Math.max(1, (team.players || []).length)));
+    (team.players || []).forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'roster-player';
+      const gamertag = p.gamertag || p.name || '';
+      const showRealName = p.name && p.gamertag && p.name !== p.gamertag;
+      row.innerHTML = '<span class="gamertag"></span>' + (showRealName ? '<span class="realname"></span>' : '');
+      row.querySelector('.gamertag').textContent = gamertag;
+      if(showRealName) row.querySelector('.realname').textContent = p.name;
+      els.players.appendChild(row);
+    });
+  }
+
+  function applyLayout(layout){
+    if(layout === 'left'){
+      wrap.classList.remove('montage-right'); wrap.classList.add('montage-left');
+      content.classList.remove('content-left'); content.classList.add('content-right');
+    } else {
+      wrap.classList.remove('montage-left'); wrap.classList.add('montage-right');
+      content.classList.remove('content-right'); content.classList.add('content-left');
+    }
+  }
+
+  function tick(){
+    const now = new Date();
+    let diff = countdownEnd - now;
+    if (isNaN(diff)) diff = 0;
+    if (diff <= 0){
+      el.textContent = "00:00:00";
+      requestAnimationFrame(tick);
+      return;
+    }
+    const h = Math.floor(diff/3.6e6);
+    const m = Math.floor((diff%3.6e6)/6e4);
+    const s = Math.floor((diff%6e4)/1000);
+    el.textContent = (h>0? pad(h)+":":"") + pad(m)+":"+pad(s);
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  // Applies a (possibly partial) global state object to the DOM. This is the
+  // single entry point for every field, including which mode (starting-soon
+  // vs post-match) is currently showing - the overlay's URL never changes,
+  // only this pushed state does.
+  function applyState(state){
+    if(!state) return;
+    logoEl.src = state.logo || defaultLogo;
+    if(state.brand) $('#brand-line1').textContent = state.brand;
+    if(state.team !== undefined) $('#brand-line2').textContent = state.team || '';
+    if(state.title) $('#title').textContent = state.title;
+    if(state.subtitle !== undefined) $('#subtitle').textContent = state.subtitle || '';
+    if(state.next !== undefined) $('#next').textContent = state.next || '';
+    if(state.status) $('#status-text').textContent = state.status;
+    if(state.end) countdownEnd = new Date(state.end);
+    if(state.socials) renderSocials(state.socials);
+    if(state.clip !== undefined) applyClip(state.clip);
+    if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
+    if(state.layout) applyLayout(state.layout.toLowerCase());
+    // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc'.
+    // 'necc' is a full-bleed passthrough iframe to a LeagueOS-hosted overlay
+    // (bracket, match preview, etc) - nothing of ours draws on top of it.
+    // 'roster' is a full third Widener view (not a flag layered on the
+    // others) - it hides the title/countdown content and montage panel and
+    // shows the two-team lineup instead.
+    if(state.mode){
+      document.body.dataset.mode = state.mode;
+      const isNecc = state.mode === 'necc';
+      const isRoster = state.mode === 'roster';
+      widenerFrame.style.display = isNecc ? 'none' : '';
+      neccFrame.classList.toggle('active', isNecc);
+      if(isNecc){
+        if(state.neccUrl && neccIframe.src !== state.neccUrl) neccIframe.src = state.neccUrl;
+      } else {
+        placeholderTitle.textContent = state.mode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';
+        content.style.display = isRoster ? 'none' : '';
+        rosterView.classList.toggle('active', isRoster);
+        if(isRoster){
+          wrap.style.display = 'none';
+        } else if(state.montage !== undefined){
+          wrap.style.display = state.montage === false ? 'none' : '';
+        }
+      }
+    }
+    if(state.teamA) renderRosterTeam('a', state.teamA);
+    if(state.teamB) renderRosterTeam('b', state.teamB);
+  }
+
+  // Live updates pushed from the control app's local server. There is exactly
+  // one overlay URL for every game and both moments (starting-soon /
+  // post-match) - it never needs to change in OBS. The one exception is the
+  // control panel's own preview pane, which loads this same page with
+  // ?preview=1 so it renders the in-progress draft instead of what's
+  // actually live on stream.
+  const isPreview = new URLSearchParams(location.search).get('preview') === '1';
+  const channel = isPreview ? 'draft' : 'live';
+  if(isPreview) document.body.dataset.preview = '1';
+  (function connect(){
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', channel })));
+    ws.addEventListener('message', (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'state' && msg.channel === channel) applyState(msg.data);
+      } catch (e) {}
+    });
+    ws.addEventListener('close', () => setTimeout(connect, 2000));
+  })();
+</script>
+</body></html>

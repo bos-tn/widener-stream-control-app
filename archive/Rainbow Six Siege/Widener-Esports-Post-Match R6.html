@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widener Esports — Post Match</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+  <link href="Widener%20Esports%20%E2%80%94%20Post%20Match_files/css2.css" rel="stylesheet">
+  <style>
+    :root{
+      --widener-blue:#0054B8;
+      --widener-gold:#F0B310;
+      --bg1:#071022;
+      --bg2:#0a1b36;
+      --text:#eaf2ff;
+      --muted:#a9b7d6;
+    }
+    html,body{height:100%;margin:0}
+    body{
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color:var(--text);
+      overflow:hidden;
+      background: radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%);
+    }
+    .bg-gradient{
+      position:fixed; inset:0;
+      background: linear-gradient(120deg, rgba(0,0,0,0) 0%, rgba(255,255,255,0.06) 50%, rgba(0,0,0,0) 100%);
+      mix-blend-mode: overlay;
+      animation: sweep 9s linear infinite;
+      pointer-events:none;
+    }
+    @keyframes sweep{ 0%{transform:translateX(-50%)} 100%{transform:translateX(50%)} }
+    .stripes{
+      position:fixed; inset:-20vh -20vw; opacity:.15; pointer-events:none;
+      background:
+        repeating-linear-gradient(-12deg,
+          var(--widener-blue) 0 18px,
+          transparent 18px 48px,
+          var(--widener-gold) 48px 66px,
+          transparent 66px 96px);
+      animation: drift 40s linear infinite;
+      filter: blur(2px);
+    }
+    @keyframes drift{ from{transform:translate3d(-5vw,-2vh,0) scale(1.1)} to{transform:translate3d(5vw,2vh,0) scale(1.1)} }
+
+    .wrap{ position:relative; height:100%; width:100%; display:grid; align-items:center; justify-items:center; padding:3.5vh 4vw; box-sizing:border-box; }
+    .frame:before, .frame:after{ content:""; position:absolute; inset:30px; border:2px solid rgba(255,255,255,.06); border-radius:24px; pointer-events:none; }
+    .frame:after{ inset:22px; border:1px solid rgba(255,255,255,.08); border-radius:28px; }
+
+    .topbar{
+      position:absolute; top:0; left:0; right:0;
+      display:flex; align-items:center; gap:16px;
+      padding:34px 48px;
+      background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,0));
+      box-sizing:border-box;
+    }
+    .logo{ height:72px; width:auto; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
+    .brand{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; letter-spacing:.5px; font-size:34px; line-height:1; }
+    .brand small{ display:block; font-weight:600; font-size:14px; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; }
+
+    .bar{
+      position:absolute; top:108px; left:0; right:0; height:6px;
+      background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+      box-shadow:0 10px 25px rgba(0,0,0,.35);
+      transform-origin: left center; animation: widen 1.2s ease-out 0.2s both;
+      overflow:hidden;
+    }
+    @keyframes widen{ from{ transform:scaleX(0) } to{ transform:scaleX(1) } }
+    .bar::after{
+      content:""; position:absolute; inset:0; width:18%;
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.6), rgba(255,255,255,0));
+      mix-blend-mode:screen; opacity:.45; transform:skewX(-10deg);
+      animation: barloop 5.5s linear 1.2s infinite;
+    }
+    @keyframes barloop{ from{ left:-20% } to{ left:120% } }
+
+    /* Montage container, side configurable */
+    .montage-wrap{ position:absolute; top:160px; bottom:140px; width:min(44vw, 780px); display:grid; align-items:center; justify-items:center; pointer-events:none; }
+    .montage-right{ right:48px; }
+    .montage-left{ left:48px; }
+    .montage{
+      width:100%; aspect-ratio:16/9; border-radius:18px; overflow:hidden;
+      background: rgba(0,0,0,.2);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow: 0 18px 40px rgba(0,0,0,.45);
+      position:relative; backdrop-filter: blur(4px);
+    }
+    .montage::after{
+      content:""; position:absolute; inset:-1px; border-radius:18px; padding:1px;
+      background: linear-gradient(90deg,var(--widener-blue),var(--widener-gold),var(--widener-blue));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      animation: borderflow 6s linear infinite; opacity:.45;
+    }
+    @keyframes borderflow{ to { background-position: 400% 0 } }
+    .montage video, .montage iframe{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:auto; }
+    .placeholder{
+      position:absolute; inset:0; display:grid; place-items:center; color:var(--muted);
+      font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+      background: repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 8px, rgba(0,0,0,0) 8px 16px);
+    }
+    .placeholder small{ font-weight:400; opacity:.8; margin-top:6px; text-transform:none }
+
+    /* Content column (opposite montage) */
+    .content{
+      display:grid; gap:16px; margin-top:6vh;
+    }
+    /* When montage is on the right, push content left and reserve that space */
+    .content-left{
+      margin-left:48px;
+      margin-right: calc(min(44vw, 780px) + 64px);
+      text-align:left; justify-items:start;
+      max-width: calc(100vw - (min(44vw, 780px) + 160px));
+    }
+    /* When montage is on the left, push content right and reserve that space */
+    .content-right{
+      margin-right:48px;
+      margin-left: calc(min(44vw, 780px) + 64px);
+      text-align:right; justify-items:end;
+      max-width: calc(100vw - (min(44vw, 780px) + 160px));
+    }
+    .title{
+      font-family:'Kanit', system-ui, sans-serif;
+      font-size: min(10vw, 80px);
+      line-height:.95;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform:uppercase;
+      text-shadow: 0 10px 40px rgba(0,0,0,.55);
+    }
+    .subtitle{ font-size: min(3.4vw, 32px); color: var(--muted); margin-top:6px; }
+    .pill{
+      display:inline-flex; align-items:center; gap:12px;
+      background: rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08);
+      padding:14px 18px; border-radius:999px; font-weight:600; letter-spacing:.03em;
+      backdrop-filter: blur(6px);
+    }
+    .dot{width:10px; height:10px; border-radius:50%; background:var(--widener-gold); box-shadow:0 0 12px var(--widener-gold);}
+    .count{ font-variant-numeric: tabular-nums; font-family:'Kanit', system-ui, sans-serif; font-size:min(6vw, 64px); letter-spacing:.02em; }
+    .soonPulse{ animation: glow 1.6s ease-in-out infinite; }
+    @keyframes glow{ 0%,100%{ text-shadow:0 0 0 rgba(240,179,16,0) } 50%{ text-shadow:0 0 24px rgba(240,179,16,.55) } }
+.socials{ position:absolute; bottom:36px; left:48px; right:48px; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; }
+    .handles{display:flex; flex-wrap:wrap; gap:10px 14px;}
+    .tag-social{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:999px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.06); font-weight:600; letter-spacing:.02em; }
+    .tag-social svg{width:18px; height:18px; opacity:.9}
+    .badge{ background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:800; font-family:'Kanit', system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+    .next{ font-weight:600; color:var(--muted); }
+
+    @media (max-width: 1200px){
+      .content{ max-width: 92vw }
+      .content-left, .content-right{
+        text-align:center; justify-items:center;
+        margin-left:0; margin-right:0;
+        max-width: none;
+      }
+      .montage-wrap{ position:static; width:92vw; margin-top:20px }
+    }
+    @media (max-width: 700px){
+      .logo{ height:54px }
+      .topbar{ padding:28px 36px }
+      .socials{ left:36px; right:36px; bottom:28px }
+    }</style>
+
+</head>
+<body>
+  <div class="stripes"></div>
+  <div class="bg-gradient"></div>
+
+  <div class="wrap frame">
+    <div class="bar"></div>
+
+    <header class="topbar">
+      <img class="logo" id="logo-img" src="Widener%20Esports%20%E2%80%94%20Post%20Match_files/587_Widener_University-278525538.png" alt="Widener Esports logo">
+      <div class="brand">
+        <span id="brand-line1">Widener Esports</span>
+        <small id="brand-line2">Rainbow Six Siege</small>
+      </div>
+    </header>
+
+    <!-- Montage side is configurable; default right -->
+    <section class="montage-wrap montage-right" id="montage-wrap" aria-label="Post-match highlights">
+      <div class="montage" id="montage">
+        <div class="placeholder" id="placeholder">
+          <div style="text-align:center">
+            <div>Post‑Match Clips</div>
+            <small>Pass ?clip=URL, or place a Media Source under this overlay.</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Content column (opposite montage) -->
+    <main class="content content-left" id="content">
+      <div class="pill soonPulse"><span class="dot"></span><span id="status-text">Stream Ending Soon</span></div>
+      <div class="title" id="title">Thanks for Watching</div>
+<div class="tag"><strong></strong>
+</div>
+      </main></div>
+      <div class="count" id="countdown">01:53</div>
+    
+
+    <footer class="socials">
+      <div class="handles" id="handles"></div>
+      <div class="right">
+        <div class="badge">Pride · Blue &amp; Gold</div>
+        <div class="next" id="next"></div>
+      </div>
+    </footer>
+  
+
+<script>
+  const qs = new URLSearchParams(location.search);
+  const $ = sel => document.querySelector(sel);
+
+  // Branding / copy
+  const defaultLogo = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fcdn2-sr-application.sportsrecruits.com%2Ffiles%2Fimages%2Fcollege_profile%2F587_Widener_University.png%3Ftimestamp%3D1663087049&f=1&nofb=1&ipt=dd04276753660be198709c21720cf7d68bfca614906ca2703c531a07d08596b1";
+  const logoParam = qs.get('logo');
+  const logoEl = $('#logo-img');
+  if (logoEl){ logoEl.src = logoParam ? logoParam : defaultLogo; }
+
+  if(qs.get('brand')) $('#brand-line1').textContent = qs.get('brand');
+  if(qs.get('team'))  $('#brand-line2').textContent = qs.get('team');
+  if(qs.get('title')) $('#title').textContent = qs.get('title');
+  if(qs.get('subtitle')) $('#subtitle').textContent = qs.get('subtitle');
+  if(qs.get('status')) $('#status-text').textContent = qs.get('status');if(qs.get('next')) $('#next').textContent = qs.get('next');
+
+  // Socials
+  const icons = {
+    twitch: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h17v12l-5 5h-4l-3 3H7v-3H3V4a2 2 0 0 1 1-2Zm3 3v9h3v3l3-3h4l2-2V5H7Zm8 2h2v5h-2V7Zm-5 0h2v5h-2V7Z"/></svg>',
+    twitter: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 5.8c-.7.3-1.5.6-2.3.7.8-.5 1.4-1.2 1.7-2.1-.7.4-1.6.8-2.5 1a4 4 0 0 0-6.8 3.6A11.5 11.5 0 0 1 3 4.9a4 4 0 0 0 1.3 5.4c-.6 0-1.1-.2-1.6-.4v.1a4 4 0 0 0 3.2 3.9c-.5.1-1 .2-1.5.1a4 4 0 0 0 3.8 2.9A8.1 8.1 0 0 1 2 19a11.4 11.4 0 0 0 6.2 1.8c7.4 0 11.5-6.1 11.5-11.5v-.5c.8-.5 1.4-1.2 1.9-2Z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm11 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2.2A2.8 2.8 0 1 0 12 15.8 2.8 2.8 0 0 0 12 9.2Z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 12c0-2.3-.2-3.9-.6-4.9-.3-.8-.9-1.4-1.7-1.7C19.7 5 12 5 12 5s-7.7 0-8.7.4c-.8.3-1.4.9-1.7 1.7C1.2 8.1 1 9.7 1 12s.2 3.9.6 4.9c.3.8.9 1.4 1.7 1.7C4.3 19 12 19 12 19s7.7 0 8.7-.4c.8-.3 1.4-.9 1.7-1.7.4-1 .6-2.6.6-4.9ZM10 9l5 3-5 3V9Z"/></svg>'
+  };
+  const handles = $('#handles');
+  ['twitch','twitter','instagram','youtube'].forEach(key => {
+    const v = qs.get(key);
+    if(v){
+      const a = document.createElement('div');
+      a.className = 'tag-social';
+      a.innerHTML = icons[key] + '<span>/' + v + '</span>';
+      handles.appendChild(a);
+    }
+  });
+
+  // Montage loader with Windows path normalization
+  function normalizeClipPath(s){
+    if(!s) return s;
+    if (/^[a-zA-Z]:\\\\/.test(s)){ s = 'file:///' + s.replace(/\\\\\\\\/g,'/'); }
+    s = s.replace(/ /g, '%20');
+    return s;
+  }
+
+  const clip = qs.get('clip');
+  const montage = $('#montage');
+  const placeholder = $('#placeholder');
+  if (clip){
+    const src = normalizeClipPath(clip);
+    const v = document.createElement('video');
+    v.src = src; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+    if (qs.get('controls')) v.setAttribute('controls','controls');
+    montage.appendChild(v);
+    placeholder && placeholder.remove();
+  }
+  if (qs.get('montage') === '0'){ $('#montage-wrap').style.display = 'none'; }
+
+  // Layout side: left/right
+  const layout = (qs.get('layout')||'right').toLowerCase();
+  const wrap = $('#montage-wrap');
+  const content = $('#content');
+  if (layout === 'left'){
+    wrap.classList.remove('montage-right'); wrap.classList.add('montage-left');
+    content.classList.remove('content-left'); content.classList.add('content-right');
+  }
+
+  // Countdown: default 2 minutes; support ?start=ISO or ?duration=seconds
+  const el = $('#countdown');
+  const startParam = qs.get('start');
+  const durationSec = parseInt(qs.get('duration') || '120', 10);
+  let end = startParam ? new Date(startParam) : new Date(Date.now() + durationSec*1000);
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function tick(){
+    const now = new Date();
+    let diff = end - now;
+    if (isNaN(diff)) diff = 0;
+    if (diff <= 0){
+      el.textContent = "00:00:00";
+      $('#status-text').textContent = "Stream Ending";
+      return;
+    }
+    const h = Math.floor(diff/3.6e6);
+    const m = Math.floor((diff%3.6e6)/6e4);
+    const s = Math.floor((diff%6e4)/1000);
+    el.textContent = (h>0? pad(h)+":":"") + pad(m)+":"+pad(s);
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  </script>
+
+
+</body></html>

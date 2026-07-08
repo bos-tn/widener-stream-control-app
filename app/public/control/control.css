@@ -1,0 +1,189 @@
+:root{
+  --widener-blue:#0054B8;
+  --widener-gold:#F0B310;
+  --bg:#0a0e17;
+  --panel:#131a29;
+  --panel-border:#242e42;
+  --text:#eaf2ff;
+  --muted:#9fb0cc;
+  --ok:#3ddc84;
+  --bad:#e5484d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;}
+html,body{height:100%; overflow:hidden}
+body{display:flex; flex-direction:column}
+
+/* Themed scrollbar (Chromium/Electron) */
+::-webkit-scrollbar{ width:12px; height:12px; }
+::-webkit-scrollbar-track{ background:var(--bg); }
+::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, var(--widener-blue), #002f66);
+  border-radius:8px; border:2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover{ background:linear-gradient(180deg, var(--widener-gold), var(--widener-blue)); }
+::-webkit-scrollbar-corner{ background:var(--bg); }
+html{ scrollbar-color: var(--widener-blue) var(--bg); scrollbar-width: thin; }
+
+.topbar{
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:14px; justify-content:flex-start;
+  padding:16px 28px; border-bottom:1px solid var(--panel-border);
+  background:linear-gradient(180deg, rgba(0,84,184,.15), transparent);
+}
+.brand-logo{ width:40px; height:40px; border-radius:10px; flex-shrink:0; }
+.brand{display:flex; flex-direction:column; line-height:1.2; margin-right:auto}
+.brand-title{font-weight:800; font-size:20px}
+.brand-sub{font-size:13px; color:var(--muted)}
+.conn{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted)}
+.dot{width:9px; height:9px; border-radius:50%; background:var(--bad)}
+.dot.connected{background:var(--ok)}
+
+.layout{
+  flex:1 1 auto; min-height:0;
+  display:grid; grid-template-columns:1fr 6px var(--preview-width, 440px); gap:0;
+}
+
+.settings-col{
+  overflow-y:auto; min-height:0;
+  padding:20px 20px 60px;
+  display:flex; flex-direction:column; gap:18px;
+}
+
+.col-resizer{
+  cursor:col-resize; background:var(--panel-border); position:relative;
+}
+.col-resizer::after{
+  content:""; position:absolute; top:0; bottom:0; left:-3px; right:-3px;
+}
+.col-resizer:hover, .col-resizer.dragging{ background:var(--widener-blue); }
+
+.preview-col{
+  min-height:0; overflow:hidden;
+  padding:20px; border-left:1px solid var(--panel-border);
+  display:flex; flex-direction:column; gap:12px;
+  background:rgba(255,255,255,.015);
+}
+.preview-label{ font-size:13px; color:var(--muted); font-weight:600; }
+.preview-frame-wrap{
+  flex:1 1 auto; min-height:0;
+  border-radius:12px; overflow:hidden; border:1px solid var(--panel-border);
+  background:#000;
+  display:flex; align-items:center; justify-content:center;
+}
+/* Force the same 16:9 shape OBS actually renders at (1920x1080), letterboxed
+   within whatever space this column has. The overlay itself is rendered at
+   its real 1920x1080 size inside .preview-scaler, then the whole thing is
+   scaled down with a CSS transform (see control.js) - resizing this box just
+   changes the scale factor, so proportions (title size, layout, montage box)
+   always match what viewers actually see on stream, at any preview size.
+   Width/height are set explicitly by JS (not CSS aspect-ratio+max-height,
+   which doesn't reliably shrink width when height is the binding constraint -
+   e.g. a short, wide preview column) so it's always exactly 16:9 no matter
+   which dimension is tighter. */
+.preview-frame-16x9{
+  position:relative; overflow:hidden;
+}
+.preview-scaler{
+  position:absolute; top:0; left:0; width:1920px; height:1080px;
+  transform-origin: top left;
+}
+.preview-scaler iframe{ width:1920px; height:1080px; border:0; display:block; }
+
+@media (max-width: 980px){
+  .layout{ grid-template-columns:1fr; grid-template-rows: 1fr 6px var(--preview-height, 340px); }
+  .col-resizer{ cursor:row-resize; }
+  .preview-col{ border-left:none; border-top:1px solid var(--panel-border); }
+}
+
+.panel{
+  background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:12px; padding:18px 20px;
+}
+.panel h2{
+  margin:0 0 14px; font-size:14px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--widener-gold); font-weight:700;
+}
+
+.field{display:flex; flex-direction:column; gap:6px; margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.field label, .field-row label{font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px}
+.field > label{margin-bottom:0}
+
+.field-row{display:flex; gap:16px; margin-bottom:14px}
+.field-row:last-child{margin-bottom:0}
+.field-row .grow{flex:1}
+
+input[type=text], input[type=number], input[type=password], input[type=datetime-local], select{
+  background:#0d1420; border:1px solid var(--panel-border); color:var(--text);
+  padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit;
+  width:100%;
+}
+input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:1px}
+
+.copy-row{display:flex; gap:8px}
+.copy-row input{flex:1; font-family:Consolas,Menlo,monospace; font-size:13px; color:var(--muted)}
+
+.btn-secondary{
+  background:#1b2436; border:1px solid var(--panel-border); color:var(--text);
+  padding:0 16px; border-radius:8px; cursor:pointer; font-size:13px;
+}
+.btn-secondary:hover{background:#232f47}
+.btn-secondary:disabled{opacity:.5; cursor:not-allowed}
+
+.hint{color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0}
+
+.radio{flex-direction:row !important; align-items:center; gap:8px !important; font-size:14px; color:var(--text) !important; cursor:pointer}
+.radio input{margin:0}
+
+.checkbox{flex-direction:row !important; align-items:center; gap:10px !important; font-size:14px; color:var(--text) !important; cursor:pointer}
+.checkbox input{margin:0; width:16px; height:16px}
+
+.countdown-mode{margin-bottom:16px}
+
+.segmented{ display:flex; border:1px solid var(--panel-border); border-radius:8px; overflow:hidden; }
+.seg-btn{
+  flex:1; background:#0d1420; border:none; color:var(--muted);
+  padding:10px 12px; font-size:14px; font-family:inherit; cursor:pointer;
+  border-right:1px solid var(--panel-border);
+}
+.seg-btn:last-child{border-right:none}
+.seg-btn.active{ background:var(--widener-blue); color:#fff; font-weight:600; }
+.seg-btn:not(.active):hover{ background:#161f30; color:var(--text); }
+
+.push-btn{
+  background:linear-gradient(90deg, var(--widener-blue), #0069e6);
+  color:#fff; border:none; border-radius:10px; padding:16px; font-size:16px; font-weight:700;
+  letter-spacing:.03em; cursor:pointer; box-shadow:0 8px 20px rgba(0,84,184,.35);
+  flex:0 0 auto;
+}
+.push-btn:hover{filter:brightness(1.08)}
+.push-btn:active{transform:translateY(1px)}
+
+.push-status{text-align:center; font-size:13px; color:var(--muted); min-height:18px; flex:0 0 auto;}
+
+/* NECC import */
+.necc-status{ font-size:13px; color:var(--muted); min-height:16px; margin-top:2px; }
+.necc-status.error{ color:var(--bad); }
+.necc-teams{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+@media (max-width: 1300px){ .necc-teams{ grid-template-columns:1fr; } }
+.necc-team{ background:#0d1420; border:1px solid var(--panel-border); border-radius:10px; padding:12px; }
+.necc-team-header{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.necc-team-logo{ width:36px; height:36px; border-radius:8px; object-fit:cover; background:rgba(255,255,255,.05); }
+.necc-team-name{ font-weight:700; font-size:14px; }
+.necc-team-tag{ font-size:11px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+.roster-picker{ display:flex; flex-wrap:wrap; gap:8px; }
+.roster-chip{
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+  background:#161f30; border:1px solid var(--panel-border); border-radius:8px;
+  padding:8px 12px; cursor:pointer; font-size:13px; color:var(--muted);
+  transition:background .12s, border-color .12s, color .12s;
+}
+.roster-chip .rc-tag{ font-weight:700; color:var(--text); }
+.roster-chip .rc-name{ font-size:11px; }
+.roster-chip.selected{ background:rgba(0,84,184,.35); border-color:var(--widener-blue); color:var(--text); }
+.roster-chip.selected .rc-tag{ color:#fff; }
+.roster-chip:hover{ border-color:var(--widener-gold); }
+
+.necc-type-hint{ margin:0 0 12px; font-size:13px; }
+.necc-type-list{ display:flex; flex-direction:column; gap:10px; }

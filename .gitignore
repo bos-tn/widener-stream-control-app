@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output (electron-builder)
+app/dist/
+
+# Dev-only local state (mutable runtime data, not source)
+app/data/
+
+# Legacy, superseded overlay files (large video assets, unused by the app)
+Stream/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db

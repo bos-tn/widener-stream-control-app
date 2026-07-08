@@ -1,0 +1,46 @@
+{
+  "name": "widener-stream-overlay-app",
+  "version": "0.4.3",
+  "private": true,
+  "description": "Widener Esports stream overlay control app",
+  "main": "main.js",
+  "author": "Widener University Esports",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.2"
+  },
+  "build": {
+    "appId": "edu.widener.esports.streamcontrol",
+    "productName": "Widener Esports Stream Control",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "necc.js",
+      "package.json",
+      "templates/**/*",
+      "public/**/*",
+      "build/icons/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

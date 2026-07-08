@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stream-app-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/server.js"],
+      "port": 4310
+    },
+    {
+      "name": "stream-app-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/server.js"],
+      "port": 4311
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widener Esports — Stream Control</title>
+<link rel="stylesheet" href="control.css">
+</head>
+<body>
+  <header class="topbar">
+    <img class="brand-logo" src="assets/logo.png" alt="Widener Esports">
+    <div class="brand">
+      <span class="brand-title">Widener Esports</span>
+      <span class="brand-sub">Stream Overlay Control</span>
+    </div>
+    <div class="conn" id="conn">
+      <span class="dot" id="connDot"></span>
+      <span id="connText">Connecting…</span>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <main class="settings-col">
+      <section class="panel">
+        <div class="field">
+          <label for="obsUrl">OBS Browser Source URL <span class="hint">(paste this once, in every scene — it never changes, not even when you switch games)</span></label>
+          <div class="copy-row">
+            <input type="text" id="obsUrl" readonly>
+            <button id="copyUrlBtn" class="btn-secondary" type="button">Copy</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <label class="grow">
+            Game <span class="hint">(fills the game name below)</span>
+            <select id="gameSelect"></select>
+          </label>
+          <label class="grow">
+            Overlay <span class="hint">(what's showing in OBS right now)</span>
+            <select id="overlaySelect">
+              <optgroup label="Widener">
+                <option value="widener:starting-soon">Starting Soon</option>
+                <option value="widener:post-match">Post-Match</option>
+                <option value="widener:roster">Rosters</option>
+              </optgroup>
+              <optgroup label="NECC" id="neccOptGroup"></optgroup>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Import from NECC / LeagueOS</h2>
+        <div class="field">
+          <label for="neccUrlInput">Match link <span class="hint">(the match page or overlay link)</span></label>
+          <div class="copy-row">
+            <input type="text" id="neccUrlInput" placeholder="https://necc.v1.leagueos.gg/league/matches/...">
+            <button id="neccFetchBtn" class="btn-secondary" type="button">Fetch</button>
+          </div>
+        </div>
+        <div class="necc-status" id="neccStatus"></div>
+
+        <div class="necc-teams" id="neccTeams" hidden>
+          <div class="necc-team" id="neccTeamA">
+            <div class="necc-team-header">
+              <img class="necc-team-logo" id="neccLogoA" alt="">
+              <div>
+                <div class="necc-team-name" id="neccNameA"></div>
+                <div class="necc-team-tag" id="neccTagA"></div>
+              </div>
+            </div>
+            <div class="roster-picker" id="neccRosterA"></div>
+          </div>
+          <div class="necc-team" id="neccTeamB">
+            <div class="necc-team-header">
+              <img class="necc-team-logo" id="neccLogoB" alt="">
+              <div>
+                <div class="necc-team-name" id="neccNameB"></div>
+                <div class="necc-team-tag" id="neccTagB"></div>
+              </div>
+            </div>
+            <div class="roster-picker" id="neccRosterB"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Text</h2>
+        <div class="field">
+          <label for="teamInput">Game name</label>
+          <input type="text" id="teamInput" placeholder="Call of Duty">
+        </div>
+        <div class="field">
+          <label for="titleInput">Title</label>
+          <input type="text" id="titleInput" placeholder="Stream Starting Soon">
+        </div>
+        <div class="field">
+          <label for="subtitleInput">Subtitle</label>
+          <input type="text" id="subtitleInput" placeholder="Optional subtitle">
+        </div>
+        <div class="field-row">
+          <label class="grow">
+            Status pill
+            <input type="text" id="statusInput" placeholder="Starting Soon">
+          </label>
+          <label class="grow">
+            Next match
+            <input type="text" id="nextInput" placeholder="Next: vs Rowan Fri 7pm">
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Countdown</h2>
+        <div class="field-row countdown-mode">
+          <label class="radio">
+            <input type="radio" name="countdownMode" id="modeDuration" value="duration" checked>
+            Count down from now
+          </label>
+          <label class="radio">
+            <input type="radio" name="countdownMode" id="modeAt" value="at">
+            Count down to a specific time
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="grow" id="durationField">
+            Seconds from now
+            <input type="number" id="durationInput" min="0" step="1" placeholder="600">
+          </label>
+          <label class="grow" id="atField" style="display:none">
+            Target date &amp; time
+            <input type="datetime-local" id="atInput">
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Socials <span class="hint">(defaults to wideneresports)</span></h2>
+        <div class="field-row">
+          <label class="grow">Twitch<input type="text" id="twitchInput" placeholder="wideneresports"></label>
+          <label class="grow">Twitter/X<input type="text" id="twitterInput" placeholder="wideneresports"></label>
+        </div>
+        <div class="field-row">
+          <label class="grow">Instagram<input type="text" id="instagramInput" placeholder="wideneresports"></label>
+          <label class="grow">YouTube<input type="text" id="youtubeInput" placeholder="wideneresports"></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Media</h2>
+        <div class="field">
+          <label for="logoInput">Logo URL or file <span class="hint">(leave blank for the default Widener logo)</span></label>
+          <div class="copy-row">
+            <input type="text" id="logoInput" placeholder="https://... or a local image file">
+            <button id="browseLogoBtn" class="btn-secondary" type="button">Browse…</button>
+            <input type="file" id="logoFile" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="field">
+          <label for="clipInput">Montage clip path or URL</label>
+          <div class="copy-row">
+            <input type="text" id="clipInput" placeholder="C:\path\to\clip.mp4 or https://...">
+            <button id="browseClipBtn" class="btn-secondary" type="button">Browse…</button>
+            <input type="file" id="clipFile" accept="video/*" hidden>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="checkbox">
+            <input type="checkbox" id="montageInput" checked>
+            Show montage panel
+          </label>
+          <label class="grow" id="layoutField">
+            Layout side
+            <select id="layoutInput">
+              <option value="right">Montage right, text left</option>
+              <option value="left">Montage left, text right</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>NECC overlays in the dropdown</h2>
+        <p class="hint necc-type-hint">Rendered right inside this same overlay - no OBS connection needed, nothing else to configure.</p>
+        <div class="necc-type-list" id="neccTypeList"></div>
+      </section>
+    </main>
+
+    <div class="col-resizer" id="colResizer"></div>
+
+    <aside class="preview-col">
+      <div class="preview-label">Preview <span class="hint">(not live until you push)</span></div>
+      <div class="preview-frame-wrap">
+        <div class="preview-frame-16x9" id="previewBox">
+          <div class="preview-scaler" id="previewScaler">
+            <iframe id="previewFrame" src="/overlay?preview=1" title="Overlay preview"></iframe>
+          </div>
+        </div>
+      </div>
+      <button id="pushBtn" class="push-btn" type="button">Push Live</button>
+      <div class="push-status" id="pushStatus"></div>
+    </aside>
+  </div>
+
+  <script src="control.js"></script>
+</body>
+</html>
