@@ -188,10 +188,15 @@
 
   /* NECC/LeagueOS mode: a full-bleed passthrough to their own overlay page
      (bracket, match preview, etc). Nothing of ours draws on top of it - it's
-     already a finished graphic, not something we're adding decoration to. */
+     already a finished graphic, not something we're adding decoration to.
+     Some NECC overlays (e.g. the bracket) have a transparent background, so
+     the frame can optionally go transparent too (.branded) - the body
+     gradient and animated stripes underneath show through instead of a flat
+     black void. Opaque NECC pages are unaffected either way. */
   .necc-frame{ display:none; position:fixed; inset:0; z-index:50; background:#000; }
+  .necc-frame.branded{ background:transparent; }
   .necc-frame.active{ display:block; }
-  .necc-frame iframe{ width:100%; height:100%; border:0; display:block; }
+  .necc-frame iframe{ width:100%; height:100%; border:0; display:block; background:transparent; }
 
   /* Curtain stinger transition: drawn over everything (including the NECC
      iframe) while a Push Live transition plays. The canvas is transparent
@@ -457,6 +462,9 @@
       widenerFrame.style.display = isNecc ? 'none' : '';
       neccFrame.classList.toggle('active', isNecc);
       if(isNecc){
+        // neccBg === false -> flat black behind the NECC page; anything else
+        // (true or absent, for old saved states) -> Widener stripe backdrop.
+        neccFrame.classList.toggle('branded', state.neccBg !== false);
         if(state.neccUrl && neccIframe.src !== state.neccUrl) neccIframe.src = state.neccUrl;
       } else {
         placeholderTitle.textContent = state.mode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';

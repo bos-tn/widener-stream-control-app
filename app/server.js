@@ -31,6 +31,8 @@ const DEFAULT_STATE = {
   montage: true,
   neccUrl: '',
   neccType: '',
+  // Widener stripe backdrop behind transparent NECC overlays (vs flat black)
+  neccBg: true,
   socials: {
     twitch: DEFAULT_SOCIAL,
     twitter: DEFAULT_SOCIAL,

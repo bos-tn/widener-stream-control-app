@@ -4,6 +4,8 @@ const copyUrlBtn = document.getElementById('copyUrlBtn');
 const gameSelect = document.getElementById('gameSelect');
 const overlaySelect = document.getElementById('overlaySelect');
 const neccOptGroup = document.getElementById('neccOptGroup');
+const neccBgField = document.getElementById('neccBgField');
+const neccBgInput = document.getElementById('neccBgInput');
 
 const teamInput = document.getElementById('teamInput');
 const titleInput = document.getElementById('titleInput');
@@ -90,6 +92,8 @@ function updateUrlDisplay() {
 
 function toggleLayoutVisibility() {
   layoutField.style.display = currentMode === 'post-match' ? '' : 'none';
+  // The stripe-backdrop toggle only means anything while a NECC overlay is up.
+  neccBgField.style.display = currentMode === 'necc' ? '' : 'none';
 }
 
 function teamPayload(team) {
@@ -109,6 +113,7 @@ function gatherForm() {
     mode: currentMode,
     neccUrl: currentNeccUrl,
     neccType: currentNeccType,
+    neccBg: neccBgInput.checked,
     game: gameSelect.value,
     team: teamInput.value,
     title: titleInput.value,
@@ -159,6 +164,7 @@ function populateForm(state) {
     overlaySelect.value = `widener:${currentMode}`;
   }
   toggleLayoutVisibility();
+  neccBgInput.checked = state.neccBg !== false;
   teamInput.value = state.team || '';
   titleInput.value = state.title || '';
   subtitleInput.value = state.subtitle || '';
@@ -356,6 +362,7 @@ overlaySelect.addEventListener('change', () => {
   currentMode = 'necc';
   currentNeccType = key;
   currentNeccUrl = url;
+  toggleLayoutVisibility();
   sendDraftNow();
 });
 

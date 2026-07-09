@@ -106,9 +106,14 @@ widenerstreamlogofixed.png     - APP ICON source (used by build/make-icon.js for
      measurements if you forget to resize first).
    - `necc` - full-bleed passthrough `<iframe>` (`#necc-frame` /
      `#necc-iframe`) to a LeagueOS-hosted overlay URL (`state.neccUrl`).
-     Everything else (topbar, frame, stripes) is hidden. Confirmed LeagueOS's
+     The Widener topbar/frame/content are hidden. Confirmed LeagueOS's
      overlay pages send no `X-Frame-Options`/CSP restricting embedding, so
-     this works.
+     this works. As of v0.6.3 the frame's backdrop is controlled by
+     `state.neccBg` (default true): true makes `.necc-frame` transparent so
+     the body gradient + animated stripes show through transparent NECC
+     pages (e.g. the bracket); false keeps the old flat black. The control
+     panel checkbox for it only renders while a NECC overlay is selected,
+     and it's ordinary pushed state - preview first, live on push.
 
 4. **Preview pane renders the overlay at its real 1920x1080** inside
    `#previewScaler` (fixed 1920x1080, `transform-origin:top left`), then a
