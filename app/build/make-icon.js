@@ -5,7 +5,7 @@ const { app, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const SOURCE_PNG = path.join(__dirname, '..', '..', 'widener-stream-control-app-icon.png');
+const SOURCE_PNG = path.join(__dirname, '..', '..', 'widenerstreamlogofixed.png');
 
 app.whenReady().then(async () => {
   const source = nativeImage.createFromPath(SOURCE_PNG);

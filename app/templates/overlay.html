@@ -294,7 +294,9 @@
 <script>
   const $ = sel => document.querySelector(sel);
 
-  const defaultLogo = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fcdn2-sr-application.sportsrecruits.com%2Ffiles%2Fimages%2Fcollege_profile%2F587_Widener_University.png%3Ftimestamp%3D1663087049&f=1&nofb=1&ipt=dd04276753660be198709c21720cf7d68bfca614906ca2703c531a07d08596b1";
+  // Served from this app, not the internet - the overlay must not depend on
+  // an external image host being reachable while streaming.
+  const defaultLogo = "/overlay-assets/widener-logo.png";
   const logoEl = $('#logo-img');
   const handles = $('#handles');
   const el = $('#countdown');
@@ -337,18 +339,35 @@
     });
   }
 
-  function normalizeClipPath(s){
-    if(!s) return s;
-    if (/^[a-zA-Z]:\\/.test(s)){ s = 'file:///' + s.replace(/\\/g,'/'); }
-    return s.replace(/ /g, '%20');
+  // Local files picked in the control panel arrive as plain filesystem paths.
+  // This page is served over http, and Chromium refuses to load file://
+  // subresources from an http page - so local paths are streamed through the
+  // app's own /media route instead. http(s) URLs pass through untouched.
+  function mediaUrl(s){
+    if(!s) return '';
+    s = String(s).trim();
+    if(/^file:\/\//i.test(s)){
+      try { s = decodeURIComponent(s.replace(/^file:\/{2,3}/i, '')); } catch(e){}
+      return '/media?src=' + encodeURIComponent(s);
+    }
+    if(/^[a-zA-Z]:[\\/]/.test(s) || /^\\\\/.test(s)){
+      return '/media?src=' + encodeURIComponent(s);
+    }
+    return s;
   }
 
   function applyClip(clip){
     if(clip){
-      const src = normalizeClipPath(clip);
+      const src = mediaUrl(clip);
       if(!videoEl){
         videoEl = document.createElement('video');
         videoEl.autoplay = true; videoEl.loop = true; videoEl.muted = true; videoEl.playsInline = true;
+        videoEl.addEventListener('error', () => {
+          if(placeholder){
+            placeholder.style.display = '';
+            placeholderTitle.textContent = 'Clip failed to load';
+          }
+        });
         montage.appendChild(videoEl);
       }
       if(videoEl.getAttribute('src') !== src) videoEl.src = src;
@@ -413,7 +432,7 @@
   // only this pushed state does.
   function applyState(state){
     if(!state) return;
-    logoEl.src = state.logo || defaultLogo;
+    logoEl.src = state.logo ? mediaUrl(state.logo) : defaultLogo;
     if(state.brand) $('#brand-line1').textContent = state.brand;
     if(state.team !== undefined) $('#brand-line2').textContent = state.team || '';
     if(state.title !== undefined) $('#title').textContent = state.title || '';
@@ -533,11 +552,17 @@
     stingerVideo.muted = true;
     stingerVideo.playsInline = true;
     stingerVideo.preload = 'auto';
+    // The video must live in the DOM: Chromium classifies a detached, muted,
+    // video-only element as "background media" and rejects play() to save
+    // power (this is what silently killed the stinger on push). It stays
+    // invisible - the WebGL canvas is what actually draws it.
+    stingerVideo.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1;';
     stingerVideo.src = STINGER_URL;
+    document.body.appendChild(stingerVideo);
     return stingerVideo;
   }
   // Preload immediately so the first push doesn't stall on a network fetch.
-  if(!isPreview) getStingerVideo();
+  getStingerVideo();
 
   // Play the curtain stinger, applying `data` while the screen is covered.
   // Every failure path (no WebGL, video missing, decode error, autoplay
@@ -579,16 +604,45 @@
       raf = requestAnimationFrame(draw);
     };
 
-    video.currentTime = 0;
     video.onended = finish;
     video.onerror = finish;
-    const p = video.play();
-    if(p && p.catch) p.catch(finish);
-    // Clear before first frame so a previous run's last frame never flashes.
-    gl.clearColor(0,0,0,0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    stingerCanvas.classList.add('active');
-    raf = requestAnimationFrame(draw);
+
+    // A rejected play() (e.g. Chromium's power saver pausing "background"
+    // video-only media while a seek is still settling) gets retried a couple
+    // of times before falling back; the STINGER_MAX_MS safety above still
+    // bounds the worst case.
+    let playAttempts = 0;
+    const tryPlay = () => {
+      if(!stingerActive) return;
+      const p = video.play();
+      if(p && p.catch) p.catch(() => {
+        if(!stingerActive) return;
+        if(++playAttempts < 3) setTimeout(tryPlay, 80);
+        else finish();
+      });
+    };
+
+    const startPlayback = () => {
+      if(!stingerActive) return;
+      // Clear before first frame so a previous run's last frame never flashes.
+      gl.clearColor(0,0,0,0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      stingerCanvas.classList.add('active');
+      raf = requestAnimationFrame(draw);
+      tryPlay();
+    };
+
+    // After a previous run the video sits at its end (video.ended === true,
+    // which the draw loop treats as "finish"), so rewind and wait for the
+    // seek to actually complete before starting - calling play() mid-seek is
+    // exactly the state Chromium's power saver aborts.
+    if(video.currentTime > 0.01 && video.readyState > 0){
+      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); startPlayback(); };
+      video.addEventListener('seeked', onSeeked);
+      video.currentTime = 0;
+    } else {
+      startPlayback();
+    }
   }
 
   // Live updates pushed from the control app's local server. There is exactly
@@ -606,9 +660,10 @@
         if (msg.type === 'state' && msg.channel === channel) {
           // Pushes flagged with the stinger transition play the curtain wipe
           // and swap content while covered; everything else applies instantly.
-          // The control panel's preview pane never plays it - it mirrors the
-          // draft in real time.
-          if (msg.transition === 'stinger' && !isPreview) stingerTransition(msg.data);
+          // The preview pane plays it too (its content already matches the
+          // draft - the wipe is confirmation for the operator that the
+          // transition went out with the push).
+          if (msg.transition === 'stinger') stingerTransition(msg.data);
           else applyState(msg.data);
         }
       } catch (e) {}

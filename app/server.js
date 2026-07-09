@@ -177,6 +177,25 @@ function createServer(port, opts = {}) {
     res.json(req.query.channel === 'draft' ? draft : live);
   });
 
+  // Local media passthrough. The control panel's Browse buttons store the
+  // logo/clip as plain filesystem paths, but the overlay is an http page and
+  // Chromium blocks file:// subresources from it - so the overlay requests
+  // /media?src=<path> and the file is streamed from here instead (sendFile
+  // handles Range requests, which video seeking needs). Only media file
+  // types are served, so this can't be used to read arbitrary files.
+  const MEDIA_EXTENSIONS = new Set([
+    '.mp4', '.webm', '.mov', '.m4v', '.mkv', '.avi', '.ogv',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.avif',
+  ]);
+  app.get('/media', (req, res) => {
+    const src = String(req.query.src || '');
+    if (!src || !path.isAbsolute(src)) return res.status(400).send('src must be an absolute file path');
+    if (!MEDIA_EXTENSIONS.has(path.extname(src).toLowerCase())) return res.status(403).send('unsupported media type');
+    res.sendFile(src, (err) => {
+      if (err && !res.headersSent) res.status(err.statusCode || 404).end();
+    });
+  });
+
   app.post('/api/necc/import', async (req, res) => {
     const url = req.body && req.body.url;
     if (!url) return res.status(400).json({ error: 'url is required' });
@@ -240,8 +259,12 @@ function createServer(port, opts = {}) {
 
       if (msg.type === 'push') {
         const newLive = pushLive();
-        broadcast('live', newLive, msg.transition === 'stinger' ? { transition: 'stinger' } : undefined);
-        broadcast('draft', draft);
+        // The stinger flag rides along to both channels: the live overlay
+        // plays the wipe while swapping content, and the control panel's
+        // preview plays it too as operator confirmation.
+        const extra = msg.transition === 'stinger' ? { transition: 'stinger' } : undefined;
+        broadcast('live', newLive, extra);
+        broadcast('draft', draft, extra);
         broadcastDirty();
         return;
       }

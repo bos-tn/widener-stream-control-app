@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App — Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.6.0**. If you're starting a new chat, read this whole
+updated through **v0.6.1**. If you're starting a new chat, read this whole
 file before touching code.
 
 ## What this is
@@ -37,7 +37,9 @@ app/                          - the actual Electron app (this is what ships)
 
 Stream/                        - ORIGINAL per-game overlay files, now superseded. Left in place, unused.
 archive/                       - the 16 old per-game HTML files, moved here in Phase 4 (reference only)
-widener-stream-control-app-icon.png   - source logo file the user dropped in (used by build/make-icon.js)
+widenerstreamlogofixed.png     - source logo file (used by build/make-icon.js; replaced
+                                  widener-stream-control-app-icon.png in v0.6.1 - also copied to
+                                  public/overlay-assets/widener-logo.png as the overlay's default logo)
 .claude/launch.json            - preview-tool server configs: "stream-app-server" (port 4310, real),
                                   "stream-app-dev" (port 4311, for testing without touching the real app)
 ```
@@ -144,10 +146,25 @@ Push Live can play the Widener curtain-wipe stinger on the live overlay
   the stinger video is ever replaced, re-measure and update that constant
   (and re-check the 0.02/0.07 luma-key thresholds).
 - Server side: the push WS message optionally carries
-  `transition: 'stinger'`; the live-channel broadcast passes it through as
-  a side-channel field on the state message. Draft/preview never plays it.
+  `transition: 'stinger'`; as of v0.6.1 the push broadcast passes it to
+  **both** channels - the live overlay plays it for real, and the control
+  panel's preview pane plays it too as operator confirmation (its content
+  already matches the draft, so it's purely cosmetic there). Ordinary
+  draft edits still never carry a transition.
+- v0.6.1 fixed "stinger never plays" (GitHub issue #2), two stacked bugs:
+  (1) the stinger `<video>` was created detached from the DOM - Chromium
+  classifies a detached, muted, video-only element as "background media"
+  and **rejects play() to save power**; the element now lives in the DOM,
+  invisible (opacity:0, 2x2px), with the WebGL canvas doing the drawing.
+  (2) `video.currentTime = 0` right before `play()` triggers a seek (even
+  when already at 0) that drops readyState mid-play-request and, on
+  repushes, leaves `video.ended === true` long enough for the draw loop's
+  ended-check to finish() instantly. Playback now only rewinds when
+  actually needed, waits for the `seeked` event before starting, and
+  retries a rejected play() twice before falling back. Don't "simplify"
+  this back to seek-then-play-immediately.
 - Overlay side fallbacks: no WebGL (OBS with hardware accel off), missing
-  file, decode error, or autoplay rejection all apply the state
+  file, decode error, or persistent autoplay rejection all apply the state
   immediately; a `STINGER_MAX_MS` (4s) safety timeout guarantees a push is
   never delayed longer than the stinger. A repush mid-stinger just swaps
   the pending state.
@@ -186,6 +203,24 @@ scheduledAt, teams: [...], overlayUrls: {...} }`. Control panel's roster
 picker pre-checks players with `position >= 0` (starters), lets the operator
 toggle who's actually playing, and only selected players get sent in the
 `teamA`/`teamB` state payload.
+
+## Local media (`/media` route, v0.6.1)
+
+The control panel's Browse buttons store the logo/clip fields as plain
+filesystem paths (`C:\...`), but the overlay is an http page and Chromium
+refuses to load `file://` subresources from it - this is why "montage clip
+never appears" (GitHub issue #4) happened. The fix: the server exposes
+`GET /media?src=<absolute path>` (express `sendFile`, so Range requests for
+video seeking work), and the overlay's `mediaUrl()` rewrites Windows/UNC
+paths and `file://` URLs to it. http(s) URLs pass through untouched. The
+route only serves whitelisted video/image extensions, and a clip that fails
+to load shows the montage placeholder with "Clip failed to load" instead of
+an empty black panel.
+
+Related v0.6.1 fix (GitHub issue #3): a NECC **Fetch now overwrites** the
+game name, `vs <opponent>` subtitle, and scheduled countdown time on every
+successful import. It used to fill only empty fields, so re-fetching a new
+match link kept showing the previous opponent.
 
 ## Two real bugs found during this build (both fixed, worth knowing about)
 

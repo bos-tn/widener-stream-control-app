@@ -470,12 +470,15 @@ neccFetchBtn.addEventListener('click', async () => {
     renderNeccTeam('A', neccTeamA);
     renderNeccTeam('B', neccTeamB);
 
-    // Convenience auto-fill - only touches fields that are currently empty.
-    if (data.game && !teamInput.value) teamInput.value = data.game;
+    // Auto-fill from the imported match. A fetch is an explicit "load this
+    // match" action, so these overwrite whatever the previous match left
+    // behind - only filling empty fields meant a second import kept showing
+    // the old opponent in the subtitle.
+    if (data.game) teamInput.value = data.game;
     const widener = data.teams.find((t) => /widener/i.test(t.org || t.name || ''));
     const opponent = data.teams.find((t) => t !== widener) || data.teams[1];
-    if (opponent && !subtitleInput.value) subtitleInput.value = `vs ${opponent.name}`;
-    if (data.scheduledAt && !atInput.value) {
+    if (opponent && opponent.name) subtitleInput.value = `vs ${opponent.name}`;
+    if (data.scheduledAt) {
       modeAt.checked = true;
       modeDuration.checked = false;
       durationField.style.display = 'none';
