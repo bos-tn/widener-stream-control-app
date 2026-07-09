@@ -1,6 +1,6 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Widener Esports stream overlay control app",
   "main": "main.js",

@@ -3,6 +3,7 @@ node_modules/
 
 # Build output (electron-builder)
 app/dist/
+app/dist-*/
 
 # Dev-only local state (mutable runtime data, not source)
 app/data/

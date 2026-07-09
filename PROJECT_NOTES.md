@@ -27,7 +27,8 @@ app/                          - the actual Electron app (this is what ships)
     games.json                - the 8 games' {id, name} used by the Game dropdown
   public/control/
     index.html / control.css / control.js   - the control panel UI
-    assets/logo.png            - app logo (also embedded as the .ico)
+    assets/logo.png            - control panel header logo: the classic Widener W
+                                  (NOT the app icon - see below; kept separate on purpose as of v0.6.2)
   build/
     make-icon.js               - regenerates icon.ico + PNGs from the source logo (run manually if logo changes)
     icons/                     - generated icon files (icon.ico used by electron-builder + main.js window icon)
@@ -37,9 +38,14 @@ app/                          - the actual Electron app (this is what ships)
 
 Stream/                        - ORIGINAL per-game overlay files, now superseded. Left in place, unused.
 archive/                       - the 16 old per-game HTML files, moved here in Phase 4 (reference only)
-widenerstreamlogofixed.png     - source logo file (used by build/make-icon.js; replaced
-                                  widener-stream-control-app-icon.png in v0.6.1 - also copied to
-                                  public/overlay-assets/widener-logo.png as the overlay's default logo)
+widenerstreamlogofixed.png     - APP ICON source (used by build/make-icon.js for icon.ico +
+                                  window/taskbar PNGs; replaced widener-stream-control-app-icon.png
+                                  in v0.6.1). The ICON ONLY - the user explicitly wants the classic
+                                  Widener W (public/control/assets/logo.png and
+                                  public/overlay-assets/widener-logo.png, bundled locally in v0.6.2)
+                                  as the visible brand logo in the control panel header and as the
+                                  overlay's default on-stream logo. Don't regenerate those two from
+                                  the icon source.
 .claude/launch.json            - preview-tool server configs: "stream-app-server" (port 4310, real),
                                   "stream-app-dev" (port 4311, for testing without touching the real app)
 ```
