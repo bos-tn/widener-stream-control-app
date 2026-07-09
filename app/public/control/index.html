@@ -63,27 +63,29 @@
           </div>
         </div>
         <div class="necc-status" id="neccStatus"></div>
+        <p class="hint necc-type-hint" style="margin:10px 0 0">A successful fetch fills in the Rosters below — from there you can edit any name or add players by hand.</p>
+      </section>
 
-        <div class="necc-teams" id="neccTeams" hidden>
-          <div class="necc-team" id="neccTeamA">
-            <div class="necc-team-header">
-              <img class="necc-team-logo" id="neccLogoA" alt="">
-              <div>
-                <div class="necc-team-name" id="neccNameA"></div>
-                <div class="necc-team-tag" id="neccTagA"></div>
-              </div>
+      <section class="panel">
+        <h2>Rosters <span class="hint">(shown in the Rosters overlay — type players in by hand, or fill them from a NECC fetch)</span></h2>
+        <div class="roster-editor">
+          <div class="roster-edit-team">
+            <div class="ret-header">
+              <img class="ret-logo" id="editLogoA" alt="" hidden>
+              <input type="text" class="ret-name" id="editNameA" placeholder="Team A name">
+              <input type="text" class="ret-tag" id="editTagA" placeholder="TAG">
             </div>
-            <div class="roster-picker" id="neccRosterA"></div>
+            <div class="ret-players" id="editPlayersA"></div>
+            <button class="btn-secondary ret-add" id="addPlayerA" type="button">+ Add player</button>
           </div>
-          <div class="necc-team" id="neccTeamB">
-            <div class="necc-team-header">
-              <img class="necc-team-logo" id="neccLogoB" alt="">
-              <div>
-                <div class="necc-team-name" id="neccNameB"></div>
-                <div class="necc-team-tag" id="neccTagB"></div>
-              </div>
+          <div class="roster-edit-team">
+            <div class="ret-header">
+              <img class="ret-logo" id="editLogoB" alt="" hidden>
+              <input type="text" class="ret-name" id="editNameB" placeholder="Team B name">
+              <input type="text" class="ret-tag" id="editTagB" placeholder="TAG">
             </div>
-            <div class="roster-picker" id="neccRosterB"></div>
+            <div class="ret-players" id="editPlayersB"></div>
+            <button class="btn-secondary ret-add" id="addPlayerB" type="button">+ Add player</button>
           </div>
         </div>
       </section>

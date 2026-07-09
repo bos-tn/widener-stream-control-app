@@ -210,10 +210,29 @@ Confirmed-working endpoints:
     **byte-for-byte** against a real URL the user provided.
 
 `importMatch(url)` returns `{ matchId, game, eventName, division,
-scheduledAt, teams: [...], overlayUrls: {...} }`. Control panel's roster
-picker pre-checks players with `position >= 0` (starters), lets the operator
-toggle who's actually playing, and only selected players get sent in the
-`teamA`/`teamB` state payload.
+scheduledAt, teams: [...], overlayUrls: {...} }`. As of v0.6.4 an import just
+**pre-fills the editable roster panel** (`neccToRoster()` keeps the starters,
+`position >= 0`); it's no longer a separate read-only chip picker.
+
+## Editable rosters (control panel, v0.6.4)
+
+The Rosters panel is a plain editable form, always visible - it does NOT
+require a NECC fetch anymore. `rosterA`/`rosterB` are the local model
+(`{ name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] }`);
+`renderRosterEditor(letter)` rebuilds the DOM rows from the model, each row's
+inputs write straight back into the model on `input` and call `pushDraft()`.
+Add/remove buttons mutate `players` and re-render. Key points:
+- `gatherForm()` **always** sends `teamA`/`teamB` now (via `rosterPayload()`),
+  which drops rows where both gamertag and real name are blank - so an empty
+  "add player" row you're still typing into never shows as a nameless slot on
+  stream, but stays in the editor.
+- `populateForm()` seeds `rosterA/rosterB` from `state.teamA/teamB` and
+  re-renders, so restore-on-connect and Revert rebuild the editor correctly.
+- A NECC fetch fills the same model via `neccToRoster()` (starters only;
+  subs/coaches are dropped by default and can be re-added/renamed by hand).
+- The overlay side is unchanged - `renderRosterTeam()` already rendered
+  whatever `players` array it was given, so manual entries "just work",
+  including the `--roster-count` size scaling.
 
 ## Local media (`/media` route, v0.6.1)
 

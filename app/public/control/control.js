@@ -38,7 +38,19 @@ const layoutInput = document.getElementById('layoutInput');
 const neccUrlInput = document.getElementById('neccUrlInput');
 const neccFetchBtn = document.getElementById('neccFetchBtn');
 const neccStatus = document.getElementById('neccStatus');
-const neccTeams = document.getElementById('neccTeams');
+
+const rosterEditEls = {
+  A: {
+    name: document.getElementById('editNameA'), tag: document.getElementById('editTagA'),
+    logo: document.getElementById('editLogoA'), players: document.getElementById('editPlayersA'),
+    add: document.getElementById('addPlayerA'),
+  },
+  B: {
+    name: document.getElementById('editNameB'), tag: document.getElementById('editTagB'),
+    logo: document.getElementById('editLogoB'), players: document.getElementById('editPlayersB'),
+    add: document.getElementById('addPlayerB'),
+  },
+};
 
 const pushBtn = document.getElementById('pushBtn');
 const revertBtn = document.getElementById('revertBtn');
@@ -67,11 +79,13 @@ let receivedInitialDraft = false;
 let repopulateOnNextDraft = false;
 let lastPushedAt = null;
 
-// The two teams built from a NECC import - each player has {id, name, gamertag,
-// active, position, selected}. "selected" (which players are actually playing)
-// is what the operator toggles via the roster chips.
-let neccTeamA = null;
-let neccTeamB = null;
+// The two teams shown in the Rosters overlay. Fully editable by hand (type a
+// name/tag, add/remove player rows) and also what a NECC fetch fills in. Each
+// player is a plain { name, gamertag }.
+function emptyRoster() { return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] }; }
+let rosterA = emptyRoster();
+let rosterB = emptyRoster();
+function rosterFor(letter) { return letter === 'A' ? rosterA : rosterB; }
 // Overlay asset URLs (bracket, matchPreview, etc.) resolved by the last
 // successful import, keyed by NECC type - what the Overlay dropdown's NECC
 // options actually point at when selected. Persisted to localStorage so the
@@ -96,17 +110,95 @@ function toggleLayoutVisibility() {
   neccBgField.style.display = currentMode === 'necc' ? '' : 'none';
 }
 
-function teamPayload(team) {
-  if (!team) return null;
+// What actually goes in the state payload: drop rows the operator left blank
+// so an empty "add player" row never shows up as a nameless slot on stream.
+function rosterPayload(team) {
   return {
     name: team.name || '',
     tag: team.tag || '',
     color: team.color || '',
     colorAlt: team.colorAlt || '',
     logoUrl: team.logoUrl || '',
-    players: (team.players || []).filter((p) => p.selected).map((p) => ({ name: p.name, gamertag: p.gamertag })),
+    players: (team.players || [])
+      .filter((p) => (p.gamertag && p.gamertag.trim()) || (p.name && p.name.trim()))
+      .map((p) => ({ name: p.name || '', gamertag: p.gamertag || '' })),
   };
 }
+
+function normalizeRoster(team) {
+  if (!team) return emptyRoster();
+  return {
+    name: team.name || '',
+    tag: team.tag || '',
+    color: team.color || '',
+    colorAlt: team.colorAlt || '',
+    logoUrl: team.logoUrl || '',
+    players: (team.players || []).map((p) => ({ name: p.name || '', gamertag: p.gamertag || '' })),
+  };
+}
+
+// NECC import -> editable roster: keep the starters (position >= 0) as rows.
+// Subs/coaches are left out by default; the operator can add or rename anyone
+// by hand from here.
+function neccToRoster(team) {
+  if (!team) return emptyRoster();
+  return {
+    name: team.name || '',
+    tag: team.tag || '',
+    color: team.color || '',
+    colorAlt: team.colorAlt || '',
+    logoUrl: team.logoUrl || '',
+    players: (team.players || []).filter((p) => p.position >= 0).map((p) => ({ name: p.name || '', gamertag: p.gamertag || '' })),
+  };
+}
+
+function buildPlayerRow(letter, player) {
+  const team = rosterFor(letter);
+  const row = document.createElement('div');
+  row.className = 'ret-player';
+  const gt = document.createElement('input');
+  gt.type = 'text'; gt.className = 'ret-gamertag'; gt.placeholder = 'Gamertag'; gt.value = player.gamertag || '';
+  const rn = document.createElement('input');
+  rn.type = 'text'; rn.className = 'ret-realname'; rn.placeholder = 'Real name (optional)'; rn.value = player.name || '';
+  const rm = document.createElement('button');
+  rm.type = 'button'; rm.className = 'ret-remove'; rm.title = 'Remove player'; rm.textContent = '×';
+  gt.addEventListener('input', () => { player.gamertag = gt.value; pushDraft(); });
+  rn.addEventListener('input', () => { player.name = rn.value; pushDraft(); });
+  rm.addEventListener('click', () => {
+    const idx = team.players.indexOf(player);
+    if (idx >= 0) team.players.splice(idx, 1);
+    renderRosterEditor(letter);
+    pushDraft();
+  });
+  row.append(gt, rn, rm);
+  return row;
+}
+
+function renderRosterEditor(letter) {
+  const team = rosterFor(letter);
+  const els = rosterEditEls[letter];
+  els.name.value = team.name || '';
+  els.tag.value = team.tag || '';
+  if (team.logoUrl) { els.logo.src = team.logoUrl; els.logo.hidden = false; }
+  else { els.logo.removeAttribute('src'); els.logo.hidden = true; }
+  els.players.innerHTML = '';
+  team.players.forEach((p) => els.players.appendChild(buildPlayerRow(letter, p)));
+}
+
+['A', 'B'].forEach((letter) => {
+  const els = rosterEditEls[letter];
+  els.name.addEventListener('input', () => { rosterFor(letter).name = els.name.value; pushDraft(); });
+  els.tag.addEventListener('input', () => { rosterFor(letter).tag = els.tag.value; pushDraft(); });
+  els.add.addEventListener('click', () => {
+    const team = rosterFor(letter);
+    team.players.push({ name: '', gamertag: '' });
+    renderRosterEditor(letter);
+    const rows = els.players.querySelectorAll('.ret-player');
+    const last = rows[rows.length - 1];
+    if (last) last.querySelector('.ret-gamertag').focus();
+    pushDraft();
+  });
+});
 
 function gatherForm() {
   const data = {
@@ -138,8 +230,8 @@ function gatherForm() {
     data.countdownMode = 'duration';
     data.durationSec = parseInt(durationInput.value || '0', 10);
   }
-  if (neccTeamA) data.teamA = teamPayload(neccTeamA);
-  if (neccTeamB) data.teamB = teamPayload(neccTeamB);
+  data.teamA = rosterPayload(rosterA);
+  data.teamB = rosterPayload(rosterB);
   return data;
 }
 
@@ -165,6 +257,10 @@ function populateForm(state) {
   }
   toggleLayoutVisibility();
   neccBgInput.checked = state.neccBg !== false;
+  rosterA = normalizeRoster(state.teamA);
+  rosterB = normalizeRoster(state.teamB);
+  renderRosterEditor('A');
+  renderRosterEditor('B');
   teamInput.value = state.team || '';
   titleInput.value = state.title || '';
   subtitleInput.value = state.subtitle || '';
@@ -429,30 +525,6 @@ function refreshNeccDropdownOptions() {
   if (Array.from(overlaySelect.options).some((o) => o.value === current)) overlaySelect.value = current;
 }
 
-function renderRosterPicker(container, team) {
-  container.innerHTML = '';
-  team.players.forEach((p) => {
-    const chip = document.createElement('div');
-    chip.className = 'roster-chip' + (p.selected ? ' selected' : '');
-    chip.innerHTML = '<span class="rc-tag"></span><span class="rc-name"></span>';
-    chip.querySelector('.rc-tag').textContent = p.gamertag || p.name;
-    if (p.name && p.gamertag && p.name !== p.gamertag) chip.querySelector('.rc-name').textContent = p.name;
-    chip.addEventListener('click', () => {
-      p.selected = !p.selected;
-      chip.classList.toggle('selected', p.selected);
-      pushDraft();
-    });
-    container.appendChild(chip);
-  });
-}
-
-function renderNeccTeam(letter, team) {
-  document.getElementById(`neccLogo${letter}`).src = team.logoUrl || '';
-  document.getElementById(`neccName${letter}`).textContent = team.name || '';
-  document.getElementById(`neccTag${letter}`).textContent = team.tag || '';
-  renderRosterPicker(document.getElementById(`neccRoster${letter}`), team);
-}
-
 neccFetchBtn.addEventListener('click', async () => {
   const url = neccUrlInput.value.trim();
   if (!url) return;
@@ -468,14 +540,13 @@ neccFetchBtn.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Import failed');
 
-    neccTeamA = { ...data.teams[0], players: (data.teams[0]?.players || []).map((p) => ({ ...p, selected: p.position >= 0 })) };
-    neccTeamB = { ...data.teams[1], players: (data.teams[1]?.players || []).map((p) => ({ ...p, selected: p.position >= 0 })) };
+    rosterA = neccToRoster(data.teams[0]);
+    rosterB = neccToRoster(data.teams[1]);
     lastImportedOverlayUrls = data.overlayUrls || {};
     localStorage.setItem(NECC_URLS_KEY, JSON.stringify(lastImportedOverlayUrls));
 
-    neccTeams.hidden = false;
-    renderNeccTeam('A', neccTeamA);
-    renderNeccTeam('B', neccTeamB);
+    renderRosterEditor('A');
+    renderRosterEditor('B');
 
     // Auto-fill from the imported match. A fetch is an explicit "load this
     // match" action, so these overwrite whatever the previous match left

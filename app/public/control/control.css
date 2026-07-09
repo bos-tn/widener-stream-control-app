@@ -214,3 +214,26 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 
 .necc-type-hint{ margin:0 0 12px; font-size:13px; }
 .necc-type-list{ display:flex; flex-direction:column; gap:10px; }
+
+/* Roster editor - fully editable by hand, and what a NECC fetch fills in. */
+.roster-editor{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width: 1300px){ .roster-editor{ grid-template-columns:1fr; } }
+.roster-edit-team{
+  background:#0d1420; border:1px solid var(--panel-border); border-radius:10px;
+  padding:12px; display:flex; flex-direction:column; gap:10px;
+}
+.ret-header{ display:flex; align-items:center; gap:8px; }
+.ret-logo{ width:36px; height:36px; border-radius:8px; object-fit:cover; background:rgba(255,255,255,.05); flex-shrink:0; }
+.ret-name{ flex:1 1 auto; min-width:0; }
+.ret-tag{ flex:0 0 88px; text-transform:uppercase; }
+.ret-players{ display:flex; flex-direction:column; gap:8px; }
+.ret-player{ display:flex; gap:8px; align-items:center; }
+.ret-gamertag{ flex:1 1 55%; min-width:0; }
+.ret-realname{ flex:1 1 45%; min-width:0; }
+.ret-remove{
+  flex:0 0 auto; width:34px; height:39px; border-radius:8px; cursor:pointer;
+  background:#1b2436; border:1px solid var(--panel-border); color:var(--muted);
+  font-size:20px; line-height:1; display:flex; align-items:center; justify-content:center;
+}
+.ret-remove:hover{ border-color:var(--bad); color:#ff8a8e; }
+.ret-add{ align-self:flex-start; padding:8px 14px; }

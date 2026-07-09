@@ -46,10 +46,13 @@ Electron app. No cloud, no accounts, no internet dependency on game day.
   live overlay and swaps your changes in while the screen is covered — every
   push looks like a produced scene change. (Toggleable, of course.)
 - **NECC / LeagueOS import.** Paste a match link and pull in both teams' names,
-  logos, and rosters. Click player chips to pick who's actually playing, and
-  switch to NECC's own bracket/match graphics right from the overlay dropdown.
+  logos, and starting rosters, and switch to NECC's own bracket/match graphics
+  right from the overlay dropdown.
+- **Fully editable rosters.** Type team names and players in by hand, add or
+  remove players with a click — no import required. A NECC fetch just pre-fills
+  the same fields, which you can then edit freely.
 - **A real roster view.** Full-screen two-team lineup that scales player rows to
-  fit however many are selected.
+  fit however many players you enter.
 - **Live-sized preview.** The preview renders at a true 1920×1080 and scales
   down, so proportions always match what viewers see.
 
@@ -74,8 +77,9 @@ week, or a new season.
    auto-fills sensible titles and countdowns for the moment you picked.
 2. **Edit text, countdown, socials, logo, montage clip.** Everything autosaves
    to the draft and shows in the preview pane instantly.
-3. **Importing a match?** Paste the NECC/LeagueOS link, hit Fetch, and toggle
-   the player chips for tonight's lineup.
+3. **Rosters?** Type the teams and players straight into the Rosters panel, or
+   paste a NECC/LeagueOS link and hit Fetch to pre-fill them — then edit, add,
+   or remove any player by hand.
 4. **Push Live.** Your draft goes to the stream exactly as previewed — behind
    the curtain stinger if the checkbox is on, instantly if it's not.
 5. Changed your mind? **Revert** discards the draft and re-syncs the preview
