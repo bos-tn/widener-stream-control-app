@@ -1,4 +1,4 @@
-# Widener Esports Stream Control App — Project Notes
+# Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
 updated through **v0.7.0**. If you're starting a new chat, read this whole
@@ -51,7 +51,7 @@ widenerstreamlogofixed.png     - APP ICON source (used by build/make-icon.js for
                                   "stream-app-dev" (port 4311, for testing without touching the real app)
 ```
 
-## Architecture — the big ideas
+## Architecture: the big ideas
 
 1. **One overlay URL, forever.** OBS points at `http://localhost:4310/overlay`
    and never needs editing again. Everything - which game, which moment
@@ -181,7 +181,7 @@ Push Live can play the Widener curtain-wipe stinger on the live overlay
   never delayed longer than the stinger. A repush mid-stinger just swaps
   the pending state.
 
-## OBS dock + scene-sync (v0.7.0) — optional, additive
+## OBS dock + scene-sync (v0.7.0), optional and additive
 
 Two opt-in OBS integrations, layered on top of the single-URL push model
 without changing it. If the operator never touches them, the app behaves
@@ -190,7 +190,7 @@ exactly as v0.6.x did.
 1. **Control panel as an OBS browser dock.** Pure documentation + a helper: the
    "Run this panel inside OBS" panel surfaces a copyable dock URL
    (`http://localhost:4310/control`); the user adds it via OBS **Docks → Custom
-   Browser Docks…**. No code path is OBS-specific — it's the same web panel. The
+   Browser Docks…**. No code path is OBS-specific; it's the same web panel. The
    panel already stacks below 980px, and was checked to have zero horizontal
    overflow down to 380px wide (typical dock column).
 
@@ -214,14 +214,14 @@ exactly as v0.6.x did.
      per view (`WU: Starting Soon` / `WU: Post-Match` / `WU: Rosters` /
      `WU: NECC`, sources `WU-src-*`), each pointing at
      `…/overlay?view=<view>`. It reuses existing scenes/inputs by name
-     (`GetSceneList`/`GetInputList`) and only corrects URL/size — re-running
+     (`GetSceneList`/`GetInputList`) and only corrects URL/size, so re-running
      never duplicates. One NECC scene covers all NECC types (the locked page
      reads the pushed `neccUrl`).
    - **Switch-on-push**: `server.js`'s `push` handler calls `obs.onPush(live)`
      after `pushLive()`. If connected AND scene-sync is on, it optionally sets
      the configured transition (`SetCurrentSceneTransition`) then
      `SetCurrentProgramScene` for `live.mode`. We chose switch-on-**push** (not
-     on select) to preserve the preview-then-push model — the open question in
+     on select) to preserve the preview-then-push model. That was the open question in
      the spec. Fire-and-forget + fully soft: a failed/absent OBS never delays or
      breaks the push that already went out.
    - **Stinger suppression** (the mode switch): when scene-sync is active the
@@ -234,7 +234,7 @@ exactly as v0.6.x did.
      error string. Verified an ECONNREFUSED path returns no password in the
      response or logs.
 
-   **`obs.js` is a new top-level `app/*.js` — it IS in `build.files`.**
+   **`obs.js` is a new top-level `app/*.js`, and it IS in `build.files`.**
    `obs-websocket-js` is a production dependency, so electron-builder bundles it
    from `node_modules` automatically.
 
@@ -243,6 +243,42 @@ exactly as v0.6.x did.
    server; the actual `CreateScene`/`CreateInput`/`SetCurrentProgramScene`
    behavior and transition timing need a live OBS 28+ with the WebSocket server
    enabled. That's the one remaining smoke test.
+
+## Control panel help conventions (v0.7.0)
+
+The panel used to carry its guidance as inline parenthetical `.hint` text in
+every label plus `title=` attributes. That got unreadable once the OBS sections
+landed, so help now lives in two places, and **new controls should follow the
+same pattern** rather than reintroducing inline hints:
+
+- **Short tips: a hover/focus info point.** `<span class="info" tabindex="0"
+  role="button" aria-label="More information" data-tip="…">i</span>`, placed
+  inside a `<span class="lbl">` alongside the label text.
+- **Longer setup walkthroughs: a `<details class="help">` disclosure**, closed
+  by default, with the steps in an `<ol>` inside `.help-body`.
+
+Details that matter if you touch this:
+
+- **One shared bubble, not a CSS `::after`.** `control.js` creates a single
+  `.tip-bubble` on `document.body`, positions it `fixed`, and **clamps it to the
+  viewport** (flipping below the dot when there's no room above). A CSS-only
+  tooltip was rejected because `.settings-col` is `overflow-y:auto`, which clips
+  on both axes, so bubbles got cut off in a narrow OBS dock. Verified all 14
+  info points stay fully on-screen at 380px wide.
+- **A `visibility:hidden` element still has a layout box**, which is why the
+  bubble can be measured and positioned before it's shown, with no flicker.
+- **The click handler calls `preventDefault()`.** An info dot sits inside
+  `<label>` elements (e.g. the stinger checkbox), and without this, clicking the
+  dot toggles that checkbox. This was caught in testing; don't remove it.
+- Hover, focus, Escape, resize, and **capture-phase** scroll all drive show/hide.
+  Capture phase is required because scrolling `.settings-col` doesn't bubble.
+- **Label markup wraps text + dot in `<span class="lbl">`.** Field labels are
+  `display:flex; flex-direction:column`, so without the wrapper the dot becomes
+  its own anonymous flex item and drops to a line of its own.
+- The stinger checkbox's tip text is **rewritten at runtime** by
+  `renderObsStatus()` to explain why it's disabled under scene-sync.
+- **No em-dashes in user-facing strings** (panel, overlay, or docs). This is a
+  stated user preference, applied throughout in v0.7.0.
 
 ## NECC / LeagueOS integration (`necc.js`)
 

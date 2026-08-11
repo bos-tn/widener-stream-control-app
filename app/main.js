@@ -9,7 +9,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1150,
     height: 820,
-    title: 'Widener Esports — Stream Control',
+    title: 'Widener Esports Stream Control',
     icon: ICON_PATH,
   });
   win.setMenuBarVisibility(false);
@@ -36,7 +36,7 @@ if (!app.requestSingleInstanceLock()) {
       dialog.showErrorBox(
         'Widener Esports Stream Control',
         err && err.code === 'EADDRINUSE'
-          ? `Port ${PORT} is already in use — is another copy of the app (or an older version) still running?`
+          ? `Port ${PORT} is already in use. Is another copy of the app, or an older version, still running?`
           : `The overlay server failed to start:\n${err}`
       );
       app.quit();
