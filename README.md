@@ -53,6 +53,10 @@ Electron app. No cloud, no accounts, no internet dependency on game day.
   the same fields, which you can then edit freely.
 - **A real roster view.** Full-screen two-team lineup that scales player rows to
   fit however many players you enter.
+- **A Be Right Back card.** Full-screen break screen with the Widener Pride lion,
+  an animated headline wipe, and your social handles. The headline and subtitle
+  are ordinary editable fields, so "Be Right Back" can just as easily read
+  "Back after this match".
 - **Live-sized preview.** The preview renders at a true 1920×1080 and scales
   down, so proportions always match what viewers see.
 - **Optional OBS integration.** Run the control panel as a dock *inside* OBS, and
@@ -76,9 +80,10 @@ week, or a new season.
 
 ## Running the show
 
-1. **Pick a game** and an **overlay**: Starting Soon, Post-Match, Rosters, or a
-   NECC graphic. Switching overlays previews first, like every other edit, and
-   auto-fills sensible titles and countdowns for the moment you picked.
+1. **Pick a game** and an **overlay**: Starting Soon, Post-Match, Rosters, Be
+   Right Back, or a NECC graphic. Switching overlays previews first, like every
+   other edit, and auto-fills sensible titles and countdowns for the moment you
+   picked.
 2. **Edit text, countdown, socials, logo, montage clip.** Everything autosaves
    to the draft and shows in the preview pane instantly.
 3. **Rosters?** Type the teams and players straight into the Rosters panel, or
@@ -111,8 +116,9 @@ OBS window, right next to your scenes.
 WebSocket server under **Tools** then **WebSocket Server Settings**, and note the
 password. In the panel's **OBS scene-sync** section, enter the host, port, and
 password, click **Connect**, then **Build / update scenes**. That creates one
-scene per overlay type (*Starting Soon*, *Post-Match*, *Rosters*, *NECC*), each
-holding a locked Browser Source at `…/overlay?view=<type>`. Turn **Scene-sync
+scene per overlay type (*Starting Soon*, *Post-Match*, *Rosters*, *Be Right
+Back*, *NECC*), each holding a locked Browser Source at
+`…/overlay?view=<type>`. Turn **Scene-sync
 on**, and every Push Live switches OBS to the matching scene using OBS's own
 configured transition, which you can point at your Widener stinger. The overlay
 content inside each scene still updates live over WebSocket exactly as before,
@@ -172,6 +178,12 @@ Adding `?view=<type>` to the overlay URL pins that page to one view: it ignores
 pushed mode changes but still applies every other pushed field live. That is
 what lets OBS hold a fixed source per scene in scene-sync mode. Without the
 parameter, the overlay behaves exactly as it always has.
+
+The Be Right Back card is authored as a fixed 1920×1080 composition, so it
+renders at its true size and the whole stage is scaled to fit the viewport.
+That keeps it pixel-exact on a 1080p source and correct in the small preview
+pane. Its headline shrinks automatically if you type something longer than the
+space allows, so a long line never runs off the edge.
 
 ### Repo layout
 

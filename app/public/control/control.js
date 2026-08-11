@@ -63,9 +63,13 @@ const pushStatus = document.getElementById('pushStatus');
 const connDot = document.getElementById('connDot');
 const connText = document.getElementById('connText');
 
+// Seeded into the form when you pick a Widener overlay. Only the keys a mode
+// actually defines are applied, so a view with no countdown (Be Right Back)
+// leaves the countdown settings alone instead of resetting them.
 const MODE_DEFAULTS = {
   'starting-soon': { title: 'Stream Starting Soon', status: 'Starting Soon', durationSec: 600 },
   'post-match': { title: 'Thanks for Watching', status: 'Stream Ending Soon', durationSec: 120 },
+  'brb': { title: 'Be Right Back', subtitle: 'Thanks for waiting' },
 };
 
 let ws = null;
@@ -445,11 +449,14 @@ overlaySelect.addEventListener('change', () => {
     toggleLayoutVisibility();
     const d = MODE_DEFAULTS[key];
     if (d) {
-      titleInput.value = d.title;
-      statusInput.value = d.status;
-      durationInput.value = d.durationSec;
-      modeDuration.checked = true; modeAt.checked = false;
-      durationField.style.display = ''; atField.style.display = 'none';
+      if (d.title !== undefined) titleInput.value = d.title;
+      if (d.subtitle !== undefined) subtitleInput.value = d.subtitle;
+      if (d.status !== undefined) statusInput.value = d.status;
+      if (d.durationSec !== undefined) {
+        durationInput.value = d.durationSec;
+        modeDuration.checked = true; modeAt.checked = false;
+        durationField.style.display = ''; atField.style.display = 'none';
+      }
     }
     sendDraftNow();
     return;

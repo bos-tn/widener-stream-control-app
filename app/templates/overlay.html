@@ -186,6 +186,80 @@
     .socials{ left:36px; right:36px; bottom:28px }
   }
 
+  /* Be Right Back: a full third-party-designed view, imported at v0.7.1. It is
+     authored as a fixed 1920x1080 composition (absolute px positions, a 150px
+     headline), so rather than re-expressing it in vw/vh it renders at its true
+     size inside .brb-stage and JS scales the whole stage to fit whatever
+     viewport it's in - the same trick the control panel preview uses. That
+     keeps it pixel-exact on a 1080p OBS source and still correct in the
+     smaller preview pane.
+     It draws its own full-screen layer over the standard Widener frame, and
+     deliberately reuses the page's existing stripes + sheen backdrop rather
+     than shipping its own copy. */
+  .brb-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
+  .brb-view.active{ display:block; }
+  .brb-stage{
+    position:absolute; top:0; left:0; width:1920px; height:1080px;
+    transform-origin: top left;
+    font-family:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  /* Trapezoid brand accents, top-left and bottom-right. */
+  .brb-trap{
+    position:absolute; width:760px; height:170px; pointer-events:none; opacity:.5;
+    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+  }
+  .brb-trap-tl{ top:0; left:0; clip-path:polygon(0 0, 70% 0, 40% 100%, 0 100%); }
+  .brb-trap-br{ bottom:0; right:0; clip-path:polygon(100% 0, 60% 0, 30% 100%, 100% 100%); }
+
+  /* Converging rules meeting the spinner in the top right. */
+  .brb-rule-v{ position:absolute; top:156px; right:161px; width:3px; bottom:170px; background:rgba(255,255,255,.16); }
+  .brb-spin-wrap{ position:absolute; top:90px; right:140px; }
+  .brb-rule-h{ position:absolute; top:21px; left:-1152px; right:66px; height:3px; background:rgba(255,255,255,.16); }
+  .brb-spinner{ position:relative; width:44px; height:44px; animation: brb-spin 1.4s steps(8) infinite; }
+  .brb-spinner i{
+    position:absolute; top:0; left:50%; width:6px; height:6px; margin-left:-3px;
+    border-radius:50%; background:var(--text); transform-origin:3px 22px;
+  }
+  @keyframes brb-spin{ to{ transform:rotate(360deg) } }
+
+  .brb-content{ position:absolute; left:304px; top:212px; }
+  .brb-brandrow{ display:flex; align-items:center; gap:26px; margin-bottom:44px; }
+  .brb-lion{ height:170px; width:auto; }
+  .brb-brand{
+    font-family:'Kanit', system-ui, sans-serif; font-weight:600; font-style:italic;
+    transform:skewX(-8deg); font-size:68px; letter-spacing:.01em;
+    text-transform:uppercase; color:var(--text);
+  }
+  /* The headline is gradient-filled text revealed by a clip-path wipe. */
+  .brb-headline{
+    margin:0; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-style:italic;
+    transform:skewX(-8deg); transform-origin:left center;
+    font-size:150px; line-height:.9; letter-spacing:1px; text-transform:uppercase; white-space:nowrap;
+    background: linear-gradient(90deg, var(--widener-gold) 0%, var(--text) 85%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation: brb-wipe 1.1s cubic-bezier(.22,1,.36,1) both;
+  }
+  @keyframes brb-wipe{ 0%{ clip-path:inset(0 100% 0 0) } 100%{ clip-path:inset(0 0 0 0) } }
+  .brb-subrow{ display:flex; align-items:flex-end; gap:48px; margin-top:14px; }
+  .brb-bar{
+    width:730px; height:5px; box-shadow:0 10px 25px rgba(0,0,0,.35); transform-origin:left center;
+    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+    animation: widen 1s cubic-bezier(.22,1,.36,1) both;
+  }
+  .brb-sub{
+    font-weight:600; font-size:30px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); white-space:nowrap;
+    animation: brb-fadeup .9s cubic-bezier(.22,1,.36,1) both .5s;
+  }
+  @keyframes brb-fadeup{ from{ opacity:0; transform:translateY(10px) } to{ opacity:1; transform:translateY(0) } }
+  .brb-socials{ display:flex; gap:16px; margin-top:64px; }
+  .brb-pill{
+    display:inline-flex; align-items:center; gap:10px; padding:11px 18px; border-radius:999px;
+    background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(6px);
+    font-weight:600; font-size:16px; letter-spacing:.02em; color:var(--text);
+  }
+  .brb-pill svg{ width:18px; height:18px; fill:var(--widener-gold); flex-shrink:0; }
+
   /* NECC/LeagueOS mode: a full-bleed passthrough to their own overlay page
      (bracket, match preview, etc). Nothing of ours draws on top of it - it's
      already a finished graphic, not something we're adding decoration to.
@@ -232,6 +306,41 @@
 
   <div class="necc-frame" id="necc-frame">
     <iframe id="necc-iframe" title="NECC overlay" src="about:blank"></iframe>
+  </div>
+
+  <div class="brb-view" id="brb-view" aria-label="Be right back">
+    <div class="brb-stage" id="brb-stage">
+      <div class="brb-trap brb-trap-tl"></div>
+      <div class="brb-trap brb-trap-br"></div>
+
+      <div class="brb-rule-v"></div>
+      <div class="brb-spin-wrap">
+        <div class="brb-rule-h"></div>
+        <div class="brb-spinner">
+          <i style="transform:rotate(0deg);opacity:1"></i>
+          <i style="transform:rotate(45deg);opacity:.87"></i>
+          <i style="transform:rotate(90deg);opacity:.75"></i>
+          <i style="transform:rotate(135deg);opacity:.62"></i>
+          <i style="transform:rotate(180deg);opacity:.5"></i>
+          <i style="transform:rotate(225deg);opacity:.37"></i>
+          <i style="transform:rotate(270deg);opacity:.25"></i>
+          <i style="transform:rotate(315deg);opacity:.12"></i>
+        </div>
+      </div>
+
+      <div class="brb-content">
+        <div class="brb-brandrow">
+          <img class="brb-lion" id="brb-lion" alt="Widener Pride lion">
+          <span class="brb-brand" id="brb-brand">Widener Esports</span>
+        </div>
+        <h1 class="brb-headline" id="brb-headline">Be Right Back</h1>
+        <div class="brb-subrow">
+          <div class="brb-bar"></div>
+          <div class="brb-sub" id="brb-sub">Thanks for waiting</div>
+        </div>
+        <div class="brb-socials" id="brb-socials"></div>
+      </div>
+    </div>
   </div>
 
   <div class="wrap frame" id="widener-frame">
@@ -314,6 +423,9 @@
   const widenerFrame = $('#widener-frame');
   const neccFrame = $('#necc-frame');
   const neccIframe = $('#necc-iframe');
+  const brbView = $('#brb-view');
+  const brbStage = $('#brb-stage');
+  const brbSocials = $('#brb-socials');
   const rosterEls = {
     a: { logo: $('#roster-logo-a'), name: $('#roster-name-a'), tag: $('#roster-tag-a'), players: $('#roster-players-a') },
     b: { logo: $('#roster-logo-b'), name: $('#roster-name-b'), tag: $('#roster-tag-b'), players: $('#roster-players-b') },
@@ -404,6 +516,66 @@
     });
   }
 
+  // The BRB view is authored at a fixed 1920x1080. Scale the whole stage to
+  // fit the current viewport and center it, so it stays pixel-faithful on a
+  // 1080p OBS source and in the much smaller preview pane alike.
+  // Bundled locally, like every other overlay asset - nothing on this page may
+  // depend on an external host being reachable mid-broadcast.
+  const BRB_LION = '/overlay-assets/widener-lion.png';
+  $('#brb-lion').src = BRB_LION;
+  function fitBrbStage(){
+    const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    const x = (window.innerWidth - 1920 * s) / 2;
+    const y = (window.innerHeight - 1080 * s) / 2;
+    brbStage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+  }
+  window.addEventListener('resize', fitBrbStage);
+  fitBrbStage();
+
+  // The headline is a single 150px nowrap line, which the original design sized
+  // around the short "Be Right Back". The operator can type anything here, and
+  // a longer line would run past the stage edge and get clipped - so shrink the
+  // type until it fits the space left of the vertical rule. Short headlines are
+  // untouched and render at the intended 150px.
+  const BRB_HEADLINE_MAX = 1450; // stage 1920 - content left 304 - rule gutter
+  const BRB_HEADLINE_SIZE = 150;
+  function fitBrbHeadline(){
+    const h = $('#brb-headline');
+    h.style.fontSize = '';
+    // Measure the text itself, not the block. The h1 is a block that fills its
+    // container, so scrollWidth reports the widest sibling row instead of the
+    // headline - which would shrink short headlines for no reason. Width is
+    // switched to max-content only for the measurement and restored right
+    // after: the gradient is background-clip:text over the *box*, so leaving
+    // the box hugging the text would change the colour ramp the design
+    // intends.
+    h.style.width = 'max-content';
+    const w = h.offsetWidth;
+    h.style.width = '';
+    if(w > BRB_HEADLINE_MAX){
+      h.style.fontSize = Math.max(48, Math.floor(BRB_HEADLINE_SIZE * BRB_HEADLINE_MAX / w)) + 'px';
+    }
+  }
+  // Kanit arrives asynchronously; a width measured against the fallback font
+  // would size the headline wrongly, so re-fit once the real font is ready.
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitBrbHeadline);
+
+  // Social pills, built from the same socials object every other view uses so
+  // there is one place to edit handles. Blank handles are skipped.
+  function renderBrbSocials(socials){
+    brbSocials.innerHTML = '';
+    if(!socials) return;
+    ['twitch','twitter','instagram','youtube'].forEach(key => {
+      const v = socials[key];
+      if(!v) return;
+      const pill = document.createElement('span');
+      pill.className = 'brb-pill';
+      pill.innerHTML = icons[key] + '<span></span>';
+      pill.querySelector('span').textContent = '/' + v;
+      brbSocials.appendChild(pill);
+    });
+  }
+
   function applyLayout(layout){
     if(layout === 'left'){
       wrap.classList.remove('montage-right'); wrap.classList.add('montage-left');
@@ -446,15 +618,23 @@
     if(state.status !== undefined) $('#status-text').textContent = state.status || '';
     if(state.end) countdownEnd = new Date(state.end);
     if(state.socials) renderSocials(state.socials);
+    // Be Right Back reads the same fields as everything else, so editing the
+    // title/subtitle/socials updates it live exactly like any other view.
+    if(state.title !== undefined){ $('#brb-headline').textContent = state.title || ''; fitBrbHeadline(); }
+    if(state.subtitle !== undefined) $('#brb-sub').textContent = state.subtitle || '';
+    if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || 'Widener Esports';
+    if(state.socials) renderBrbSocials(state.socials);
     if(state.clip !== undefined) applyClip(state.clip);
     if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
     if(state.layout) applyLayout(state.layout.toLowerCase());
-    // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc'.
+    // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc' | 'brb'.
     // 'necc' is a full-bleed passthrough iframe to a LeagueOS-hosted overlay
     // (bracket, match preview, etc) - nothing of ours draws on top of it.
     // 'roster' is a full third Widener view (not a flag layered on the
     // others) - it hides the title/countdown content and montage panel and
     // shows the two-team lineup instead.
+    // 'brb' is a full-screen Be Right Back card drawn on its own scaled
+    // 1920x1080 stage over the standard frame.
     //
     // When this page is locked to a view (?view=…, scene-sync mode), the mode
     // is pinned to lockedView and any pushed mode change is ignored - OBS owns
@@ -465,8 +645,21 @@
       document.body.dataset.mode = effectiveMode;
       const isNecc = effectiveMode === 'necc';
       const isRoster = effectiveMode === 'roster';
-      widenerFrame.style.display = isNecc ? 'none' : '';
+      const isBrb = effectiveMode === 'brb';
+      widenerFrame.style.display = (isNecc || isBrb) ? 'none' : '';
       neccFrame.classList.toggle('active', isNecc);
+      brbView.classList.toggle('active', isBrb);
+      if(isBrb){
+        // Re-fit on entry: the viewport may have changed while this view was
+        // hidden, and restart the headline wipe so switching to BRB always
+        // plays its intro rather than showing an already-finished card.
+        fitBrbStage();
+        fitBrbHeadline();
+        const h = $('#brb-headline');
+        h.style.animation = 'none';
+        void h.offsetWidth; // force reflow so the animation restarts
+        h.style.animation = '';
+      }
       if(isNecc){
         // neccBg === false -> flat black behind the NECC page; anything else
         // (true or absent, for old saved states) -> Widener stripe backdrop.
@@ -501,7 +694,7 @@
   // pushed field (title, countdown, roster names, neccUrl, ...) live. With no
   // view param, behavior is exactly as before: a single source whose mode is
   // whatever was last pushed. Kept fully backward-compatible.
-  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc'];
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb'];
   const rawView = params.get('view');
   const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
   // Optional NECC type hint for a view=necc source (informational: the actual

@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.7.0**. If you're starting a new chat, read this whole
+updated through **v0.7.1**. If you're starting a new chat, read this whole
 file before touching code.
 
 ## What this is
@@ -91,7 +91,8 @@ widenerstreamlogofixed.png     - APP ICON source (used by build/make-icon.js for
    - On WS reconnect (not first connect) the panel re-sends `gatherForm()`
      so edits made while disconnected aren't lost.
 
-3. **`overlay.html` has three-ish visual states, controlled by `state.mode`:**
+3. **`overlay.html`'s visual states, controlled by `state.mode`** (a fifth,
+   `brb`, was added in v0.7.1 - see its own section below):
    - `starting-soon` / `post-match` - the original title/subtitle/countdown/
      montage layout (mode just toggles text defaults, title size, montage
      placeholder text).
@@ -195,7 +196,7 @@ exactly as v0.6.x did.
    overflow down to 380px wide (typical dock column).
 
 2. **Per-type overlay URL (`?view=`).** `overlay.html` reads `?view=` on load
-   (`starting-soon|post-match|roster|necc`). When present it **pins `mode`** to
+   (`starting-soon|post-match|roster|necc|brb`). When present it **pins `mode`** to
    that view and ignores any pushed `mode` change, while still applying every
    other pushed field live (title, countdown, roster names, `neccUrl`, …). With
    no `view` param, behavior is exactly as before (single source, mode-driven).
@@ -212,7 +213,7 @@ exactly as v0.6.x did.
      query), `POST /api/obs/build-scenes`, `POST /api/obs/switch {view}`.
    - **Build scenes** is idempotent: one scene + one locked `browser_source`
      per view (`WU: Starting Soon` / `WU: Post-Match` / `WU: Rosters` /
-     `WU: NECC`, sources `WU-src-*`), each pointing at
+     `WU: Be Right Back` / `WU: NECC`, sources `WU-src-*`), each pointing at
      `…/overlay?view=<view>`. It reuses existing scenes/inputs by name
      (`GetSceneList`/`GetInputList`) and only corrects URL/size, so re-running
      never duplicates. One NECC scene covers all NECC types (the locked page
@@ -243,6 +244,47 @@ exactly as v0.6.x did.
    server; the actual `CreateScene`/`CreateInput`/`SetCurrentProgramScene`
    behavior and transition timing need a live OBS 28+ with the WebSocket server
    enabled. That's the one remaining smoke test.
+
+## Be Right Back view (v0.7.1)
+
+A fifth `state.mode`, `brb`. It came in as an externally designed page (a
+self-extracting "bundled" React/Helmet HTML the user dropped in Downloads) and
+was **reimplemented natively** rather than embedded: the app has no build step
+and no framework, and shipping React + Babel for one static card would have been
+absurd. Extracting the design was cheap because the source was already built on
+this app's own tokens (identical `#0054b8` / `#f0b310` / `#eaf2ff` / `#a9b7d6`,
+Inter + Kanit, and the same stripes and sheen), so it reuses the page's existing
+vars, fonts, backdrop, and `icons` map instead of importing copies.
+
+- **The lion** (`public/overlay-assets/widener-lion.png`, 842KB RGBA, 1942x1158)
+  was extracted from the bundle's base64 manifest. Bundled locally like every
+  other overlay asset, since nothing on the overlay may depend on an external
+  host mid-broadcast. Under `public/**`, so it ships without a `build.files`
+  change.
+- **Fixed 1920x1080 stage.** The design is authored in absolute px (content at
+  304,212; a 150px headline; a 730x5 bar). Rather than re-expressing all of it
+  in vw/vh, `.brb-stage` renders at true size and `fitBrbStage()` scales and
+  centers it for the viewport, the same trick the control panel preview uses.
+  Verified the rendered geometry matches the source design exactly.
+- **`fitBrbHeadline()` is load-bearing, not polish.** The 150px `nowrap`
+  headline was sized around the short "Be Right Back", but it renders
+  `state.title`, which the operator can set to anything. "Stream Starting Soon"
+  measured 2061px against a 1920 stage and was being clipped. It now shrinks the
+  type to fit.
+  - It measures with `width:max-content` **temporarily, then restores**. The h1
+    is a block that fills its container, so `scrollWidth` reports the widest
+    sibling row, which would shrink short headlines for nothing. The width is
+    not left as max-content because the gradient is `background-clip:text` over
+    the *box*, so hugging the text would change the intended colour ramp.
+  - Re-fit on `document.fonts.ready`: a width measured against the fallback font
+    sizes the headline wrongly.
+- **Fields are shared, not new.** It reads `title`, `subtitle`, `brand`, and
+  `socials`, so it is live-editable like everything else and **the state shape
+  did not change**. `MODE_DEFAULTS.brb` seeds the two lines on selection, and
+  the dropdown handler now applies **only the keys a mode defines**, so BRB
+  (which has no countdown) stops resetting the countdown settings.
+- Entering the view re-runs both fits and restarts the headline wipe, so
+  switching to BRB always plays its intro instead of showing a finished card.
 
 ## Control panel help conventions (v0.7.0)
 

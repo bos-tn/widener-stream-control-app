@@ -22,6 +22,7 @@ const SCENES = [
   { view: 'starting-soon', scene: 'WU: Starting Soon', input: 'WU-src-starting-soon' },
   { view: 'post-match',    scene: 'WU: Post-Match',    input: 'WU-src-post-match' },
   { view: 'roster',        scene: 'WU: Rosters',       input: 'WU-src-roster' },
+  { view: 'brb',           scene: 'WU: Be Right Back', input: 'WU-src-brb' },
   // One NECC scene covers every NECC overlay type: the locked page reads the
   // pushed neccUrl, so picking bracket vs match-preview is a live content
   // update inside this same scene, not a new scene.
