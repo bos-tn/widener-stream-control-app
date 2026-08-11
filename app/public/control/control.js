@@ -63,14 +63,41 @@ const pushStatus = document.getElementById('pushStatus');
 const connDot = document.getElementById('connDot');
 const connText = document.getElementById('connText');
 
-// Seeded into the form when you pick a Widener overlay. Only the keys a mode
-// actually defines are applied, so a view with no countdown (Be Right Back)
-// leaves the countdown settings alone instead of resetting them.
+// Fallback text for an overlay that has none saved yet, plus the countdown
+// each mode starts from. Only the keys a mode actually defines are applied, so
+// a view with no countdown (Be Right Back) leaves the countdown alone instead
+// of resetting it.
 const MODE_DEFAULTS = {
   'starting-soon': { title: 'Stream Starting Soon', status: 'Starting Soon', durationSec: 600 },
   'post-match': { title: 'Thanks for Watching', status: 'Stream Ending Soon', durationSec: 120 },
   'brb': { title: 'Be Right Back', subtitle: 'Thanks for waiting' },
 };
+
+// Per-overlay text, mirroring `state.views` on the server. Each overlay owns
+// its own title/subtitle/status pill, so editing text changes only the overlay
+// you are currently on. That is what lets an OBS scene-sync source show its
+// own wording the moment you switch scenes in OBS, with no Push Live: every
+// locked page receives all views in one push and renders its own slice.
+let viewTexts = {};
+
+function currentViewText() {
+  return { title: titleInput.value, subtitle: subtitleInput.value, status: statusInput.value };
+}
+
+// Remember what's typed for the overlay we're leaving, so switching away and
+// back doesn't lose it.
+function stashViewText() {
+  viewTexts[currentMode] = currentViewText();
+}
+
+function loadViewText(mode) {
+  const saved = viewTexts[mode];
+  const fallback = MODE_DEFAULTS[mode] || {};
+  const t = saved || fallback;
+  titleInput.value = t.title || '';
+  subtitleInput.value = t.subtitle || '';
+  statusInput.value = t.status || '';
+}
 
 let ws = null;
 let games = [];
@@ -232,6 +259,9 @@ function gatherForm() {
       instagram: instagramInput.value,
       youtube: youtubeInput.value,
     },
+    // Only the overlay being edited is sent; the server merges it over the
+    // other views so their text survives.
+    views: { [currentMode]: currentViewText() },
   };
   if (modeAt.checked && atInput.value) {
     data.countdownMode = 'at';
@@ -272,9 +302,14 @@ function populateForm(state) {
   renderRosterEditor('A');
   renderRosterEditor('B');
   teamInput.value = state.team || '';
-  titleInput.value = state.title || '';
-  subtitleInput.value = state.subtitle || '';
-  statusInput.value = state.status || '';
+  // Seed every overlay's saved text, then show the one we're currently on.
+  // Falls back to the shared top-level fields for a state file written before
+  // per-view text existed.
+  viewTexts = JSON.parse(JSON.stringify(state.views || {}));
+  if (!viewTexts[currentMode]) {
+    viewTexts[currentMode] = { title: state.title || '', subtitle: state.subtitle || '', status: state.status || '' };
+  }
+  loadViewText(currentMode);
   nextInput.value = state.next || '';
   logoInput.value = state.logo || '';
   clipInput.value = state.clip || '';
@@ -443,20 +478,20 @@ overlaySelect.addEventListener('change', () => {
   const [kind, key] = overlaySelect.value.split(':');
 
   if (kind === 'widener') {
+    // Keep the outgoing overlay's words before swapping in the new one's.
+    stashViewText();
     currentMode = key;
     currentNeccType = '';
     currentNeccUrl = '';
     toggleLayoutVisibility();
+    loadViewText(key);
+    // The countdown is global, not per view, so it still resets to the mode's
+    // starting point.
     const d = MODE_DEFAULTS[key];
-    if (d) {
-      if (d.title !== undefined) titleInput.value = d.title;
-      if (d.subtitle !== undefined) subtitleInput.value = d.subtitle;
-      if (d.status !== undefined) statusInput.value = d.status;
-      if (d.durationSec !== undefined) {
-        durationInput.value = d.durationSec;
-        modeDuration.checked = true; modeAt.checked = false;
-        durationField.style.display = ''; atField.style.display = 'none';
-      }
+    if (d && d.durationSec !== undefined) {
+      durationInput.value = d.durationSec;
+      modeDuration.checked = true; modeAt.checked = false;
+      durationField.style.display = ''; atField.style.display = 'none';
     }
     sendDraftNow();
     return;
@@ -471,7 +506,9 @@ overlaySelect.addEventListener('change', () => {
     return;
   }
   neccStatus.classList.remove('error');
+  stashViewText();
   currentMode = 'necc';
+  loadViewText('necc');
   currentNeccType = key;
   currentNeccUrl = url;
   toggleLayoutVisibility();

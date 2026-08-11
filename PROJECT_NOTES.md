@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.7.1**. If you're starting a new chat, read this whole
+updated through **v0.7.2**. If you're starting a new chat, read this whole
 file before touching code.
 
 ## What this is
@@ -245,6 +245,46 @@ exactly as v0.6.x did.
    behavior and transition timing need a live OBS 28+ with the WebSocket server
    enabled. That's the one remaining smoke test.
 
+## Per-overlay text (`state.views`, v0.7.2)
+
+**Why it exists.** Reported from real OBS use: switching scenes in OBS did not
+change the wording. Every locked scene page rendered the single shared
+`title`/`subtitle`/`status`, so `WU: Be Right Back` showed whatever text was
+last pushed (e.g. "Stream Starting Soon") until someone pressed Push Live. The
+single-source model hid this, because there the panel's dropdown seeds the text
+on the way to a push. With OBS as the switcher, nothing seeds.
+
+**The model.** `state.views` holds `{ title, subtitle, status }` per mode
+(`starting-soon`, `post-match`, `roster`, `brb`, `necc`). Each overlay owns its
+own words. Everything else - socials, logo, montage, rosters, countdown, next -
+stays global; only those three vary per view.
+
+- The overlay resolves text as `state.views[lockedView || state.mode]`, falling
+  back to the top-level fields. **One push distributes all five views' text to
+  every connected page**, so each locked scene already holds its own wording and
+  an OBS scene switch needs no push at all. That is the whole point.
+- The panel keeps a `viewTexts` mirror. Switching the Overlay dropdown stashes
+  the outgoing view's text and loads the incoming view's, so custom wording
+  survives switching away and back. `gatherForm()` sends **only the current
+  view** (`views: { [currentMode]: … }`); the server merges per key so the other
+  views' text is not clobbered.
+- `MODE_DEFAULTS` is now a *fallback* for a view with nothing saved, plus the
+  countdown each mode starts from. The countdown is global, so it still resets
+  on a mode switch; the text no longer does.
+- **Migration matters here.** A state file written before v0.7.2 has no `views`,
+  and naively defaulting would silently replace an operator's own wording with
+  "Stream Starting Soon". `normalizeViews(raw.views, raw)` detects the missing
+  key and carries the shared title/subtitle/status into whichever view was
+  active. Verified against real pre-0.7.2 files, including the one in userData.
+
+**Testing note that cost time:** pushes carry `transition:'stinger'` by default,
+and a push arriving mid-stinger is *queued*, not applied, until the swap point
+(or the 4s safety). An automated test that pushes and reads a few hundred ms
+later will see stale content and look like a mode-switching bug. It is not.
+Offscreen iframes make it worse, since the stinger video cannot play there and
+the run only ends via the safety timeout. Turn the stinger checkbox off when
+scripting push/read assertions.
+
 ## Be Right Back view (v0.7.1)
 
 A fifth `state.mode`, `brb`. It came in as an externally designed page (a
@@ -425,6 +465,9 @@ persistence, asar read-only-ness).
   layout: 'left'|'right', clip, logo, montage: bool,
   neccUrl, neccType,                                    // only meaningful when mode === 'necc';
                                                         // neccType is the dropdown key (e.g. 'stageBracket')
+  views: {                                              // per-overlay text (v0.7.2); everything else is global
+    'starting-soon'|'post-match'|'roster'|'brb'|'necc': { title, subtitle, status },
+  },
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
 }

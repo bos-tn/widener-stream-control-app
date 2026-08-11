@@ -85,7 +85,11 @@ week, or a new season.
    other edit, and auto-fills sensible titles and countdowns for the moment you
    picked.
 2. **Edit text, countdown, socials, logo, montage clip.** Everything autosaves
-   to the draft and shows in the preview pane instantly.
+   to the draft and shows in the preview pane instantly. The title, subtitle,
+   and status pill belong to the overlay you are currently on, so wording you
+   set for Be Right Back stays put when you switch to Starting Soon and back.
+   Socials, logo, montage, rosters, and the countdown are shared by every
+   overlay.
 3. **Rosters?** Type the teams and players straight into the Rosters panel, or
    paste a NECC/LeagueOS link and hit Fetch to pre-fill them, then edit, add, or
    remove any player by hand.
@@ -123,6 +127,11 @@ on**, and every Push Live switches OBS to the matching scene using OBS's own
 configured transition, which you can point at your Widener stinger. The overlay
 content inside each scene still updates live over WebSocket exactly as before,
 and the in-overlay curtain wipe switches itself off so the two never double up.
+
+Because each overlay carries its own title and subtitle, a single Push Live
+sends the wording for *every* view at once. After that you can switch scenes
+directly in OBS and each one shows its own text immediately, with no need to
+push again.
 
 Notes:
 - Scene-building is idempotent. Re-running it reuses existing scenes and sources

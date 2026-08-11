@@ -16,6 +16,46 @@ function emptyTeam() {
   return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] };
 }
 
+// Per-overlay text. Each view owns its own headline/subtitle/status pill, so a
+// page locked to one view (?view=…, i.e. an OBS scene-sync source) shows that
+// view's words no matter which view was last edited. Without this, every
+// locked scene rendered the single shared title, so switching scenes in OBS
+// showed the previous view's text until someone pushed again.
+// Everything else (socials, logo, montage, rosters, countdown) stays global -
+// only these three vary per view.
+function defaultViewText() {
+  return {
+    'starting-soon': { title: 'Stream Starting Soon', subtitle: '', status: 'Starting Soon' },
+    'post-match': { title: 'Thanks for Watching', subtitle: '', status: 'Stream Ending Soon' },
+    'roster': { title: '', subtitle: '', status: '' },
+    'brb': { title: 'Be Right Back', subtitle: 'Thanks for waiting', status: '' },
+    'necc': { title: '', subtitle: '', status: '' },
+  };
+}
+
+function normalizeViews(raw, parent) {
+  const out = defaultViewText();
+  if (raw && typeof raw === 'object') {
+    Object.keys(out).forEach((k) => {
+      if (raw[k] && typeof raw[k] === 'object') out[k] = { ...out[k], ...raw[k] };
+    });
+    return out;
+  }
+  // Upgrade path from before per-view text existed: the file has one shared
+  // title/subtitle/status and no `views`. Carry those into whichever view was
+  // active, so an operator's own wording survives the upgrade instead of being
+  // silently replaced by defaults. Other views start from defaults.
+  if (parent && typeof parent.mode === 'string' && out[parent.mode]) {
+    const v = out[parent.mode];
+    out[parent.mode] = {
+      title: parent.title !== undefined ? parent.title : v.title,
+      subtitle: parent.subtitle !== undefined ? parent.subtitle : v.subtitle,
+      status: parent.status !== undefined ? parent.status : v.status,
+    };
+  }
+  return out;
+}
+
 const DEFAULT_STATE = {
   mode: 'starting-soon',
   game: '',
@@ -42,6 +82,7 @@ const DEFAULT_STATE = {
   },
   teamA: emptyTeam(),
   teamB: emptyTeam(),
+  views: defaultViewText(),
 };
 
 function initialState() {
@@ -50,6 +91,7 @@ function initialState() {
     socials: { ...DEFAULT_STATE.socials },
     teamA: emptyTeam(),
     teamB: emptyTeam(),
+    views: defaultViewText(),
     end: new Date(Date.now() + DEFAULT_STATE.durationSec * 1000).toISOString(),
   };
 }
@@ -62,6 +104,9 @@ function normalizeLoaded(raw) {
     socials: { ...DEFAULT_STATE.socials, ...raw.socials },
     teamA: { ...emptyTeam(), ...raw.teamA },
     teamB: { ...emptyTeam(), ...raw.teamB },
+    // State files written before v0.7.2 have no `views` at all; merging over
+    // fresh defaults gives them the per-view text without losing anything.
+    views: normalizeViews(raw.views, raw),
   };
 }
 
@@ -109,6 +154,9 @@ function createServer(port, opts = {}) {
       socials: { ...target.socials, ...(partial.socials || {}) },
       teamA: partial.teamA ? { ...emptyTeam(), ...partial.teamA } : target.teamA,
       teamB: partial.teamB ? { ...emptyTeam(), ...partial.teamB } : target.teamB,
+      // Merged per view key: the panel only ever sends the view it just
+      // edited, so the other views' text must survive the update.
+      views: partial.views ? { ...target.views, ...partial.views } : target.views,
     };
     if (channel === 'live') live = merged; else draft = merged;
     savePersisted();

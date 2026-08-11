@@ -609,19 +609,31 @@
   // only this pushed state does.
   function applyState(state){
     if(!state) return;
+    // Which view's words this page should show. Each overlay owns its own
+    // headline/subtitle/status (state.views), so a page locked to one view -
+    // an OBS scene-sync source - renders that view's text even when the last
+    // edit was made on a different overlay. This is what lets switching scenes
+    // in OBS change the wording with no Push Live. Falls back to the shared
+    // top-level fields for older state files that predate state.views.
+    const textMode = lockedView || state.mode;
+    const vt = (state.views && state.views[textMode]) || null;
+    const vTitle = vt && vt.title !== undefined ? vt.title : state.title;
+    const vSubtitle = vt && vt.subtitle !== undefined ? vt.subtitle : state.subtitle;
+    const vStatus = vt && vt.status !== undefined ? vt.status : state.status;
+
     logoEl.src = state.logo ? mediaUrl(state.logo) : defaultLogo;
     if(state.brand) $('#brand-line1').textContent = state.brand;
     if(state.team !== undefined) $('#brand-line2').textContent = state.team || '';
-    if(state.title !== undefined) $('#title').textContent = state.title || '';
-    if(state.subtitle !== undefined) $('#subtitle').textContent = state.subtitle || '';
+    if(vTitle !== undefined) $('#title').textContent = vTitle || '';
+    if(vSubtitle !== undefined) $('#subtitle').textContent = vSubtitle || '';
     if(state.next !== undefined) $('#next').textContent = state.next || '';
-    if(state.status !== undefined) $('#status-text').textContent = state.status || '';
+    if(vStatus !== undefined) $('#status-text').textContent = vStatus || '';
     if(state.end) countdownEnd = new Date(state.end);
     if(state.socials) renderSocials(state.socials);
     // Be Right Back reads the same fields as everything else, so editing the
     // title/subtitle/socials updates it live exactly like any other view.
-    if(state.title !== undefined){ $('#brb-headline').textContent = state.title || ''; fitBrbHeadline(); }
-    if(state.subtitle !== undefined) $('#brb-sub').textContent = state.subtitle || '';
+    if(vTitle !== undefined){ $('#brb-headline').textContent = vTitle || ''; fitBrbHeadline(); }
+    if(vSubtitle !== undefined) $('#brb-sub').textContent = vSubtitle || '';
     if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || 'Widener Esports';
     if(state.socials) renderBrbSocials(state.socials);
     if(state.clip !== undefined) applyClip(state.clip);
