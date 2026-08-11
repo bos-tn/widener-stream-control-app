@@ -1,6 +1,6 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "private": true,
   "description": "Widener Esports stream overlay control app",
   "main": "main.js",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "express": "^4.22.2",
+    "obs-websocket-js": "^5.0.8",
     "ws": "^8.21.0"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
       "main.js",
       "server.js",
       "necc.js",
+      "obs.js",
       "package.json",
       "templates/**/*",
       "public/**/*",

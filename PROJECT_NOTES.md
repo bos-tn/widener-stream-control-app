@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App — Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.6.1**. If you're starting a new chat, read this whole
+updated through **v0.7.0**. If you're starting a new chat, read this whole
 file before touching code.
 
 ## What this is
@@ -20,8 +20,9 @@ app, `localhost:4310`). No cloud services, no accounts.
 ```
 app/                          - the actual Electron app (this is what ships)
   main.js                     - Electron entry: starts server.js, opens control panel window
-  server.js                  - Express + ws server: state model, WS protocol, NECC import route
+  server.js                  - Express + ws server: state model, WS protocol, NECC import route, OBS routes
   necc.js                    - LeagueOS API client (match/roster import, overlay URL construction)
+  obs.js                     - optional obs-websocket client (scene-sync; fails soft if OBS absent) [v0.7.0]
   templates/
     overlay.html              - THE overlay - single file, all games, all modes (see below)
     games.json                - the 8 games' {id, name} used by the Game dropdown
@@ -180,6 +181,69 @@ Push Live can play the Widener curtain-wipe stinger on the live overlay
   never delayed longer than the stinger. A repush mid-stinger just swaps
   the pending state.
 
+## OBS dock + scene-sync (v0.7.0) — optional, additive
+
+Two opt-in OBS integrations, layered on top of the single-URL push model
+without changing it. If the operator never touches them, the app behaves
+exactly as v0.6.x did.
+
+1. **Control panel as an OBS browser dock.** Pure documentation + a helper: the
+   "Run this panel inside OBS" panel surfaces a copyable dock URL
+   (`http://localhost:4310/control`); the user adds it via OBS **Docks → Custom
+   Browser Docks…**. No code path is OBS-specific — it's the same web panel. The
+   panel already stacks below 980px, and was checked to have zero horizontal
+   overflow down to 380px wide (typical dock column).
+
+2. **Per-type overlay URL (`?view=`).** `overlay.html` reads `?view=` on load
+   (`starting-soon|post-match|roster|necc`). When present it **pins `mode`** to
+   that view and ignores any pushed `mode` change, while still applying every
+   other pushed field live (title, countdown, roster names, `neccUrl`, …). With
+   no `view` param, behavior is exactly as before (single source, mode-driven).
+   A view-locked page also **suppresses the in-overlay curtain stinger** (OBS
+   owns transitions in that mode, so playing the WebGL wipe too would double it).
+   This is the foundation that lets OBS hold a fixed source per scene.
+
+3. **obs-websocket scene-sync (`obs.js`).** Node module in the **server**
+   process (not the renderer), using `obs-websocket-js` v5. The control panel
+   drives it through `/api/obs/*` routes:
+   - `POST /api/obs/connect {host,port,password,sceneSync,transitionName}`,
+     `POST /api/obs/disconnect`, `POST /api/obs/settings`,
+     `GET /api/obs/status` (cached, sync, safe), `GET /api/obs/inspect` (live
+     query), `POST /api/obs/build-scenes`, `POST /api/obs/switch {view}`.
+   - **Build scenes** is idempotent: one scene + one locked `browser_source`
+     per view (`WU: Starting Soon` / `WU: Post-Match` / `WU: Rosters` /
+     `WU: NECC`, sources `WU-src-*`), each pointing at
+     `…/overlay?view=<view>`. It reuses existing scenes/inputs by name
+     (`GetSceneList`/`GetInputList`) and only corrects URL/size — re-running
+     never duplicates. One NECC scene covers all NECC types (the locked page
+     reads the pushed `neccUrl`).
+   - **Switch-on-push**: `server.js`'s `push` handler calls `obs.onPush(live)`
+     after `pushLive()`. If connected AND scene-sync is on, it optionally sets
+     the configured transition (`SetCurrentSceneTransition`) then
+     `SetCurrentProgramScene` for `live.mode`. We chose switch-on-**push** (not
+     on select) to preserve the preview-then-push model — the open question in
+     the spec. Fire-and-forget + fully soft: a failed/absent OBS never delays or
+     breaks the push that already went out.
+   - **Stinger suppression** (the mode switch): when scene-sync is active the
+     control panel disables the "Curtain stinger on push" checkbox and Push Live
+     stops sending `transition:'stinger'` (`obsSceneSyncActive` in control.js),
+     so OBS's transition and the WebGL wipe never both fire.
+   - **Password is a secret**: entered in the panel, sent over localhost, held
+     only in `obs.js` memory (+ this machine's localStorage as a convenience).
+     Never persisted server-side, never logged; `scrub()` strips it from any
+     error string. Verified an ECONNREFUSED path returns no password in the
+     response or logs.
+
+   **`obs.js` is a new top-level `app/*.js` — it IS in `build.files`.**
+   `obs-websocket-js` is a production dependency, so electron-builder bundles it
+   from `node_modules` automatically.
+
+   **Not yet verified against a real OBS.** The fail-soft paths (disconnected
+   connect/inspect/build, push while disconnected) were verified on the dev
+   server; the actual `CreateScene`/`CreateInput`/`SetCurrentProgramScene`
+   behavior and transition timing need a live OBS 28+ with the WebSocket server
+   enabled. That's the one remaining smoke test.
+
 ## NECC / LeagueOS integration (`necc.js`)
 
 This talks to **`api.leagueos.gg`, which is not an official/documented public
@@ -265,7 +329,7 @@ match link kept showing the previous opponent.
    packaged app on launch (`Cannot find module './necc'`). **Any new
    top-level `app/*.js` file must be added to `build.files` in
    `app/package.json`.** Currently whitelisted: `main.js`, `server.js`,
-   `necc.js`, `package.json`, `templates/**/*`, `public/**/*`,
+   `necc.js`, `obs.js`, `package.json`, `templates/**/*`, `public/**/*`,
    `build/icons/**/*`.
 
 General lesson from this project: **always smoke-test the actual packaged
@@ -317,10 +381,11 @@ new state fields.
 
 ## Known gaps / things not yet done
 
-- OBS WebSocket integration was built once (for a NECC/Widener source
-  toggle) and then **fully removed** in favor of the iframe approach - if
-  you see references to obs-websocket anywhere, that's stale; the app has no
-  OBS connection dependency at all as of v0.4.1+.
+- An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
+  removed at v0.4.1 in favor of the iframe approach. A **new, different**
+  obs-websocket integration was then added at **v0.7.0** (`obs.js`, scene-sync)
+  - see that section above. The two are unrelated; the app still has **no hard
+  OBS dependency** (scene-sync is opt-in and fails soft).
 - No automated tests - everything has been verified manually via the
   preview tool per session. There is no CI.
 - The LeagueOS integration is inherently fragile (unofficial API) - if a

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Widener Esports — Stream Control</title>
+<title>Widener Esports Stream Control</title>
 <link rel="stylesheet" href="control.css">
 </head>
 <body>
@@ -23,7 +23,11 @@
     <main class="settings-col">
       <section class="panel">
         <div class="field">
-          <label for="obsUrl">OBS Browser Source URL <span class="hint">(paste this once, in every scene — it never changes, not even when you switch games)</span></label>
+          <label for="obsUrl">
+            <span class="lbl">OBS Browser Source URL
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste this once into every OBS scene that needs the overlay. It never changes, not even when you switch games.">i</span>
+            </span>
+          </label>
           <div class="copy-row">
             <input type="text" id="obsUrl" readonly>
             <button id="copyUrlBtn" class="btn-secondary" type="button">Copy</button>
@@ -32,11 +36,15 @@
 
         <div class="field-row">
           <label class="grow">
-            Game <span class="hint">(fills the game name below)</span>
+            <span class="lbl">Game
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Fills in the game name field below.">i</span>
+            </span>
             <select id="gameSelect"></select>
           </label>
           <label class="grow">
-            Overlay <span class="hint">(previews first — goes live when you push)</span>
+            <span class="lbl">Overlay
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Switching previews first. It only reaches the stream when you push.">i</span>
+            </span>
             <select id="overlaySelect">
               <optgroup label="Widener">
                 <option value="widener:starting-soon">Starting Soon</option>
@@ -47,27 +55,121 @@
             </select>
           </label>
         </div>
-        <label class="checkbox" id="neccBgField" style="display:none" title="Transparent NECC overlays (like the bracket) show the Widener stripe background instead of plain black">
+        <label class="checkbox" id="neccBgField" style="display:none">
           <input type="checkbox" id="neccBgInput" checked>
           Widener stripe background behind the NECC overlay
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Transparent NECC overlays, like the bracket, show the Widener stripe background instead of plain black.">i</span>
         </label>
+      </section>
+
+      <section class="panel">
+        <h2>Run this panel inside OBS <span class="tag-opt">Optional</span></h2>
+        <details class="help">
+          <summary>How do I set this up?</summary>
+          <div class="help-body">
+            <p>OBS can host this control panel as a dock, right beside your scenes.
+            It is the same panel, just embedded in the OBS window.</p>
+            <ol>
+              <li>In OBS, open <b>Docks</b> then <b>Custom Browser Docks…</b></li>
+              <li>Give it a name, such as <b>Widener Control</b>.</li>
+              <li>Paste the URL below, then click <b>Apply</b>.</li>
+            </ol>
+          </div>
+        </details>
+        <div class="field">
+          <label for="dockUrl"><span class="lbl">Custom Browser Dock URL</span></label>
+          <div class="copy-row">
+            <input type="text" id="dockUrl" readonly>
+            <button id="copyDockBtn" class="btn-secondary" type="button">Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>OBS scene-sync <span class="tag-opt">Optional</span></h2>
+        <details class="help">
+          <summary>What does scene-sync do?</summary>
+          <div class="help-body">
+            <p>It connects to the WebSocket server built into OBS 28 and newer, then
+            builds one scene per overlay type. After that, every Push Live switches
+            OBS to the matching scene using OBS's own transition, such as the
+            Widener stinger.</p>
+            <p>The overlay content inside each scene still updates live, exactly as
+            it does today. Leave this disconnected to keep the classic
+            single-source setup. Nothing here is required.</p>
+            <ol>
+              <li>In OBS, open <b>Tools</b> then <b>WebSocket Server Settings</b>.</li>
+              <li>Enable the server and copy the password.</li>
+              <li>Fill in the fields below and click <b>Connect</b>.</li>
+              <li>Click <b>Build / update scenes</b>, then turn scene-sync on.</li>
+            </ol>
+          </div>
+        </details>
+        <div class="field-row">
+          <label class="grow">
+            <span class="lbl">Host</span>
+            <input type="text" id="obsHostInput" placeholder="127.0.0.1" value="127.0.0.1">
+          </label>
+          <label style="flex:0 0 110px">
+            <span class="lbl">Port</span>
+            <input type="number" id="obsPortInput" placeholder="4455" value="4455">
+          </label>
+        </div>
+        <div class="field">
+          <label for="obsPassInput">
+            <span class="lbl">Password
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="From OBS: Tools, then WebSocket Server Settings. Stored only on this machine, and never written to the overlay state.">i</span>
+            </span>
+          </label>
+          <input type="password" id="obsPassInput" placeholder="OBS WebSocket password">
+        </div>
+        <div class="push-row" style="margin-bottom:12px">
+          <button id="obsConnectBtn" class="btn-secondary" type="button">Connect</button>
+          <button id="obsDisconnectBtn" class="btn-secondary" type="button" disabled>Disconnect</button>
+        </div>
+        <div class="necc-status" id="obsStatus">Not connected</div>
+
+        <div id="obsSyncControls" style="display:none; margin-top:14px; border-top:1px solid var(--panel-border); padding-top:14px">
+          <label class="checkbox">
+            <input type="checkbox" id="obsSyncEnable">
+            Scene-sync on
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Push Live switches OBS scenes and lets OBS play the transition. The in-overlay curtain wipe turns off automatically so the two cannot double up.">i</span>
+          </label>
+          <div class="field" style="margin-top:12px">
+            <label for="obsTransitionSelect">
+              <span class="lbl">OBS transition on switch
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Pick the Widener stinger you set up in OBS. Leaving it on the OBS default keeps whatever transition OBS already has selected.">i</span>
+              </span>
+            </label>
+            <select id="obsTransitionSelect"><option value="">OBS default</option></select>
+          </div>
+          <div class="push-row">
+            <button id="obsBuildBtn" class="btn-secondary" type="button">Build / update scenes in OBS</button>
+          </div>
+          <div class="necc-status" id="obsBuildStatus" style="margin-top:8px"></div>
+        </div>
       </section>
 
       <section class="panel">
         <h2>Import from NECC / LeagueOS</h2>
         <div class="field">
-          <label for="neccUrlInput">Match link <span class="hint">(the match page or overlay link)</span></label>
+          <label for="neccUrlInput">
+            <span class="lbl">Match link
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="The NECC match page link, or an overlay link. A successful fetch fills in the Rosters below, which you can then edit by hand.">i</span>
+            </span>
+          </label>
           <div class="copy-row">
             <input type="text" id="neccUrlInput" placeholder="https://necc.v1.leagueos.gg/league/matches/...">
             <button id="neccFetchBtn" class="btn-secondary" type="button">Fetch</button>
           </div>
         </div>
         <div class="necc-status" id="neccStatus"></div>
-        <p class="hint necc-type-hint" style="margin:10px 0 0">A successful fetch fills in the Rosters below — from there you can edit any name or add players by hand.</p>
       </section>
 
       <section class="panel">
-        <h2>Rosters <span class="hint">(shown in the Rosters overlay — type players in by hand, or fill them from a NECC fetch)</span></h2>
+        <h2>Rosters
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Shown in the Rosters overlay. Type players in by hand, or fill them from a NECC fetch and edit from there.">i</span>
+        </h2>
         <div class="roster-editor">
           <div class="roster-edit-team">
             <div class="ret-header">
@@ -93,24 +195,24 @@
       <section class="panel">
         <h2>Text</h2>
         <div class="field">
-          <label for="teamInput">Game name</label>
+          <label for="teamInput"><span class="lbl">Game name</span></label>
           <input type="text" id="teamInput" placeholder="Call of Duty">
         </div>
         <div class="field">
-          <label for="titleInput">Title</label>
+          <label for="titleInput"><span class="lbl">Title</span></label>
           <input type="text" id="titleInput" placeholder="Stream Starting Soon">
         </div>
         <div class="field">
-          <label for="subtitleInput">Subtitle</label>
+          <label for="subtitleInput"><span class="lbl">Subtitle</span></label>
           <input type="text" id="subtitleInput" placeholder="Optional subtitle">
         </div>
         <div class="field-row">
           <label class="grow">
-            Status pill
+            <span class="lbl">Status pill</span>
             <input type="text" id="statusInput" placeholder="Starting Soon">
           </label>
           <label class="grow">
-            Next match
+            <span class="lbl">Next match</span>
             <input type="text" id="nextInput" placeholder="Next: vs Rowan Fri 7pm">
           </label>
         </div>
@@ -130,32 +232,38 @@
         </div>
         <div class="field-row">
           <label class="grow" id="durationField">
-            Seconds from now
+            <span class="lbl">Seconds from now</span>
             <input type="number" id="durationInput" min="0" step="1" placeholder="600">
           </label>
           <label class="grow" id="atField" style="display:none">
-            Target date &amp; time
+            <span class="lbl">Target date &amp; time</span>
             <input type="datetime-local" id="atInput">
           </label>
         </div>
       </section>
 
       <section class="panel">
-        <h2>Socials <span class="hint">(defaults to wideneresports)</span></h2>
+        <h2>Socials
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave a field blank to hide that handle on the overlay. All four default to wideneresports.">i</span>
+        </h2>
         <div class="field-row">
-          <label class="grow">Twitch<input type="text" id="twitchInput" placeholder="wideneresports"></label>
-          <label class="grow">Twitter/X<input type="text" id="twitterInput" placeholder="wideneresports"></label>
+          <label class="grow"><span class="lbl">Twitch</span><input type="text" id="twitchInput" placeholder="wideneresports"></label>
+          <label class="grow"><span class="lbl">Twitter/X</span><input type="text" id="twitterInput" placeholder="wideneresports"></label>
         </div>
         <div class="field-row">
-          <label class="grow">Instagram<input type="text" id="instagramInput" placeholder="wideneresports"></label>
-          <label class="grow">YouTube<input type="text" id="youtubeInput" placeholder="wideneresports"></label>
+          <label class="grow"><span class="lbl">Instagram</span><input type="text" id="instagramInput" placeholder="wideneresports"></label>
+          <label class="grow"><span class="lbl">YouTube</span><input type="text" id="youtubeInput" placeholder="wideneresports"></label>
         </div>
       </section>
 
       <section class="panel">
         <h2>Media</h2>
         <div class="field">
-          <label for="logoInput">Logo URL or file <span class="hint">(leave blank for the default Widener logo)</span></label>
+          <label for="logoInput">
+            <span class="lbl">Logo URL or file
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave blank for the default Widener logo.">i</span>
+            </span>
+          </label>
           <div class="copy-row">
             <input type="text" id="logoInput" placeholder="https://... or a local image file">
             <button id="browseLogoBtn" class="btn-secondary" type="button">Browse…</button>
@@ -163,7 +271,7 @@
           </div>
         </div>
         <div class="field">
-          <label for="clipInput">Montage clip path or URL</label>
+          <label for="clipInput"><span class="lbl">Montage clip path or URL</span></label>
           <div class="copy-row">
             <input type="text" id="clipInput" placeholder="C:\path\to\clip.mp4 or https://...">
             <button id="browseClipBtn" class="btn-secondary" type="button">Browse…</button>
@@ -176,7 +284,7 @@
             Show montage panel
           </label>
           <label class="grow" id="layoutField">
-            Layout side
+            <span class="lbl">Layout side</span>
             <select id="layoutInput">
               <option value="right">Montage right, text left</option>
               <option value="left">Montage left, text right</option>
@@ -186,8 +294,9 @@
       </section>
 
       <section class="panel">
-        <h2>NECC overlays in the dropdown</h2>
-        <p class="hint necc-type-hint">Rendered right inside this same overlay - no OBS connection needed, nothing else to configure.</p>
+        <h2>NECC overlays in the dropdown
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="These render inside this same overlay, so no OBS connection is needed and there is nothing else to configure.">i</span>
+        </h2>
         <div class="necc-type-list" id="neccTypeList"></div>
       </section>
     </main>
@@ -195,7 +304,11 @@
     <div class="col-resizer" id="colResizer"></div>
 
     <aside class="preview-col">
-      <div class="preview-label">Preview <span class="hint">(not live until you push)</span></div>
+      <div class="preview-label">
+        <span class="lbl">Preview
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="This is your draft. Nothing here reaches the stream until you click Push Live.">i</span>
+        </span>
+      </div>
       <div class="preview-frame-wrap">
         <div class="preview-frame-16x9" id="previewBox">
           <div class="preview-scaler" id="previewScaler">
@@ -203,13 +316,14 @@
           </div>
         </div>
       </div>
-      <label class="checkbox stinger-check" title="Play the Widener curtain wipe on the live overlay whenever you push, hiding the switch">
+      <label class="checkbox stinger-check">
         <input type="checkbox" id="stingerInput" checked>
         Curtain stinger on push
+        <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays the Widener curtain wipe on the live overlay whenever you push, hiding the switch.">i</span>
       </label>
       <div class="push-row">
         <button id="pushBtn" class="push-btn" type="button">Push Live</button>
-        <button id="revertBtn" class="revert-btn" type="button" disabled title="Discard preview changes and match what's currently live">Revert</button>
+        <button id="revertBtn" class="revert-btn" type="button" disabled title="Discard preview changes and match what is currently live">Revert</button>
       </div>
       <div class="push-status" id="pushStatus"></div>
     </aside>

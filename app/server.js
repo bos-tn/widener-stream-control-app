@@ -3,6 +3,7 @@ const fs = require('fs');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const { importMatch } = require('./necc');
+const { createObs } = require('./obs');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
@@ -155,6 +156,11 @@ function createServer(port, opts = {}) {
     return stableStringify(a) !== stableStringify(b);
   }
 
+  // Optional OBS integration (see obs.js). Points OBS browser sources at this
+  // same server. Everything it does is opt-in and fails soft - if OBS is never
+  // connected, none of this runs and the app behaves exactly as before.
+  const obs = createObs({ getOverlayBase: () => `http://localhost:${port}` });
+
   const app = express();
   app.use(express.json());
   app.use('/control', express.static(CONTROL_DIR));
@@ -207,6 +213,38 @@ function createServer(port, opts = {}) {
     } catch (err) {
       res.status(502).json({ error: err.message || 'Failed to import match' });
     }
+  });
+
+  // --- OBS integration routes (all optional, all fail soft) ----------------
+  // The control panel drives OBS through these. Note the password is only ever
+  // sent from the local panel to here over localhost; it is never persisted
+  // server-side and never logged.
+  app.get('/api/obs/status', (req, res) => res.json(obs.status()));
+
+  app.get('/api/obs/inspect', async (req, res) => {
+    try { res.json(await obs.inspect()); }
+    catch (err) { res.json({ ...obs.status(), error: err.message || String(err) }); }
+  });
+
+  app.post('/api/obs/connect', async (req, res) => {
+    try { res.json(await obs.connect(req.body || {})); }
+    catch (err) { res.status(502).json({ ...obs.status(), error: err.message || 'Failed to connect to OBS' }); }
+  });
+
+  app.post('/api/obs/disconnect', (req, res) => res.json(obs.disconnect()));
+
+  app.post('/api/obs/settings', (req, res) => res.json(obs.setSettings(req.body || {})));
+
+  app.post('/api/obs/build-scenes', async (req, res) => {
+    try { res.json(await obs.buildScenes()); }
+    catch (err) { res.status(502).json({ error: err.message || 'Failed to build scenes' }); }
+  });
+
+  // Manual scene switch (e.g. a "test switch" button). Push Live already drives
+  // this automatically via obs.onPush when scene-sync is enabled.
+  app.post('/api/obs/switch', async (req, res) => {
+    try { res.json(await obs.switchToView((req.body || {}).view)); }
+    catch (err) { res.status(502).json({ error: err.message || 'Failed to switch scene' }); }
   });
 
   const server = app.listen(port, () => {
@@ -268,6 +306,10 @@ function createServer(port, opts = {}) {
         broadcast('live', newLive, extra);
         broadcast('draft', draft, extra);
         broadcastDirty();
+        // Scene-sync (if connected + enabled): OBS switches to the scene for
+        // the newly-live view and fires its own transition. Fire-and-forget -
+        // it must never delay or fail the push that already went out.
+        obs.onPush(newLive).catch(() => {});
         return;
       }
 
