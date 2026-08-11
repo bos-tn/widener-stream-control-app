@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Widener Esports — Stream Overlay</title>
+<title>Widener Esports Stream Overlay</title>
 <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Kanit:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -226,7 +226,7 @@
 <body data-mode="starting-soon">
   <div class="stripes"></div>
   <div class="bg-gradient"></div>
-  <div class="preview-flag">Preview — not live</div>
+  <div class="preview-flag">Preview, not live</div>
 
   <canvas id="stinger-canvas" width="1920" height="1080"></canvas>
 
@@ -455,10 +455,16 @@
     // 'roster' is a full third Widener view (not a flag layered on the
     // others) - it hides the title/countdown content and montage panel and
     // shows the two-team lineup instead.
-    if(state.mode){
-      document.body.dataset.mode = state.mode;
-      const isNecc = state.mode === 'necc';
-      const isRoster = state.mode === 'roster';
+    //
+    // When this page is locked to a view (?view=…, scene-sync mode), the mode
+    // is pinned to lockedView and any pushed mode change is ignored - OBS owns
+    // *which* view is on program via scene switches, we only own the content
+    // inside it. Every other field below still applies live either way.
+    const effectiveMode = lockedView || state.mode;
+    if(effectiveMode){
+      document.body.dataset.mode = effectiveMode;
+      const isNecc = effectiveMode === 'necc';
+      const isRoster = effectiveMode === 'roster';
       widenerFrame.style.display = isNecc ? 'none' : '';
       neccFrame.classList.toggle('active', isNecc);
       if(isNecc){
@@ -467,7 +473,7 @@
         neccFrame.classList.toggle('branded', state.neccBg !== false);
         if(state.neccUrl && neccIframe.src !== state.neccUrl) neccIframe.src = state.neccUrl;
       } else {
-        placeholderTitle.textContent = state.mode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';
+        placeholderTitle.textContent = effectiveMode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';
         content.style.display = isRoster ? 'none' : '';
         rosterView.classList.toggle('active', isRoster);
         if(isRoster){
@@ -483,9 +489,30 @@
 
   // Which channel this page mirrors: live (OBS) or draft (the control
   // panel's preview pane, loaded with ?preview=1).
-  const isPreview = new URLSearchParams(location.search).get('preview') === '1';
+  const params = new URLSearchParams(location.search);
+  const isPreview = params.get('preview') === '1';
   const channel = isPreview ? 'draft' : 'live';
   if(isPreview) document.body.dataset.preview = '1';
+
+  // Optional per-type lock (?view=starting-soon|post-match|roster|necc). This
+  // is what lets OBS's scene-sync mode hold a *fixed* source per overlay type:
+  // each OBS Browser Source loads /overlay?view=<type>, which pins mode to that
+  // type and ignores any pushed mode change, while still applying every other
+  // pushed field (title, countdown, roster names, neccUrl, ...) live. With no
+  // view param, behavior is exactly as before: a single source whose mode is
+  // whatever was last pushed. Kept fully backward-compatible.
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc'];
+  const rawView = params.get('view');
+  const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
+  // Optional NECC type hint for a view=necc source (informational: the actual
+  // neccUrl still comes from pushed state, so the app can point one NECC scene
+  // at whatever overlay the operator selected). Recorded on the body for
+  // debugging / future use.
+  const lockedNeccType = lockedView === 'necc' ? (params.get('necc') || '') : '';
+  if(lockedView){
+    document.body.dataset.view = lockedView;
+    if(lockedNeccType) document.body.dataset.neccType = lockedNeccType;
+  }
 
   // --- Curtain stinger transition -----------------------------------------
   //
@@ -671,7 +698,12 @@
           // The preview pane plays it too (its content already matches the
           // draft - the wipe is confirmation for the operator that the
           // transition went out with the push).
-          if (msg.transition === 'stinger') stingerTransition(msg.data);
+          //
+          // A view-locked page (scene-sync mode) never plays the in-overlay
+          // stinger: OBS owns between-view transitions there, so playing the
+          // curtain wipe here too would double it up. Content still swaps
+          // instantly within the view.
+          if (msg.transition === 'stinger' && !lockedView) stingerTransition(msg.data);
           else applyState(msg.data);
         }
       } catch (e) {}

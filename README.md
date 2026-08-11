@@ -55,6 +55,10 @@ Electron app. No cloud, no accounts, no internet dependency on game day.
   fit however many players you enter.
 - **Live-sized preview.** The preview renders at a true 1920×1080 and scales
   down, so proportions always match what viewers see.
+- **Optional OBS integration.** Run the control panel as a dock *inside* OBS, and
+  (if you want) let OBS drive the transitions: one scene per overlay type,
+  switched with OBS's own stinger on every Push Live. Entirely opt-in — the
+  one-URL setup above still works with zero OBS configuration.
 
 ## Setting up OBS (once)
 
@@ -87,6 +91,36 @@ week, or a new season.
 
 Tip: pushing with no pending changes just fires the stinger — a free manual
 transition whenever you want one.
+
+## Optional: OBS dock + scene-sync
+
+Everything above works with a single OBS Browser Source and no extra setup.
+Two opt-in extras live in the control panel for people who want tighter OBS
+integration — you can use either, both, or neither.
+
+**Run the panel as an OBS dock.** In OBS: **Docks → Custom Browser Docks…**,
+give it a name, and paste the **Custom Browser Dock URL** from the panel
+(`http://localhost:4310/control`). The control panel then lives inside the OBS
+window, next to your scenes.
+
+**Let OBS drive the transitions (scene-sync).** In OBS 28+, enable the
+WebSocket server (**Tools → WebSocket Server Settings**) and note the password.
+In the panel's **OBS scene-sync** section, enter the host/port/password and
+**Connect**, then **Build / update scenes**. This creates one scene per overlay
+type — *Starting Soon*, *Post-Match*, *Rosters*, *NECC* — each holding a locked
+Browser Source at `…/overlay?view=<type>`. Turn **Scene-sync on**, and every
+Push Live switches OBS to the matching scene using OBS's own configured
+transition (point it at your Widener stinger). The overlay content inside each
+scene still updates live over WebSocket exactly as before, and the in-overlay
+curtain wipe is automatically suppressed so the two never double up.
+
+Notes:
+- Scene-building is idempotent — re-running it reuses existing scenes/sources by
+  name instead of duplicating them.
+- The obs-websocket password is held only in the app's memory (and this
+  machine's local settings) — never committed, never logged.
+- If OBS isn't reachable, none of this blocks a Push Live; the app just falls
+  back to the classic single-source behavior.
 
 ## For developers
 
@@ -135,8 +169,9 @@ apply instantly.
 ```
 app/                 the Electron app (this is what ships)
   main.js            Electron entry: starts the server, opens the panel window
-  server.js          Express + ws server: state model, WS protocol, NECC import
+  server.js          Express + ws server: state model, WS protocol, NECC import, OBS routes
   necc.js            LeagueOS API client (match/roster import, overlay URLs)
+  obs.js             optional obs-websocket client (scene-sync — fails soft if OBS is absent)
   templates/
     overlay.html     THE overlay — single file, all games, all modes
     games.json       games list for the Game dropdown
@@ -172,6 +207,7 @@ else depends on it.
 [Electron](https://www.electronjs.org/) ·
 [Express](https://expressjs.com/) ·
 [ws](https://github.com/websockets/ws) ·
+[obs-websocket-js](https://github.com/obs-websocket-community-projects/obs-websocket-js) ·
 [electron-builder](https://www.electron.build/)
 
 No automated tests — the app is small and every change is verified by hand

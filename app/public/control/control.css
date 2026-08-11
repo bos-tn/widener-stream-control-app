@@ -133,6 +133,85 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 
 .hint{color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0}
 
+/* Label text + its info dot on one line. Field labels are flex columns, so
+   without this wrapper the dot becomes its own anonymous flex item and drops
+   to a line of its own. */
+.lbl{ display:inline-flex; align-items:center; gap:7px; }
+
+/* Hover/focus info point. Replaces the parenthetical tips that used to sit
+   inline in every label - the tip text lives in data-tip and is rendered by
+   the shared floating bubble in control.js (position:fixed, viewport-clamped,
+   so it can't be clipped by the scrolling settings column or a narrow OBS
+   dock). Keyboard reachable: tabindex=0 in the markup, shown on focus. */
+.info{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; flex:0 0 16px; border-radius:50%;
+  background:#1b2436; border:1px solid var(--panel-border); color:var(--muted);
+  font-size:10px; font-weight:700; font-style:normal; line-height:1;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  text-transform:none; letter-spacing:0;
+  cursor:help; user-select:none; vertical-align:middle;
+}
+.info:hover, .info:focus-visible{
+  background:var(--widener-blue); border-color:var(--widener-blue); color:#fff;
+  outline:none;
+}
+.info:focus-visible{ box-shadow:0 0 0 2px rgba(0,84,184,.45); }
+
+.tip-bubble{
+  position:fixed; z-index:1000; max-width:280px;
+  background:#0b1220; border:1px solid var(--panel-border); border-radius:8px;
+  padding:9px 11px; font-size:12.5px; line-height:1.45; color:var(--text);
+  text-align:left; text-transform:none; letter-spacing:0; font-weight:400;
+  box-shadow:0 12px 28px rgba(0,0,0,.55);
+  opacity:0; visibility:hidden; transition:opacity .12s ease;
+  pointer-events:none;
+}
+.tip-bubble.visible{ opacity:1; visibility:visible; }
+
+/* Collapsible help block for the longer setup instructions (OBS dock, scene
+   sync). Closed by default so the panel stays scannable; the steps are one
+   click away instead of a wall of text above every control. */
+.help{
+  border:1px solid var(--panel-border); border-radius:8px;
+  background:#0d1420; margin:0 0 14px; overflow:hidden;
+}
+.help > summary{
+  cursor:pointer; padding:9px 12px; font-size:13px; color:var(--muted);
+  display:flex; align-items:center; gap:8px; list-style:none;
+}
+.help > summary::-webkit-details-marker{ display:none; }
+.help > summary::before{
+  content:"?"; flex:0 0 16px; width:16px; height:16px; border-radius:50%;
+  background:#1b2436; border:1px solid var(--panel-border);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:700; color:var(--muted);
+}
+.help > summary::after{
+  content:""; margin-left:auto; width:7px; height:7px; flex:0 0 auto;
+  border-right:2px solid var(--muted); border-bottom:2px solid var(--muted);
+  transform:rotate(45deg) translate(-2px,-2px); transition:transform .15s ease;
+}
+.help[open] > summary::after{ transform:rotate(225deg) translate(-2px,-2px); }
+.help > summary:hover{ color:var(--text); background:#131c2c; }
+.help > summary:hover::before{ color:var(--text); border-color:var(--widener-blue); }
+.help[open] > summary{ color:var(--text); border-bottom:1px solid var(--panel-border); }
+.help-body{ padding:11px 12px 13px; font-size:13px; line-height:1.55; color:var(--muted); }
+.help-body p{ margin:0 0 9px; }
+.help-body p:last-child{ margin-bottom:0; }
+.help-body b{ color:var(--text); font-weight:600; }
+.help-body ol{ margin:0; padding-left:18px; }
+.help-body li{ margin-bottom:6px; }
+.help-body li:last-child{ margin-bottom:0; }
+
+/* "Optional" marker on a section heading. */
+.tag-opt{
+  margin-left:8px; padding:2px 8px; border-radius:999px;
+  background:rgba(0,84,184,.22); border:1px solid rgba(0,84,184,.5);
+  color:#8fb6ea; font-size:10px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; vertical-align:middle;
+}
+
 .radio{flex-direction:row !important; align-items:center; gap:8px !important; font-size:14px; color:var(--text) !important; cursor:pointer}
 .radio input{margin:0}
 
@@ -212,7 +291,6 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 .roster-chip.selected .rc-tag{ color:#fff; }
 .roster-chip:hover{ border-color:var(--widener-gold); }
 
-.necc-type-hint{ margin:0 0 12px; font-size:13px; }
 .necc-type-list{ display:flex; flex-direction:column; gap:10px; }
 
 /* Roster editor - fully editable by hand, and what a NECC fetch fills in. */

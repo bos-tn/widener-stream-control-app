@@ -1,6 +1,10 @@
 const obsUrl = document.getElementById('obsUrl');
 const copyUrlBtn = document.getElementById('copyUrlBtn');
 
+// When OBS scene-sync is active, OBS plays the transition between scenes, so
+// the in-overlay curtain stinger is suppressed on push to avoid doubling it.
+let obsSceneSyncActive = false;
+
 const gameSelect = document.getElementById('gameSelect');
 const overlaySelect = document.getElementById('overlaySelect');
 const neccOptGroup = document.getElementById('neccOptGroup');
@@ -102,6 +106,8 @@ function toDatetimeLocalValue(isoString) {
 
 function updateUrlDisplay() {
   obsUrl.value = `${location.origin}/overlay`;
+  const dockUrl = document.getElementById('dockUrl');
+  if (dockUrl) dockUrl.value = `${location.origin}/control`;
 }
 
 function toggleLayoutVisibility() {
@@ -365,7 +371,10 @@ stingerInput.addEventListener('change', () => {
 pushBtn.addEventListener('click', () => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: 'update', channel: 'draft', data: gatherForm() }));
-  ws.send(JSON.stringify({ type: 'push', transition: stingerInput.checked ? 'stinger' : undefined }));
+  // In scene-sync mode OBS owns the transition, so don't also flag the
+  // in-overlay curtain wipe (it would double up / play in the preview only).
+  const useStinger = stingerInput.checked && !obsSceneSyncActive;
+  ws.send(JSON.stringify({ type: 'push', transition: useStinger ? 'stinger' : undefined }));
   lastPushedAt = new Date().toLocaleTimeString();
   pushStatus.textContent = `Pushed live at ${lastPushedAt}`;
 });
@@ -565,7 +574,7 @@ neccFetchBtn.addEventListener('click', async () => {
     }
 
     const urlCount = Object.keys(lastImportedOverlayUrls).length;
-    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? ` — ${data.eventName}` : ''}${urlCount ? ` (${urlCount} overlay links ready)` : ' (no overlay links resolved - bracket/preview switching unavailable for this match)'}`;
+    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${urlCount ? ` (${urlCount} overlay links ready)` : ' (no overlay links resolved, so bracket and preview switching are unavailable for this match)'}`;
     pushDraft();
   } catch (err) {
     neccStatus.textContent = err.message || 'Failed to import match';
@@ -649,8 +658,236 @@ fetch('/games.json')
   .then((r) => r.json())
   .then((data) => {
     games = data;
-    gameSelect.innerHTML = '<option value="">— custom —</option>' + games.map((g) => `<option value="${g.id}">${g.name}</option>`).join('');
+    gameSelect.innerHTML = '<option value="">Custom</option>' + games.map((g) => `<option value="${g.id}">${g.name}</option>`).join('');
     updateUrlDisplay();
     toggleLayoutVisibility();
     connect();
   });
+
+// --- Info points -----------------------------------------------------------
+//
+// One shared floating bubble serves every .info dot. It's position:fixed and
+// clamped to the viewport, so a tip can't be clipped by the scrolling settings
+// column or squeezed off-screen when the panel runs as a narrow OBS dock -
+// which a CSS-only ::after tooltip would be. Shown on hover and on keyboard
+// focus; dismissed on scroll, blur, or Escape.
+
+const tipBubble = document.createElement('div');
+tipBubble.className = 'tip-bubble';
+tipBubble.setAttribute('role', 'tooltip');
+document.body.appendChild(tipBubble);
+
+const TIP_GAP = 8;
+
+function showTip(el) {
+  const text = el.getAttribute('data-tip');
+  if (!text) return;
+  tipBubble.textContent = text;
+  // A visibility:hidden element still gets a layout box, so the bubble can be
+  // measured (and positioned) before it's ever shown - no first-frame flicker.
+  const anchor = el.getBoundingClientRect();
+  const bubble = tipBubble.getBoundingClientRect();
+  let left = anchor.left + anchor.width / 2 - bubble.width / 2;
+  left = Math.max(TIP_GAP, Math.min(left, window.innerWidth - bubble.width - TIP_GAP));
+  // Prefer above the dot; flip below when there isn't room.
+  let top = anchor.top - bubble.height - TIP_GAP;
+  if (top < TIP_GAP) top = anchor.bottom + TIP_GAP;
+  tipBubble.style.left = `${Math.round(left)}px`;
+  tipBubble.style.top = `${Math.round(top)}px`;
+  tipBubble.classList.add('visible');
+}
+
+function hideTip() {
+  tipBubble.classList.remove('visible');
+}
+
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest && e.target.closest('.info');
+  if (el) showTip(el);
+});
+document.addEventListener('mouseout', (e) => {
+  if (e.target.closest && e.target.closest('.info')) hideTip();
+});
+document.addEventListener('focusin', (e) => {
+  const el = e.target.closest && e.target.closest('.info');
+  if (el) showTip(el);
+});
+document.addEventListener('focusout', (e) => {
+  if (e.target.closest && e.target.closest('.info')) hideTip();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+// Capture phase so a scroll inside the settings column (which doesn't bubble)
+// still dismisses a bubble anchored to a row that just moved.
+document.addEventListener('scroll', hideTip, true);
+window.addEventListener('resize', hideTip);
+// An info dot inside a <label> would otherwise toggle that label's checkbox.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('.info');
+  if (el) { e.preventDefault(); showTip(el); }
+});
+
+// --- OBS dock URL copy + scene-sync ----------------------------------------
+//
+// All optional. The dock URL just mirrors how the Browser Source URL is
+// surfaced. Scene-sync talks to the server's /api/obs/* routes, which own the
+// single obs-websocket connection; the password is entered here, sent over
+// localhost, and only ever held in the server's memory (plus this machine's
+// localStorage as a convenience) - never committed, never logged.
+
+const copyDockBtn = document.getElementById('copyDockBtn');
+copyDockBtn.addEventListener('click', () => {
+  const dockUrl = document.getElementById('dockUrl');
+  navigator.clipboard.writeText(dockUrl.value).then(() => {
+    copyDockBtn.textContent = 'Copied!';
+    setTimeout(() => { copyDockBtn.textContent = 'Copy'; }, 1500);
+  });
+});
+
+const obsHostInput = document.getElementById('obsHostInput');
+const obsPortInput = document.getElementById('obsPortInput');
+const obsPassInput = document.getElementById('obsPassInput');
+const obsConnectBtn = document.getElementById('obsConnectBtn');
+const obsDisconnectBtn = document.getElementById('obsDisconnectBtn');
+const obsStatusEl = document.getElementById('obsStatus');
+const obsSyncControls = document.getElementById('obsSyncControls');
+const obsSyncEnable = document.getElementById('obsSyncEnable');
+const obsTransitionSelect = document.getElementById('obsTransitionSelect');
+const obsBuildBtn = document.getElementById('obsBuildBtn');
+const obsBuildStatus = document.getElementById('obsBuildStatus');
+
+const OBS_SETTINGS_KEY = 'widener-obs-settings';
+
+function loadObsSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(OBS_SETTINGS_KEY)) || {};
+    if (s.host) obsHostInput.value = s.host;
+    if (s.port) obsPortInput.value = s.port;
+    if (typeof s.password === 'string') obsPassInput.value = s.password;
+    if (s.sceneSync) obsSyncEnable.checked = true;
+    if (s.transitionName) obsTransitionSelect.dataset.saved = s.transitionName;
+  } catch (e) {}
+}
+function saveObsSettings() {
+  localStorage.setItem(OBS_SETTINGS_KEY, JSON.stringify({
+    host: obsHostInput.value.trim(),
+    port: parseInt(obsPortInput.value, 10) || 4455,
+    // Convenience only, on this machine. Not committed, not logged.
+    password: obsPassInput.value,
+    sceneSync: obsSyncEnable.checked,
+    transitionName: obsTransitionSelect.value || '',
+  }));
+}
+
+function renderObsStatus(st) {
+  const connected = !!(st && st.connected);
+  obsConnectBtn.disabled = connected;
+  obsDisconnectBtn.disabled = !connected;
+  obsSyncControls.style.display = connected ? '' : 'none';
+  obsSceneSyncActive = connected && !!(st && st.sceneSync);
+  // Reflect scene-sync state onto the curtain-stinger checkbox: when OBS owns
+  // the transition, the in-overlay wipe is off and can't be toggled here.
+  stingerInput.disabled = obsSceneSyncActive;
+  // Explain the disabled checkbox in its own info point rather than a separate
+  // note, so the reason sits exactly where the control is.
+  const stingerInfo = stingerInput.parentElement.querySelector('.info');
+  if (stingerInfo) {
+    stingerInfo.setAttribute('data-tip', obsSceneSyncActive
+      ? 'Turned off while OBS scene-sync is on, because OBS is playing the transition instead. Two wipes would otherwise stack on every push.'
+      : 'Plays the Widener curtain wipe on the live overlay whenever you push, hiding the switch.');
+  }
+
+  if (!st || !connected) {
+    obsStatusEl.textContent = (st && st.error) ? `Not connected. ${st.error}` : 'Not connected';
+    obsStatusEl.classList.toggle('error', !!(st && st.error));
+    return;
+  }
+  obsStatusEl.classList.remove('error');
+  const scene = st.currentScene ? ` · program scene: ${st.currentScene}` : '';
+  obsStatusEl.textContent = `Connected${st.sceneSync ? ' · scene-sync ON' : ' · scene-sync off'}${scene}`;
+}
+
+function fillTransitions(list, selected) {
+  const want = selected || obsTransitionSelect.value || obsTransitionSelect.dataset.saved || '';
+  obsTransitionSelect.innerHTML = '<option value="">OBS default</option>' +
+    (list || []).map((t) => `<option value="${t}">${t}</option>`).join('');
+  if (want && (list || []).includes(want)) obsTransitionSelect.value = want;
+}
+
+async function obsInspect() {
+  try {
+    const st = await fetch('/api/obs/inspect').then((r) => r.json());
+    renderObsStatus(st);
+    if (st.connected && st.transitions) fillTransitions(st.transitions);
+    return st;
+  } catch (e) {
+    renderObsStatus({ connected: false, error: 'server unreachable' });
+    return null;
+  }
+}
+
+obsConnectBtn.addEventListener('click', async () => {
+  saveObsSettings();
+  obsStatusEl.classList.remove('error');
+  obsStatusEl.textContent = 'Connecting…';
+  obsConnectBtn.disabled = true;
+  try {
+    const st = await fetch('/api/obs/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host: obsHostInput.value.trim(),
+        port: parseInt(obsPortInput.value, 10) || 4455,
+        password: obsPassInput.value,
+        sceneSync: obsSyncEnable.checked,
+        transitionName: obsTransitionSelect.value || obsTransitionSelect.dataset.saved || '',
+      }),
+    }).then((r) => r.json());
+    renderObsStatus(st);
+    await obsInspect();
+  } catch (e) {
+    renderObsStatus({ connected: false, error: 'connection failed' });
+  } finally {
+    obsConnectBtn.disabled = false;
+  }
+});
+
+obsDisconnectBtn.addEventListener('click', async () => {
+  try {
+    const st = await fetch('/api/obs/disconnect', { method: 'POST' }).then((r) => r.json());
+    renderObsStatus(st);
+  } catch (e) {}
+});
+
+async function pushObsSettings() {
+  saveObsSettings();
+  try {
+    const st = await fetch('/api/obs/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneSync: obsSyncEnable.checked, transitionName: obsTransitionSelect.value || '' }),
+    }).then((r) => r.json());
+    renderObsStatus(st);
+  } catch (e) {}
+}
+obsSyncEnable.addEventListener('change', pushObsSettings);
+obsTransitionSelect.addEventListener('change', pushObsSettings);
+
+obsBuildBtn.addEventListener('click', async () => {
+  obsBuildStatus.classList.remove('error');
+  obsBuildStatus.textContent = 'Building scenes in OBS…';
+  obsBuildBtn.disabled = true;
+  try {
+    const res = await fetch('/api/obs/build-scenes', { method: 'POST' }).then((r) => r.json());
+    if (res.error) throw new Error(res.error);
+    obsBuildStatus.textContent = `Ready: ${(res.built || []).join(', ')}`;
+    await obsInspect();
+  } catch (e) {
+    obsBuildStatus.textContent = e.message || 'Failed to build scenes';
+    obsBuildStatus.classList.add('error');
+  } finally {
+    obsBuildBtn.disabled = false;
+  }
+});
+
+loadObsSettings();
+obsInspect(); // reflect any connection that survived a panel reload
