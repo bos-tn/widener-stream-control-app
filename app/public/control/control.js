@@ -56,6 +56,14 @@ const rosterEditEls = {
   },
 };
 
+const smashPanel = document.getElementById('smashPanel');
+const sbRoundInput = document.getElementById('sbRoundInput');
+const sbBestOfInput = document.getElementById('sbBestOfInput');
+const sbCrewInput = document.getElementById('sbCrewInput');
+const sbStocksInput = document.getElementById('sbStocksInput');
+const sbShowStocksInput = document.getElementById('sbShowStocksInput');
+const sbInstantInput = document.getElementById('sbInstantInput');
+
 const pushBtn = document.getElementById('pushBtn');
 const revertBtn = document.getElementById('revertBtn');
 const stingerInput = document.getElementById('stingerInput');
@@ -145,6 +153,15 @@ function toggleLayoutVisibility() {
   layoutField.style.display = currentMode === 'post-match' ? '' : 'none';
   // The stripe-backdrop toggle only means anything while a NECC overlay is up.
   neccBgField.style.display = currentMode === 'necc' ? '' : 'none';
+  // The scoreboard controls show for the Smash overlay, and also whenever the
+  // game is Smash, so stocks can be kept even while a different overlay is up.
+  const isSmash = currentMode === 'smash';
+  smashPanel.style.display = (isSmash || gameSelect.value === 'smash') ? '' : 'none';
+  // The scoreboard has no headline, subtitle, pill or countdown, so hide the
+  // fields that would do nothing while it's selected.
+  ['titleField', 'subtitleField', 'statusField', 'countdownPanel'].forEach((id) => {
+    document.getElementById(id).style.display = isSmash ? 'none' : '';
+  });
 }
 
 // What actually goes in the state payload: drop rows the operator left blank
@@ -262,6 +279,11 @@ function gatherForm() {
     // Only the overlay being edited is sent; the server merges it over the
     // other views so their text survives.
     views: { [currentMode]: currentViewText() },
+    // Scoreboard settings only. The live counters (stocks, sets, swap) are
+    // deliberately NOT here: they change through sendScore() alone, so a
+    // second open panel (e.g. the app window plus an OBS dock) can never
+    // overwrite the real score with its own stale copy.
+    smash: smashConfig(),
   };
   if (modeAt.checked && atInput.value) {
     data.countdownMode = 'at';
@@ -329,6 +351,14 @@ function populateForm(state) {
   else if (!isAt) durationInput.value = state.durationSec || '';
   const match = games.find((g) => g.name === state.game || g.id === state.game);
   gameSelect.value = match ? match.id : '';
+  smash = { ...defaultSmash(), ...(state.smash || {}) };
+  sbRoundInput.value = smash.round || '';
+  sbBestOfInput.value = String(smash.bestOf || 3);
+  sbCrewInput.value = smash.crewSize || 4;
+  sbStocksInput.value = smash.stocksEach || 3;
+  sbShowStocksInput.checked = smash.showStocks !== false;
+  toggleLayoutVisibility();
+  renderScorePanel();
   applyingRemote = false;
 }
 
@@ -339,6 +369,8 @@ function setConnStatus(connected) {
 
 let draftDebounce = null;
 function pushDraft() {
+  // Roster names/crew size feed the scoreboard panel's "on stage" readout.
+  renderScorePanel();
   if (applyingRemote) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   clearTimeout(draftDebounce);
@@ -393,6 +425,10 @@ function connect() {
         receivedInitialDraft = true;
         repopulateOnNextDraft = false;
         populateForm(msg.data);
+      } else if (msg.type === 'state' && msg.channel === 'draft') {
+        // Scoreboard counters are server-authoritative: always follow them,
+        // so every open panel shows the same stocks.
+        syncCounters(msg.data.smash);
       }
       if (msg.type === 'dirty') setDirty(msg.dirty);
     } catch (e) {}
@@ -428,6 +464,7 @@ revertBtn.addEventListener('click', () => {
 gameSelect.addEventListener('change', () => {
   const g = games.find((x) => x.id === gameSelect.value);
   if (g) teamInput.value = g.name;
+  toggleLayoutVisibility();
   pushDraft();
 });
 
@@ -513,6 +550,131 @@ overlaySelect.addEventListener('change', () => {
   currentNeccUrl = url;
   toggleLayoutVisibility();
   sendDraftNow();
+});
+
+// --- Smash scoreboard ------------------------------------------------------
+//
+// Stocks are tracked as a count lost per team; the overlay derives who is on
+// stage from it (crew order = Rosters order). Counter changes go straight to
+// live by default (see applyScore in server.js) - a stock is lost in real time
+// and waiting on Push Live plus a curtain wipe for each one would be unusable.
+
+const SB_COUNTERS = ['scoreA', 'scoreB', 'lostA', 'lostB', 'swap'];
+function defaultSmash() {
+  return { round: 'Crew Battle', bestOf: 3, scoreA: 0, scoreB: 0, crewSize: 4, stocksEach: 3, lostA: 0, lostB: 0, showStocks: true, swap: false };
+}
+let smash = defaultSmash();
+
+function clampInt(v, lo, hi, dflt) {
+  const n = parseInt(v, 10);
+  return isNaN(n) ? dflt : Math.max(lo, Math.min(hi, n));
+}
+function smashConfig() {
+  return {
+    round: sbRoundInput.value,
+    bestOf: clampInt(sbBestOfInput.value, 1, 9, 3),
+    crewSize: clampInt(sbCrewInput.value, 1, 8, 4),
+    stocksEach: clampInt(sbStocksInput.value, 1, 5, 3),
+    showStocks: sbShowStocksInput.checked,
+  };
+}
+function smashCounters() {
+  const out = {};
+  SB_COUNTERS.forEach((k) => { out[k] = smash[k]; });
+  return out;
+}
+function syncCounters(remote) {
+  if (!remote) return;
+  let changed = false;
+  SB_COUNTERS.forEach((k) => {
+    if (remote[k] !== undefined && remote[k] !== smash[k]) { smash[k] = remote[k]; changed = true; }
+  });
+  if (changed) renderScorePanel();
+}
+
+function renderScorePanel() {
+  const { crewSize, stocksEach } = smashConfig();
+  const total = crewSize * stocksEach;
+  ['A', 'B'].forEach((t) => {
+    const team = rosterPayload(rosterFor(t));
+    const lost = Math.min(smash['lost' + t] || 0, total);
+    const left = total - lost;
+    document.getElementById('sbName' + t).textContent = team.name || `Team ${t}`;
+    document.getElementById('sbStock' + t).innerHTML = `<b>${left}</b> / ${total} stocks`;
+    document.getElementById('sbScore' + t).textContent = String(smash['score' + t] || 0);
+    const on = document.getElementById('sbOn' + t);
+    if (left <= 0) {
+      on.textContent = 'Out of stocks';
+    } else {
+      const idx = Math.floor(lost / stocksEach);
+      const p = team.players[idx] || {};
+      const name = p.gamertag || p.name || `Player ${idx + 1}`;
+      const theirs = stocksEach - (lost % stocksEach);
+      on.innerHTML = 'On stage: <b></b>';
+      on.querySelector('b').textContent = `${name} (${theirs} left)`;
+    }
+    smashPanel.querySelector(`[data-sb="lose"][data-team="${t}"]`).disabled = left <= 0;
+    smashPanel.querySelector(`[data-sb="undo"][data-team="${t}"]`).disabled = lost <= 0;
+  });
+}
+
+// Instant: straight to live and preview. Otherwise it is an ordinary draft
+// edit that waits for Push Live like everything else.
+function sendScore() {
+  renderScorePanel();
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (sbInstantInput.checked) {
+    ws.send(JSON.stringify({ type: 'score', smash: smashCounters() }));
+  } else {
+    ws.send(JSON.stringify({ type: 'update', channel: 'draft', data: { smash: smashCounters() } }));
+  }
+}
+
+const SB_INSTANT_KEY = 'widener-smash-instant';
+try { sbInstantInput.checked = localStorage.getItem(SB_INSTANT_KEY) !== 'off'; } catch (e) {}
+sbInstantInput.addEventListener('change', () => {
+  try { localStorage.setItem(SB_INSTANT_KEY, sbInstantInput.checked ? 'on' : 'off'); } catch (e) {}
+});
+
+let resetArmedUntil = 0;
+smashPanel.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-sb]');
+  if (!btn) return;
+  const t = btn.dataset.team;
+  const { crewSize, stocksEach } = smashConfig();
+  const total = crewSize * stocksEach;
+  switch (btn.dataset.sb) {
+    case 'lose': smash['lost' + t] = Math.min(total, (smash['lost' + t] || 0) + 1); break;
+    case 'undo': smash['lost' + t] = Math.max(0, Math.min(total, smash['lost' + t] || 0) - 1); break;
+    case 'score+': smash['score' + t] = Math.min(9, (smash['score' + t] || 0) + 1); break;
+    case 'score-': smash['score' + t] = Math.max(0, (smash['score' + t] || 0) - 1); break;
+    // Set over: point to the winner, both crews refill for the next set.
+    case 'win':
+      smash['score' + t] = Math.min(9, (smash['score' + t] || 0) + 1);
+      smash.lostA = 0; smash.lostB = 0;
+      break;
+    case 'refill': smash.lostA = 0; smash.lostB = 0; break;
+    case 'swap': smash.swap = !smash.swap; break;
+    // Wiping the whole match is the one destructive action here, so it takes
+    // a second click (confirm() dialogs are unreliable inside an OBS dock).
+    case 'reset':
+      if (Date.now() > resetArmedUntil) {
+        resetArmedUntil = Date.now() + 3000;
+        btn.textContent = 'Click again to reset';
+        setTimeout(() => { btn.textContent = 'Reset match'; }, 3000);
+        return;
+      }
+      resetArmedUntil = 0;
+      btn.textContent = 'Reset match';
+      Object.assign(smash, { scoreA: 0, scoreB: 0, lostA: 0, lostB: 0, swap: false });
+      break;
+    default: return;
+  }
+  if (t) {
+    const side = document.getElementById('sbSide' + t);
+    side.classList.remove('flash'); void side.offsetWidth; side.classList.add('flash');
+  }
+  sendScore();
 });
 
 // --- NECC / LeagueOS import ---------------------------------------------

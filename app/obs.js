@@ -23,6 +23,9 @@ const SCENES = [
   { view: 'post-match',    scene: 'WU: Post-Match',    input: 'WU-src-post-match' },
   { view: 'roster',        scene: 'WU: Rosters',       input: 'WU-src-roster' },
   { view: 'brb',           scene: 'WU: Be Right Back', input: 'WU-src-brb' },
+  // Transparent scoreboard: the game capture goes in this scene *under* the
+  // browser source, so it's the one scene the operator adds their own source to.
+  { view: 'smash',         scene: 'WU: Smash Scoreboard', input: 'WU-src-smash' },
   // One NECC scene covers every NECC overlay type: the locked page reads the
   // pushed neccUrl, so picking bracket vs match-preview is a live content
   // update inside this same scene, not a new scene.

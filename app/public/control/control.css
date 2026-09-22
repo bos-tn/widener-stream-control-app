@@ -315,3 +315,38 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 }
 .ret-remove:hover{ border-color:var(--bad); color:#ff8a8e; }
 .ret-add{ align-self:flex-start; padding:8px 14px; }
+
+/* Smash scoreboard controls (v0.8.0). Built for fast live use: the stock
+   buttons are the biggest targets in the panel, one column per team. */
+.sb-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+@media (max-width: 520px){ .sb-grid{ grid-template-columns:1fr; } }
+.sb-side{
+  background:#0d1420; border:1px solid var(--panel-border); border-top:3px solid var(--widener-blue);
+  border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; min-width:0;
+}
+#sbSideB{ border-top-color:var(--widener-gold); }
+.sb-side-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.sb-side-name{ font-weight:800; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sb-side-stock{ font-size:13px; color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.sb-side-stock b{ color:var(--text); font-size:18px; }
+.sb-side-onstage{ font-size:12.5px; color:var(--muted); min-height:16px; }
+.sb-side-onstage b{ color:var(--widener-gold); }
+.sb-btns{ display:flex; gap:8px; }
+.sb-btns .btn-secondary{ padding:0 12px; }
+.sb-big{
+  flex:1 1 auto; padding:14px 10px; border-radius:9px; cursor:pointer;
+  background:#3a1518; border:1px solid #6b262b; color:#ffb3b6;
+  font-size:15px; font-weight:700; font-family:inherit;
+}
+.sb-big:hover:not(:disabled){ background:#4d1a1e; border-color:var(--bad); color:#fff; }
+.sb-big:active:not(:disabled){ transform:translateY(1px); }
+.sb-big:disabled{ opacity:.4; cursor:not-allowed; }
+.sb-score-row{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); flex-wrap:wrap; }
+.sb-score-row .lbl{ margin-right:auto; }
+.sb-step{ width:32px; height:32px; padding:0 !important; font-size:18px; }
+.sb-score-val{ min-width:26px; text-align:center; font-size:20px; color:var(--text); font-variant-numeric:tabular-nums; }
+.sb-win{ height:32px; }
+.sb-actions{ margin-bottom:12px; flex-wrap:wrap; }
+.sb-actions .btn-secondary{ padding:9px 14px; }
+.sb-side.flash{ animation:sbFlash .5s ease-out; }
+@keyframes sbFlash{ from{ box-shadow:0 0 0 2px var(--widener-gold); } to{ box-shadow:none; } }

@@ -260,6 +260,122 @@
   }
   .brb-pill svg{ width:18px; height:18px; fill:var(--widener-gold); flex-shrink:0; }
 
+  /* Smash Ultimate scoreboard (v0.8.0). Unlike every other view this is an
+     in-game overlay: the page goes fully transparent so the game capture
+     underneath it in OBS shows through, and only the scoreboard is drawn.
+     It sits top-center because Ultimate's own HUD (damage percents) lives
+     along the bottom, and the corners are left clear for the in-game timer.
+     Authored on a fixed 1920x1080 stage, scaled to fit like the BRB view. */
+  body[data-mode="smash"]{ background:transparent; }
+  body[data-mode="smash"] .stripes,
+  body[data-mode="smash"] .bg-gradient{ display:none; }
+  .sb-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
+  .sb-view.active{ display:block; }
+  .sb-stage{ position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; }
+  /* The preview pane has no game underneath it, so an empty transparent page
+     would read as "broken". This stand-in only renders with ?preview=1; OBS
+     never sees it. */
+  .sb-preview-bg{ display:none; position:absolute; inset:0;
+    background:
+      radial-gradient(900px 500px at 50% 60%, rgba(0,84,184,.22), transparent 70%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 14px, transparent 14px 28px),
+      #0b0f18;
+  }
+  body[data-preview="1"] .sb-preview-bg{ display:grid; place-items:center; }
+  .sb-preview-bg span{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:34px;
+    letter-spacing:.14em; text-transform:uppercase; color:rgba(234,242,255,.18); }
+
+  .sb{
+    --a:#0054B8; --b:#F0B310; --a-ink:#fff; --b-ink:#111;
+    position:absolute; top:22px; left:50%; transform:translateX(-50%);
+    display:grid; grid-template-columns:470px 96px 190px 96px 470px; grid-template-rows:76px auto;
+    font-family:'Inter', system-ui, sans-serif; color:var(--text);
+    filter:drop-shadow(0 10px 22px rgba(0,0,0,.55));
+    animation: sb-drop .7s cubic-bezier(.22,1,.36,1) both;
+  }
+  @keyframes sb-drop{ from{ opacity:0; transform:translate(-50%,-40px) } to{ opacity:1; transform:translate(-50%,0) } }
+
+  .sb-team{
+    position:relative; display:flex; align-items:center; gap:14px; min-width:0;
+    background:linear-gradient(180deg, rgba(14,26,52,.94), rgba(7,16,34,.94));
+    padding:0 22px 0 40px;
+    clip-path:polygon(26px 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .sb-team.right{ flex-direction:row-reverse; padding:0 40px 0 22px; clip-path:polygon(0 0, calc(100% - 26px) 0, 100% 100%, 0 100%); }
+  /* Team-colour accent along the slanted outer edge. */
+  .sb-team::before{
+    content:""; position:absolute; top:0; bottom:0; left:0; width:40px;
+    background:var(--c); clip-path:polygon(26px 0, 40px 0, 14px 100%, 0 100%);
+  }
+  .sb-team.right::before{ left:auto; right:0; clip-path:polygon(0 0, 14px 0, 40px 100%, 26px 100%); }
+  /* side-a / side-b = which team (A or B) a block is showing. Swapping sides
+     only moves these classes between the left and right slots. */
+  .sb .side-a{ --c:var(--a); }
+  .sb .side-b{ --c:var(--b); }
+  .sb-logo{ width:50px; height:50px; border-radius:10px; object-fit:cover; flex-shrink:0; background:rgba(255,255,255,.06); }
+  .sb-logo[hidden]{ display:none; }
+  .sb-names{ display:flex; flex-direction:column; min-width:0; line-height:1; }
+  .sb-team.right .sb-names{ align-items:flex-end; text-align:right; }
+  .sb-tag{ font-weight:700; font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--widener-gold); margin-bottom:6px; }
+  .sb-tag:empty{ display:none; }
+  .sb-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:32px; text-transform:uppercase;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; letter-spacing:.02em; }
+  .sb-team.out .sb-name{ opacity:.45; }
+
+  .sb-score{
+    display:grid; place-items:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:58px;
+    font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .sb-score.side-a{ background:var(--a); color:var(--a-ink); }
+  .sb-score.side-b{ background:var(--b); color:var(--b-ink); }
+  .sb-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
+  @keyframes sb-bump{ 0%{ filter:brightness(2.2) } 40%{ transform:scale(1.18) } 100%{ filter:none; transform:none } }
+
+  .sb-mid{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+    background:linear-gradient(180deg, #0a1b36, #050a18); border-bottom:4px solid var(--widener-gold);
+  }
+  .sb-set{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
+  .sb-bo{ font-weight:700; font-size:12px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
+
+  /* Round label hanging under the centre block. */
+  .sb-round{
+    grid-column:3; grid-row:2; justify-self:center; align-self:start;
+    white-space:nowrap; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis;
+    padding:7px 20px 8px; font-weight:800; font-size:13px; letter-spacing:.16em; text-transform:uppercase;
+    background:linear-gradient(90deg, var(--widener-blue), #0069e6); color:#fff;
+    clip-path:polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%);
+  }
+  .sb-round:empty{ display:none; }
+
+  /* Crew strip: one chip per player with their stock pips. Order is the crew
+     order; whoever is first with stocks left is on stage. */
+  .sb-crew{ grid-row:2; display:flex; gap:6px; padding-top:8px; align-items:stretch; }
+  .sb-crew.side-left{ grid-column:1 / 3; padding-left:30px; padding-right:8px; }
+  .sb-crew.side-right{ grid-column:4 / 6; padding-right:30px; padding-left:8px; flex-direction:row-reverse; }
+  .sb-stocks-hidden .sb-crew{ display:none; }
+  .sb-left-count{
+    flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-width:70px; padding:4px 8px; background:rgba(7,16,34,.9); border-radius:8px;
+    border-bottom:3px solid var(--c);
+  }
+  .sb-left-count b{ font-family:'Kanit', system-ui, sans-serif; font-size:30px; line-height:1; font-variant-numeric:tabular-nums; }
+  .sb-left-count small{ font-size:9px; font-weight:700; letter-spacing:.2em; color:var(--muted); margin-top:2px; }
+  .sb-chip{
+    flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:6px 8px 7px; background:rgba(7,16,34,.86); border-radius:8px;
+    border-top:3px solid transparent; transition:opacity .3s, border-color .3s;
+  }
+  .sb-chip.active{ border-top-color:var(--widener-gold); background:rgba(14,30,62,.95); box-shadow:0 0 18px rgba(240,179,16,.25); }
+  .sb-chip.gone{ opacity:.38; }
+  .sb-chip.gone .sb-pname{ text-decoration:line-through; }
+  .sb-pname{ font-weight:700; font-size:17px; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sb-pips{ display:flex; gap:5px; }
+  .sb-pip{ width:15px; height:15px; border-radius:50%; background:var(--c); box-shadow:0 0 6px var(--c); }
+  .sb-pip.lost{ background:transparent; box-shadow:inset 0 0 0 2px rgba(234,242,255,.3); }
+  .sb-pip.pop{ animation: sb-pop .7s ease-out; }
+  @keyframes sb-pop{ 0%{ transform:scale(1.9); background:#fff; box-shadow:0 0 16px #fff } 100%{ transform:scale(1) } }
+
   /* NECC/LeagueOS mode: a full-bleed passthrough to their own overlay page
      (bracket, match preview, etc). Nothing of ours draws on top of it - it's
      already a finished graphic, not something we're adding decoration to.
@@ -339,6 +455,28 @@
           <div class="brb-sub" id="brb-sub">Thanks for waiting</div>
         </div>
         <div class="brb-socials" id="brb-socials"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-view" id="sb-view" aria-label="Smash scoreboard">
+    <div class="sb-stage" id="sb-stage">
+      <div class="sb-preview-bg"><span>Game capture shows here</span></div>
+      <div class="sb" id="sb">
+        <div class="sb-team" id="sbL-team">
+          <img class="sb-logo" id="sbL-logo" alt="" hidden>
+          <div class="sb-names"><span class="sb-tag" id="sbL-tag"></span><span class="sb-name" id="sbL-name"></span></div>
+        </div>
+        <div class="sb-score" id="sbL-score">0</div>
+        <div class="sb-mid"><span class="sb-set" id="sb-set">Set 1</span><span class="sb-bo" id="sb-bo">Best of 3</span></div>
+        <div class="sb-score" id="sbR-score">0</div>
+        <div class="sb-team right" id="sbR-team">
+          <img class="sb-logo" id="sbR-logo" alt="" hidden>
+          <div class="sb-names"><span class="sb-tag" id="sbR-tag"></span><span class="sb-name" id="sbR-name"></span></div>
+        </div>
+        <div class="sb-crew side-left" id="sbL-crew"></div>
+        <div class="sb-round" id="sb-round"></div>
+        <div class="sb-crew side-right" id="sbR-crew"></div>
       </div>
     </div>
   </div>
@@ -426,6 +564,7 @@
   const brbView = $('#brb-view');
   const brbStage = $('#brb-stage');
   const brbSocials = $('#brb-socials');
+  const sbView = $('#sb-view');
   const rosterEls = {
     a: { logo: $('#roster-logo-a'), name: $('#roster-name-a'), tag: $('#roster-tag-a'), players: $('#roster-players-a') },
     b: { logo: $('#roster-logo-b'), name: $('#roster-name-b'), tag: $('#roster-tag-b'), players: $('#roster-players-b') },
@@ -523,11 +662,14 @@
   // depend on an external host being reachable mid-broadcast.
   const BRB_LION = '/overlay-assets/widener-lion.png';
   $('#brb-lion').src = BRB_LION;
+  const sbStage = $('#sb-stage');
   function fitBrbStage(){
     const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
     const x = (window.innerWidth - 1920 * s) / 2;
     const y = (window.innerHeight - 1080 * s) / 2;
     brbStage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    // The Smash scoreboard uses the same fixed 1920x1080 stage.
+    sbStage.style.transform = brbStage.style.transform;
   }
   window.addEventListener('resize', fitBrbStage);
   fitBrbStage();
@@ -574,6 +716,113 @@
       pill.querySelector('span').textContent = '/' + v;
       brbSocials.appendChild(pill);
     });
+  }
+
+  // --- Smash scoreboard -----------------------------------------------------
+  // Team colours come from NECC (or are blank for hand-typed teams). Only a
+  // plain hex colour is trusted into CSS; anything else falls back to Widener
+  // blue for team A and gold for team B.
+  function safeColor(c, fallback){
+    c = String(c || '').trim();
+    if(/^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c)) c = '#' + c;
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c) ? c : fallback;
+  }
+  // Dark or light digits on the score box, whichever reads on that colour.
+  function inkFor(hex){
+    let h = hex.slice(1);
+    if(h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.55 ? '#111' : '#fff';
+  }
+  function clampInt(v, lo, hi, dflt){
+    const n = parseInt(v, 10);
+    return isNaN(n) ? dflt : Math.max(lo, Math.min(hi, n));
+  }
+
+  // Last rendered stocks-lost per team, so the pip that just went out can be
+  // animated (and only that one) instead of the whole strip re-flashing.
+  const sbPrev = { lostA: null, lostB: null, scoreA: null, scoreB: null };
+
+  function renderCrew(el, team, lost, crewSize, stocksEach, sideClass, prevLost){
+    const players = (team && team.players) || [];
+    el.innerHTML = '';
+    el.className = 'sb-crew ' + (el.id === 'sbL-crew' ? 'side-left ' : 'side-right ') + sideClass;
+    const total = crewSize * stocksEach;
+    const count = document.createElement('div');
+    count.className = 'sb-left-count';
+    count.innerHTML = '<b></b><small>STOCKS</small>';
+    count.querySelector('b').textContent = String(Math.max(0, total - lost));
+    el.appendChild(count);
+    const active = Math.floor(lost / stocksEach);
+    for(let i = 0; i < crewSize; i++){
+      const p = players[i] || {};
+      const chip = document.createElement('div');
+      chip.className = 'sb-chip' + (i < active ? ' gone' : i === active ? ' active' : '');
+      const name = document.createElement('span');
+      name.className = 'sb-pname';
+      name.textContent = p.gamertag || p.name || ('Player ' + (i + 1));
+      const pips = document.createElement('div');
+      pips.className = 'sb-pips';
+      for(let s = 0; s < stocksEach; s++){
+        const idx = i * stocksEach + s; // stocks are lost in crew order
+        const pip = document.createElement('i');
+        pip.className = 'sb-pip' + (idx < lost ? ' lost' : '');
+        if(prevLost !== null && idx < lost && idx >= prevLost) pip.classList.add('pop');
+        pips.appendChild(pip);
+      }
+      chip.append(name, pips);
+      el.appendChild(chip);
+    }
+  }
+
+  function renderSmash(state){
+    const sm = state.smash || {};
+    const bestOf = clampInt(sm.bestOf, 1, 9, 3);
+    const crewSize = clampInt(sm.crewSize, 1, 8, 4);
+    const stocksEach = clampInt(sm.stocksEach, 1, 5, 3);
+    const total = crewSize * stocksEach;
+    const t = {
+      A: { team: state.teamA || {}, score: clampInt(sm.scoreA, 0, 99, 0), lost: clampInt(sm.lostA, 0, total, 0) },
+      B: { team: state.teamB || {}, score: clampInt(sm.scoreB, 0, 99, 0), lost: clampInt(sm.lostB, 0, total, 0) },
+    };
+    const colA = safeColor(t.A.team.color, '#0054B8');
+    const colB = safeColor(t.B.team.color, '#F0B310');
+    const sb = $('#sb');
+    sb.style.setProperty('--a', colA); sb.style.setProperty('--a-ink', inkFor(colA));
+    sb.style.setProperty('--b', colB); sb.style.setProperty('--b-ink', inkFor(colB));
+    sb.classList.toggle('sb-stocks-hidden', sm.showStocks === false);
+
+    // Swap puts team B on the left, for when players switch ports/sides.
+    const slots = sm.swap ? [['L', 'B'], ['R', 'A']] : [['L', 'A'], ['R', 'B']];
+    slots.forEach(([slot, key]) => {
+      const side = 'side-' + key.toLowerCase();
+      const d = t[key];
+      const teamEl = $('#sb' + slot + '-team');
+      teamEl.className = 'sb-team' + (slot === 'R' ? ' right ' : ' ') + side + (d.lost >= total ? ' out' : '');
+      const logo = $('#sb' + slot + '-logo');
+      if(d.team.logoUrl){ logo.src = mediaUrl(d.team.logoUrl); logo.hidden = false; }
+      else { logo.removeAttribute('src'); logo.hidden = true; }
+      $('#sb' + slot + '-tag').textContent = d.team.tag || '';
+      $('#sb' + slot + '-name').textContent = d.team.name || ('Team ' + key);
+      const scoreEl = $('#sb' + slot + '-score');
+      scoreEl.className = 'sb-score ' + side;
+      if(scoreEl.textContent !== String(d.score)){
+        scoreEl.textContent = String(d.score);
+        if(sbPrev['score' + key] !== null){
+          scoreEl.classList.remove('bump'); void scoreEl.offsetWidth; scoreEl.classList.add('bump');
+        }
+      }
+      renderCrew($('#sb' + slot + '-crew'), d.team, d.lost, crewSize, stocksEach, side, sbPrev['lost' + key]);
+    });
+    sbPrev.lostA = t.A.lost; sbPrev.lostB = t.B.lost;
+    sbPrev.scoreA = t.A.score; sbPrev.scoreB = t.B.score;
+
+    // Set N of best-of-N. Once a team has a majority the series is over.
+    const need = Math.ceil(bestOf / 2);
+    const decided = t.A.score >= need || t.B.score >= need;
+    $('#sb-set').textContent = decided ? 'Final' : 'Set ' + Math.min(t.A.score + t.B.score + 1, bestOf);
+    $('#sb-bo').textContent = 'Best of ' + bestOf;
+    $('#sb-round').textContent = sm.round || '';
   }
 
   function applyLayout(layout){
@@ -658,9 +907,17 @@
       const isNecc = effectiveMode === 'necc';
       const isRoster = effectiveMode === 'roster';
       const isBrb = effectiveMode === 'brb';
-      widenerFrame.style.display = (isNecc || isBrb) ? 'none' : '';
+      const isSmash = effectiveMode === 'smash';
+      widenerFrame.style.display = (isNecc || isBrb || isSmash) ? 'none' : '';
       neccFrame.classList.toggle('active', isNecc);
       brbView.classList.toggle('active', isBrb);
+      if(isSmash && !sbView.classList.contains('active')){
+        // Restart the drop-in so entering the view always animates.
+        const sb = $('#sb');
+        sb.style.animation = 'none'; void sb.offsetWidth; sb.style.animation = '';
+        fitBrbStage();
+      }
+      sbView.classList.toggle('active', isSmash);
       if(isBrb){
         // Re-fit on entry: the viewport may have changed while this view was
         // hidden, and restart the headline wipe so switching to BRB always
@@ -690,6 +947,9 @@
     }
     if(state.teamA) renderRosterTeam('a', state.teamA);
     if(state.teamB) renderRosterTeam('b', state.teamB);
+    // Always kept current (even while hidden) so switching to the scoreboard,
+    // or an OBS scene cut to it, never shows stale stocks.
+    renderSmash(state);
   }
 
   // Which channel this page mirrors: live (OBS) or draft (the control
@@ -706,7 +966,7 @@
   // pushed field (title, countdown, roster names, neccUrl, ...) live. With no
   // view param, behavior is exactly as before: a single source whose mode is
   // whatever was last pushed. Kept fully backward-compatible.
-  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb'];
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'smash'];
   const rawView = params.get('view');
   const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
   // Optional NECC type hint for a view=necc source (informational: the actual
@@ -909,6 +1169,9 @@
           // curtain wipe here too would double it up. Content still swaps
           // instantly within the view.
           if (msg.transition === 'stinger' && !lockedView) stingerTransition(msg.data);
+          // A scoreboard tick landing mid-stinger must not reveal the new
+          // view early: queue it as the newest pending state instead.
+          else if (stingerActive) stingerPending = msg.data;
           else applyState(msg.data);
         }
       } catch (e) {}

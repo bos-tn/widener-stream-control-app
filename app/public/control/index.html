@@ -51,6 +51,7 @@
                 <option value="widener:post-match">Post-Match</option>
                 <option value="widener:roster">Rosters</option>
                 <option value="widener:brb">Be Right Back</option>
+                <option value="widener:smash">Smash Scoreboard</option>
               </optgroup>
               <optgroup label="NECC" id="neccOptGroup"></optgroup>
             </select>
@@ -60,6 +61,93 @@
           <input type="checkbox" id="neccBgInput" checked>
           Widener stripe background behind the NECC overlay
           <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Transparent NECC overlays, like the bracket, show the Widener stripe background instead of plain black.">i</span>
+        </label>
+      </section>
+
+      <section class="panel" id="smashPanel" style="display:none">
+        <h2>Smash scoreboard
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="An in-game overlay with a transparent background. Put it above the game capture in OBS. Team names, logos and crew order come from the Rosters section.">i</span>
+        </h2>
+        <details class="help">
+          <summary>How does scoring work?</summary>
+          <div class="help-body">
+            <p>Built for NECC crew battles: each team shares a pool of stocks
+            (4 players with 3 stocks each makes 12). Players go in the order listed
+            under Rosters, and whoever is first with stocks left is shown as on stage.</p>
+            <ol>
+              <li>Click <b>Lost a stock</b> each time a player loses a life. Misclicked? Click <b>Undo</b>.</li>
+              <li>When a team runs out, click <b>Won set</b> on the winning team. It adds a point and refills both teams for the next set.</li>
+              <li>For plain 1v1 sets, turn off <b>Show stock counter</b> and just use the set score.</li>
+            </ol>
+          </div>
+        </details>
+        <div class="sb-grid">
+          <div class="sb-side" id="sbSideA">
+            <div class="sb-side-head"><span class="sb-side-name" id="sbNameA">Team A</span><span class="sb-side-stock" id="sbStockA"></span></div>
+            <div class="sb-side-onstage" id="sbOnA"></div>
+            <div class="sb-btns">
+              <button class="sb-big" type="button" data-sb="lose" data-team="A">Lost a stock</button>
+              <button class="btn-secondary" type="button" data-sb="undo" data-team="A">Undo</button>
+            </div>
+            <div class="sb-score-row">
+              <span class="lbl">Sets won</span>
+              <button class="btn-secondary sb-step" type="button" data-sb="score-" data-team="A" aria-label="Remove a set">&minus;</button>
+              <b class="sb-score-val" id="sbScoreA">0</b>
+              <button class="btn-secondary sb-step" type="button" data-sb="score+" data-team="A" aria-label="Add a set">+</button>
+              <button class="btn-secondary sb-win" type="button" data-sb="win" data-team="A">Won set</button>
+            </div>
+          </div>
+          <div class="sb-side" id="sbSideB">
+            <div class="sb-side-head"><span class="sb-side-name" id="sbNameB">Team B</span><span class="sb-side-stock" id="sbStockB"></span></div>
+            <div class="sb-side-onstage" id="sbOnB"></div>
+            <div class="sb-btns">
+              <button class="sb-big" type="button" data-sb="lose" data-team="B">Lost a stock</button>
+              <button class="btn-secondary" type="button" data-sb="undo" data-team="B">Undo</button>
+            </div>
+            <div class="sb-score-row">
+              <span class="lbl">Sets won</span>
+              <button class="btn-secondary sb-step" type="button" data-sb="score-" data-team="B" aria-label="Remove a set">&minus;</button>
+              <b class="sb-score-val" id="sbScoreB">0</b>
+              <button class="btn-secondary sb-step" type="button" data-sb="score+" data-team="B" aria-label="Add a set">+</button>
+              <button class="btn-secondary sb-win" type="button" data-sb="win" data-team="B">Won set</button>
+            </div>
+          </div>
+        </div>
+        <div class="push-row sb-actions">
+          <button class="btn-secondary" type="button" data-sb="refill">Refill stocks</button>
+          <button class="btn-secondary" type="button" data-sb="swap">Swap sides</button>
+          <button class="btn-secondary" type="button" data-sb="reset">Reset match</button>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="sbInstantInput" checked>
+          Scores go live instantly
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Stock and set changes reach the stream right away, with no Push Live and no curtain wipe. Turn off to preview score changes first, like any other edit.">i</span>
+        </label>
+        <div class="field-row" style="margin-top:14px">
+          <label class="grow">
+            <span class="lbl">Round label</span>
+            <input type="text" id="sbRoundInput" placeholder="Crew Battle">
+          </label>
+          <label style="flex:0 0 96px">
+            <span class="lbl">Best of</span>
+            <select id="sbBestOfInput"><option>1</option><option selected>3</option><option>5</option><option>7</option></select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="grow">
+            <span class="lbl">Players per team
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="NECC crews are 4. The first players listed under Rosters are the crew, in that order.">i</span>
+            </span>
+            <input type="number" id="sbCrewInput" min="1" max="8" step="1" value="4">
+          </label>
+          <label class="grow">
+            <span class="lbl">Stocks each</span>
+            <input type="number" id="sbStocksInput" min="1" max="5" step="1" value="3">
+          </label>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="sbShowStocksInput" checked>
+          Show stock counter
         </label>
       </section>
 
@@ -199,16 +287,16 @@
           <label for="teamInput"><span class="lbl">Game name</span></label>
           <input type="text" id="teamInput" placeholder="Call of Duty">
         </div>
-        <div class="field">
+        <div class="field" id="titleField">
           <label for="titleInput"><span class="lbl">Title</span></label>
           <input type="text" id="titleInput" placeholder="Stream Starting Soon">
         </div>
-        <div class="field">
+        <div class="field" id="subtitleField">
           <label for="subtitleInput"><span class="lbl">Subtitle</span></label>
           <input type="text" id="subtitleInput" placeholder="Optional subtitle">
         </div>
         <div class="field-row">
-          <label class="grow">
+          <label class="grow" id="statusField">
             <span class="lbl">Status pill</span>
             <input type="text" id="statusInput" placeholder="Starting Soon">
           </label>
@@ -219,7 +307,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="countdownPanel">
         <h2>Countdown</h2>
         <div class="field-row countdown-mode">
           <label class="radio">

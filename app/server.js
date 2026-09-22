@@ -30,6 +30,27 @@ function defaultViewText() {
     'roster': { title: '', subtitle: '', status: '' },
     'brb': { title: 'Be Right Back', subtitle: 'Thanks for waiting', status: '' },
     'necc': { title: '', subtitle: '', status: '' },
+    'smash': { title: '', subtitle: '', status: '' },
+  };
+}
+
+// Smash Ultimate scoreboard (v0.8.0). Defaults match the NECC crew battle
+// format: 4 players a side, 3 stocks each (12 per team), best of 3 sets.
+// Stocks are stored as a count *lost* per team, not per-player arrays, so the
+// crew order and who is on stage are derived: player index = lost / stocksEach.
+// That keeps it correct when the roster is edited mid-set.
+function defaultSmash() {
+  return {
+    round: 'Crew Battle',
+    bestOf: 3,
+    scoreA: 0,
+    scoreB: 0,
+    crewSize: 4,
+    stocksEach: 3,
+    lostA: 0,
+    lostB: 0,
+    showStocks: true,
+    swap: false,
   };
 }
 
@@ -83,6 +104,7 @@ const DEFAULT_STATE = {
   teamA: emptyTeam(),
   teamB: emptyTeam(),
   views: defaultViewText(),
+  smash: defaultSmash(),
 };
 
 function initialState() {
@@ -92,6 +114,7 @@ function initialState() {
     teamA: emptyTeam(),
     teamB: emptyTeam(),
     views: defaultViewText(),
+    smash: defaultSmash(),
     end: new Date(Date.now() + DEFAULT_STATE.durationSec * 1000).toISOString(),
   };
 }
@@ -107,6 +130,7 @@ function normalizeLoaded(raw) {
     // State files written before v0.7.2 have no `views` at all; merging over
     // fresh defaults gives them the per-view text without losing anything.
     views: normalizeViews(raw.views, raw),
+    smash: { ...defaultSmash(), ...raw.smash },
   };
 }
 
@@ -157,10 +181,25 @@ function createServer(port, opts = {}) {
       // Merged per view key: the panel only ever sends the view it just
       // edited, so the other views' text must survive the update.
       views: partial.views ? { ...target.views, ...partial.views } : target.views,
+      smash: partial.smash ? { ...target.smash, ...partial.smash } : target.smash,
     };
     if (channel === 'live') live = merged; else draft = merged;
     savePersisted();
     return merged;
+  }
+
+  // Scoreboard counters (stocks, set score) go straight to BOTH channels. This
+  // is the one deliberate exception to draft-then-push: a stock is lost in
+  // real time, and making the operator press Push Live (and sit through the
+  // curtain stinger) for every stock would make live scorekeeping unusable.
+  // Only the `smash` object is touched, so which overlay is on stream still
+  // changes only on Push Live. Writing both keeps draft == live for these
+  // fields, so it never shows up as an unpushed change.
+  function applyScore(smash) {
+    if (!smash || typeof smash !== 'object') return;
+    live = { ...live, smash: { ...live.smash, ...smash } };
+    draft = { ...draft, smash: { ...draft.smash, ...smash } };
+    savePersisted();
   }
 
   // Push Live: draft becomes live, verbatim, so preview and stream match
@@ -358,6 +397,16 @@ function createServer(port, opts = {}) {
         // the newly-live view and fires its own transition. Fire-and-forget -
         // it must never delay or fail the push that already went out.
         obs.onPush(newLive).catch(() => {});
+        return;
+      }
+
+      // Instant scoreboard update (see applyScore): live and preview both
+      // change immediately, with no transition.
+      if (msg.type === 'score') {
+        applyScore(msg.smash);
+        broadcast('live', live);
+        broadcast('draft', draft);
+        broadcastDirty();
         return;
       }
 
