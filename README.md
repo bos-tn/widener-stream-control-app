@@ -57,6 +57,11 @@ Electron app. No cloud, no accounts, no internet dependency on game day.
   an animated headline wipe, and your social handles. The headline and subtitle
   are ordinary editable fields, so "Be Right Back" can just as easily read
   "Back after this match".
+- **A Smash Ultimate scoreboard.** A transparent in-game overlay for NECC crew
+  battles: team names and logos, set score, best-of, and a live stock counter
+  for each crew (4 players with 3 stocks each by default) that shows who is on
+  stage and crosses out eliminated players. Big "Lost a stock" buttons in the
+  panel update the stream instantly, with no Push Live needed.
 - **Live-sized preview.** The preview renders at a true 1920×1080 and scales
   down, so proportions always match what viewers see.
 - **Optional OBS integration.** Run the control panel as a dock *inside* OBS, and
@@ -81,7 +86,7 @@ week, or a new season.
 ## Running the show
 
 1. **Pick a game** and an **overlay**: Starting Soon, Post-Match, Rosters, Be
-   Right Back, or a NECC graphic. Switching overlays previews first, like every
+   Right Back, Smash Scoreboard, or a NECC graphic. Switching overlays previews first, like every
    other edit, and auto-fills sensible titles and countdowns for the moment you
    picked.
 2. **Edit text, countdown, socials, logo, montage clip.** Everything autosaves
@@ -97,6 +102,25 @@ week, or a new season.
    curtain stinger if the checkbox is on, instantly if it's not.
 5. Changed your mind? **Revert** discards the draft and re-syncs the preview
    and form to what's live.
+
+### Smash scoreboard
+
+Pick **Smash Scoreboard** from the Overlay dropdown (the scoring controls also
+appear whenever the game is set to Super Smash Bros). The overlay's background
+is transparent, so in OBS put the browser source **above** your game capture.
+
+- Team names, tags, logos, and crew order come from the **Rosters** panel.
+  Players go in the order listed; whoever is first with stocks left is shown as
+  on stage.
+- Click **Lost a stock** each time a player loses a life, and **Undo** if you
+  misclick. When a crew runs out, click **Won set** on the winning team: it
+  adds a point and refills both crews for the next set.
+- **Swap sides** flips which team is on the left, for when players change ports.
+- Stock and set changes go live **instantly** by default, with no Push Live and
+  no curtain wipe, since stocks are lost in real time. Untick **Scores go live
+  instantly** if you'd rather preview them first. Switching *to* the scoreboard
+  is still an ordinary Push Live.
+- For plain 1v1 sets, untick **Show stock counter** and just use the set score.
 
 Anything in the panel marked with an **ⓘ** explains itself on hover or keyboard
 focus, and the longer setup walkthroughs sit behind collapsible help blocks, so

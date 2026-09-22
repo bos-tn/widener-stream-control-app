@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.7.2**. If you're starting a new chat, read this whole
+updated through **v0.8.0**. If you're starting a new chat, read this whole
 file before touching code.
 
 ## What this is
@@ -285,6 +285,55 @@ Offscreen iframes make it worse, since the stinger video cannot play there and
 the run only ends via the safety timeout. Turn the stinger checkbox off when
 scripting push/read assertions.
 
+## Smash Ultimate scoreboard (`mode: 'smash'`, v0.8.0)
+
+A sixth mode, and the first **in-game** overlay: the page goes transparent
+(`body[data-mode="smash"]` drops the gradient, stripes, and sheen) so the game
+capture under it in OBS shows through. Everything else in the app is a
+full-screen card; this one is meant to sit on top of gameplay.
+
+**Format researched, not guessed.** NECC Smash is crew battles: 4 players a
+side, 3 stocks each (a shared pool of 12), best of 3 sets. Players go in a
+chosen order; a player who runs out is replaced by the next, and the winner
+keeps their remaining stocks. Those are the `defaultSmash()` values, and all
+of them are editable (crew size, stocks each, best of, round label).
+
+- **State is `state.smash`**: `{ round, bestOf, scoreA, scoreB, crewSize,
+  stocksEach, lostA, lostB, showStocks, swap }`. Stocks are stored as a
+  **count lost per team**, not per-player arrays. Who is on stage is derived
+  (`floor(lost / stocksEach)`, crew order = Rosters order), so editing the
+  roster mid-set can't desync anything. Old state files get the defaults via
+  `normalizeLoaded`.
+- **The one deliberate exception to draft-then-push.** A new WS message,
+  `{type:'score', smash}`, merges into **both** live and draft and broadcasts
+  both with no transition (`applyScore` in server.js). Counting stocks through
+  Push Live plus a 3s curtain wipe per stock would be unusable. It only
+  touches `smash`, so *which overlay is on stream* still changes only on Push
+  Live, and writing both channels keeps it out of the dirty check. The panel
+  checkbox "Scores go live instantly" (localStorage `widener-smash-instant`,
+  default on) sends the same counters as an ordinary draft update instead.
+- **Counters are server-authoritative.** `gatherForm()` sends only the
+  scoreboard *settings* (`smashConfig()`), never the counters, and every draft
+  broadcast re-syncs the counters into the panel (`syncCounters`). This
+  matters because the app window and an OBS dock are often open at the same
+  time: if `gatherForm` carried counters, a text edit in the stale panel would
+  roll the score back.
+- **Mid-stinger ticks are queued.** A `score` broadcast arriving while the
+  curtain stinger is playing becomes the new `stingerPending` instead of being
+  applied, otherwise it would reveal the new view before the curtain covered it.
+- Layout: fixed 1920x1080 stage (same fit as BRB, `fitBrbStage` now fits both),
+  scoreboard top-center because Ultimate's HUD (damage %) is along the bottom
+  and the timer is top-right. Team colours come from NECC `color` when it's a
+  plain hex (`safeColor`), else Widener blue / gold, and the score digits pick
+  dark or light ink by luminance.
+- `?preview=1` shows a striped "Game capture shows here" stand-in behind the
+  scoreboard so the preview pane doesn't look empty. OBS never gets it.
+- OBS scene-sync builds a sixth scene, `WU: Smash Scoreboard` (`WU-src-smash`).
+  The operator adds their game capture under the browser source in that scene.
+- The panel hides Title/Subtitle/Status/Countdown while on this mode (they do
+  nothing there). "Reset match" needs a second click within 3s rather than
+  `confirm()`, which is unreliable inside an OBS dock.
+
 ## Be Right Back view (v0.7.1)
 
 A fifth `state.mode`, `brb`. It came in as an externally designed page (a
@@ -470,6 +519,8 @@ persistence, asar read-only-ness).
   },
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
+  smash: { round, bestOf, scoreA, scoreB, crewSize, stocksEach,   // Smash scoreboard (v0.8.0);
+           lostA, lostB, showStocks, swap },                      // counters change via {type:'score'}
 }
 ```
 Both `live` and `draft` are this same shape, persisted together in one
