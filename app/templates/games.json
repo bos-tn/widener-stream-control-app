@@ -1,10 +1,10 @@
 [
-  { "id": "cod",   "name": "Call of Duty" },
-  { "id": "lol",   "name": "League of Legends" },
-  { "id": "mr",    "name": "Marvel Rivals" },
-  { "id": "ow",    "name": "Overwatch" },
-  { "id": "r6",    "name": "Rainbow Six Siege" },
-  { "id": "rl",    "name": "Rocket League" },
-  { "id": "smash", "name": "Super Smash Brothers Ultimate" },
-  { "id": "val",   "name": "VALORANT" }
+  {"id": "cod", "name": "Call of Duty", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 5, "position": "top-left"}},
+  {"id": "lol", "name": "League of Legends", "scoreboard": {"round": "", "showStocks": false, "unit": "Game", "bestOf": 3, "position": "top-left"}},
+  {"id": "mr", "name": "Marvel Rivals", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}},
+  {"id": "ow", "name": "Overwatch", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 5, "position": "top-left"}},
+  {"id": "r6", "name": "Rainbow Six Siege", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}},
+  {"id": "rl", "name": "Rocket League", "scoreboard": {"round": "", "showStocks": false, "unit": "Game", "bestOf": 5, "position": "top-left"}},
+  {"id": "smash", "name": "Super Smash Bros. Ultimate", "scoreboard": {"round": "Crew Battle", "showStocks": true, "unit": "Set", "bestOf": 3, "position": "top", "crewSize": 4, "stocksEach": 3}},
+  {"id": "val", "name": "VALORANT", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}}
 ]
