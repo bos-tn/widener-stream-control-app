@@ -25,7 +25,10 @@ const SCENES = [
   { view: 'brb',           scene: 'WU: Be Right Back', input: 'WU-src-brb' },
   // Transparent scoreboard: the game capture goes in this scene *under* the
   // browser source, so it's the one scene the operator adds their own source to.
-  { view: 'smash',         scene: 'WU: Smash Scoreboard', input: 'WU-src-smash' },
+  // It was Smash-only in v0.8.0; `legacy` names are renamed in place on the
+  // next build so the operator's game capture inside it is kept.
+  { view: 'scoreboard',    scene: 'WU: Scoreboard',    input: 'WU-src-scoreboard',
+    legacy: { scene: 'WU: Smash Scoreboard', input: 'WU-src-smash' } },
   // One NECC scene covers every NECC overlay type: the locked page reads the
   // pushed neccUrl, so picking bracket vs match-preview is a live content
   // update inside this same scene, not a new scene.
@@ -36,25 +39,64 @@ function sceneForView(view) {
   return SCENES.find((s) => s.view === view) || null;
 }
 
+function viewForScene(sceneName) {
+  const t = SCENES.find((s) => s.scene === sceneName || (s.legacy && s.legacy.scene === sceneName));
+  return t ? t.view : null;
+}
+
+// How long to wait between reconnect attempts after OBS goes away.
+const RECONNECT_MS = 5000;
+
 // opts.getOverlayBase() -> e.g. "http://localhost:4310" (where OBS should point
 // its browser sources; OBS runs on the same machine, so localhost is correct).
 function createObs(opts = {}) {
   const getOverlayBase = opts.getOverlayBase || (() => 'http://localhost:4310');
+  const onProgramView = opts.onProgramView || (() => {});
   const obs = new OBSWebSocket();
 
   let connected = false;
+  // Set by a successful connect and cleared only by an explicit Disconnect.
+  // While set, a dropped connection (OBS closed or restarted) is retried in the
+  // background, so scene-sync comes back on its own instead of silently
+  // staying off for the rest of the stream. Held in memory only, like the
+  // password inside it.
+  let wanted = null;
+  let reconnectTimer = null;
+  let reconnecting = false;
   let sceneSync = false;        // does a Push Live drive an OBS scene switch?
   let transitionName = '';      // '' -> leave OBS's current transition as-is
   let currentScene = '';
   let lastError = '';
 
-  obs.on('ConnectionClosed', () => { connected = false; currentScene = ''; });
+  obs.on('ConnectionClosed', () => {
+    const was = connected;
+    connected = false;
+    currentScene = '';
+    if (was && wanted) scheduleReconnect();
+  });
   obs.on('CurrentProgramSceneChanged', (d) => {
     currentScene = (d && (d.sceneName || d.currentProgramSceneName)) || currentScene;
+    // Report which of our overlays is now on program, whether the switch came
+    // from a Push Live or from someone clicking a scene in OBS.
+    const view = viewForScene(currentScene);
+    if (view) { try { onProgramView(view); } catch (e) { /* never break OBS events */ } }
   });
 
   function status() {
-    return { connected, sceneSync, transitionName, currentScene, error: lastError };
+    return { connected, reconnecting: !connected && reconnecting, sceneSync, transitionName, currentScene, error: lastError };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnecting = true;
+    reconnectTimer = setTimeout(async () => {
+      if (!wanted || connected) { reconnecting = false; return; }
+      try {
+        await connect(wanted, true);
+      } catch (e) {
+        scheduleReconnect();
+      }
+    }, RECONNECT_MS);
   }
 
   function disconnectQuiet() {
@@ -63,7 +105,10 @@ function createObs(opts = {}) {
     currentScene = '';
   }
 
-  async function connect(cfg = {}) {
+  // cfg.retry (sent by the panel's automatic connect when the app starts) keeps
+  // trying in the background if OBS isn't open yet, instead of giving up.
+  async function connect(cfg = {}, fromRetry = false) {
+    clearTimeout(reconnectTimer);
     disconnectQuiet();
     const host = cfg.host || '127.0.0.1';
     const port = cfg.port || 4455;
@@ -72,7 +117,9 @@ function createObs(opts = {}) {
       // Empty password -> pass undefined so an unauthenticated OBS server works.
       await obs.connect(url, cfg.password || undefined);
       connected = true;
+      reconnecting = false;
       lastError = '';
+      wanted = { ...cfg };
       sceneSync = !!cfg.sceneSync;
       transitionName = cfg.transitionName || '';
       try {
@@ -84,6 +131,7 @@ function createObs(opts = {}) {
       connected = false;
       // Never surface the password even if it were somehow in the message.
       lastError = scrub(e && e.message ? e.message : String(e), cfg.password);
+      if (cfg.retry && !fromRetry) { wanted = { ...cfg }; scheduleReconnect(); }
       const err = new Error(lastError);
       err.soft = true;
       throw err;
@@ -91,6 +139,9 @@ function createObs(opts = {}) {
   }
 
   function disconnect() {
+    wanted = null;
+    reconnecting = false;
+    clearTimeout(reconnectTimer);
     disconnectQuiet();
     return status();
   }
@@ -99,6 +150,9 @@ function createObs(opts = {}) {
   function setSettings(cfg = {}) {
     if (cfg.sceneSync !== undefined) sceneSync = !!cfg.sceneSync;
     if (cfg.transitionName !== undefined) transitionName = cfg.transitionName || '';
+    // A reconnect should come back with the current preferences, not the ones
+    // from the original connect.
+    if (wanted) wanted = { ...wanted, sceneSync, transitionName };
     return status();
   }
 
@@ -144,6 +198,20 @@ function createObs(opts = {}) {
     const built = [];
     for (const t of SCENES) {
       const url = `${overlayBase}/overlay?view=${t.view}`;
+      // Rename a scene/source left from an older version rather than creating
+      // a second one next to it.
+      if (t.legacy) {
+        if (!existingScenes.has(t.scene) && existingScenes.has(t.legacy.scene)) {
+          await obs.call('SetSceneName', { sceneName: t.legacy.scene, newSceneName: t.scene });
+          existingScenes.delete(t.legacy.scene);
+          existingScenes.add(t.scene);
+        }
+        if (!existingInputs.has(t.input) && existingInputs.has(t.legacy.input)) {
+          await obs.call('SetInputName', { inputName: t.legacy.input, newInputName: t.input });
+          existingInputs.delete(t.legacy.input);
+          existingInputs.add(t.input);
+        }
+      }
       if (!existingScenes.has(t.scene)) {
         await obs.call('CreateScene', { sceneName: t.scene });
         existingScenes.add(t.scene);
@@ -188,7 +256,7 @@ function createObs(opts = {}) {
       const sceneList = await obs.call('GetSceneList');
       const have = new Set((sceneList.scenes || []).map((s) => s.sceneName));
       const out = {};
-      SCENES.forEach((t) => { out[t.view] = have.has(t.scene); });
+      SCENES.forEach((t) => { out[t.view] = have.has(t.scene) || !!(t.legacy && have.has(t.legacy.scene)); });
       return out;
     } catch (e) { return {}; }
   }
@@ -211,11 +279,20 @@ function createObs(opts = {}) {
     if (!connected || !sceneSync) return { switched: false };
     const t = sceneForView(view);
     if (!t) return { switched: false };
+    // Scenes built by v0.8.0 and not rebuilt since still carry the old name.
+    let sceneName = t.scene;
+    if (t.legacy) {
+      try {
+        const list = await obs.call('GetSceneList');
+        const names = new Set((list.scenes || []).map((x) => x.sceneName));
+        if (!names.has(t.scene) && names.has(t.legacy.scene)) sceneName = t.legacy.scene;
+      } catch (e) { /* use the current name */ }
+    }
     if (transitionName) {
       try { await obs.call('SetCurrentSceneTransition', { transitionName }); } catch (e) { /* non-fatal */ }
     }
-    await obs.call('SetCurrentProgramScene', { sceneName: t.scene });
-    return { switched: true, scene: t.scene };
+    await obs.call('SetCurrentProgramScene', { sceneName });
+    return { switched: true, scene: sceneName };
   }
 
   // Called by the server right after a Push Live. Fire-and-forget, fully soft:

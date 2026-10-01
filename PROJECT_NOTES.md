@@ -1,8 +1,38 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.8.0**. If you're starting a new chat, read this whole
-file before touching code.
+updated through **v0.9.0**. If you're starting a new chat, read the summary
+below first, then the sections relevant to what you're changing. The later
+sections are a history: each one records why something is the way it is.
+
+## How the app works now (v0.9.0 summary)
+
+- **One process, one port.** `main.js` starts `server.js` (Express + `ws`)
+  inside Electron on port 4310, listening on `127.0.0.1` and `::1` only, and
+  opens the control panel (`/control`) in a window. OBS loads `/overlay`.
+- **Two copies of state.** `draft` is what the panel edits and the preview
+  (`/overlay?preview=1`) shows; `live` is what OBS shows. Push Live copies
+  draft to live. The only thing that writes live directly is the scoreboard's
+  counters (`{type:'score'}`) and, with OBS scene-sync on, a manual scene
+  switch in OBS (which sets `live.mode`).
+- **One overlay page, six modes**: `starting-soon`, `post-match`, `roster`,
+  `brb`, `scoreboard`, `necc`. `?view=<mode>` pins a page to one mode (OBS
+  scene-sync sources); `?monitor=1` is the panel's live monitor.
+- **Panel** (`public/control/`): Show and Setup tabs, overlay buttons (drawn
+  from a hidden `<select>` that stays the source of truth), rosters with team
+  library, match save/load, scoreboard controls, undo/redo, keyboard
+  shortcuts. It sends the whole draft on every edit (debounced 150 ms).
+- **Data on disk** (Electron userData, or `app/data` in dev): `state.json`
+  (`{live, draft}`), `library.json` (saved teams and matches), `logos/`
+  (cached NECC logos). All JSON is written through `writeJsonSafe` (temp file
+  + rename + `.bak`).
+- **Game montages** (v0.10.0, `montages.js`): `games.json` gives each game
+  except CoD a `montage: {file, driveId, bytes}`. The server downloads it from
+  Drive into `<data>/montages` on demand and serves it at `/montages/<file>`;
+  the overlay plays it when `clip` is blank. See the v0.10.0 section.
+- **Optional pieces**: NECC import (`necc.js`, unofficial LeagueOS API), OBS
+  scene-sync (`obs.js`, obs-websocket v5), auto-update (`electron-updater`
+  against GitHub releases).
 
 ## What this is
 
@@ -37,7 +67,9 @@ app/                          - the actual Electron app (this is what ships)
   dist/                        - electron-builder output (the installer .exe) - NOT committed, rebuilt each time
   package.json                 - version number lives here; bump on every shippable change
 
-Stream/                        - ORIGINAL per-game overlay files, now superseded. Left in place, unused.
+Stream/                        - REMOVED from the repo folder in v0.9.0 (it was never committed). The
+                                  original per-game overlay files now sit in
+                                  Documents/WidenerStreamApp-legacy-Stream on the dev PC.
 archive/                       - the 16 old per-game HTML files, moved here in Phase 4 (reference only)
 widenerstreamlogofixed.png     - APP ICON source (used by build/make-icon.js for icon.ico +
                                   window/taskbar PNGs; replaced widener-stream-control-app-icon.png
@@ -287,6 +319,10 @@ scripting push/read assertions.
 
 ## Smash Ultimate scoreboard (`mode: 'smash'`, v0.8.0)
 
+> **Renamed in v0.9.0.** The mode is now `scoreboard` and the state key is
+> `state.scoreboard`, and it serves every game (see the v0.9.0 section). The
+> reasoning below still applies; read `smash` as `scoreboard`.
+
 A sixth mode, and the first **in-game** overlay: the page goes transparent
 (`body[data-mode="smash"]` drops the gradient, stripes, and sheen) so the game
 capture under it in OBS shows through. Everything else in the app is a
@@ -505,22 +541,159 @@ calling a build done - dev-mode (`node server.js`) and the packaged app do
 not always behave the same (file whitelisting, userData path for state
 persistence, asar read-only-ness).
 
+## v0.9.0: the 25-item batch
+
+A review of the whole app produced a numbered list; these were done together.
+The ones with non-obvious reasoning:
+
+- **Countdown no longer restarts on every edit (bug).** Every draft update
+  carries `durationSec`, and `updateChannel` used to recompute `end` whenever
+  it was present, so fixing a typo and pushing reset the countdown on stream.
+  `end` is now recomputed only when the duration actually changes, the mode
+  switches into "count down from now", or the update carries
+  `restartCountdown: true` (the Restart countdown button, or selecting an
+  overlay with its own countdown). `restartCountdown` is never stored.
+  `isDirty()` now compares `end` too, since it only changes deliberately, and
+  `pushLive()` restamps a restarted countdown at push time so waiting before
+  pushing doesn't shorten it.
+- **Localhost only.** The server listened on every interface, so anyone on the
+  campus network could open the panel and change the stream. It now listens on
+  `127.0.0.1` and `::1`. Both, because Chromium resolves `localhost` to `::1`
+  first on Windows: with IPv4 only, every WebSocket connect took ~330 ms
+  (failed IPv6 attempt, then fallback); with both it takes ~3 ms. The WS
+  server runs in `noServer` mode and is attached to both listeners' `upgrade`
+  events. `WIDENER_HOST` (env) or `opts.host` overrides with a single address
+  if LAN access is ever wanted again.
+- **Safe saves.** `writeJsonSafe` writes `file.tmp`, copies the old file to
+  `file.bak`, then renames. A failed save logs and never throws (it used to
+  run inside the WS handler, where a throw could crash the server). Loading
+  falls back to `.bak`. Verified by truncating `state.json` mid-object.
+- **Local fonts.** Inter 400/600/700/800 and Kanit 600/700/800 (latin, woff2,
+  from Fontsource, OFL licence files alongside) in
+  `public/overlay-assets/fonts`, `font-display:block`. Kanit italics were
+  deliberately not added: the BRB card has always used synthesized italics,
+  and real italics would change its look.
+- **NECC logo cache.** `/api/necc/import` downloads each team logo to
+  `userData/logos/<sha1>.<ext>` and rewrites `logoUrl` to `/logos/...`. On any
+  failure the remote URL is kept. **Not verified against a live NECC import
+  yet** (no public match link was available while building).
+- **Scoreboard for every game.** `smash` became `scoreboard`, with `unit`
+  (Game/Map/Set/Round), `position` (`top` = full bar, or a corner = compact
+  box), and `showStocks` (default off; the Smash preset turns it on).
+  Migration: `normalizeScoreboard` maps an old `smash` object to
+  `{unit:'Set', showStocks:true, ...}`, `mode:'smash'` becomes `scoreboard`,
+  `views.smash` becomes `views.scoreboard`, and the overlay treats
+  `?view=smash` as `scoreboard`. OBS: the scene entry has `legacy` names, and
+  Build scenes **renames** `WU: Smash Scoreboard` / `WU-src-smash` in place
+  (keeping the operator's game capture inside it) instead of creating a
+  second scene; `switchToView` falls back to the legacy name if the scenes
+  haven't been rebuilt.
+- **Per-game presets** live in `games.json` (`scoreboard` object per game). The
+  corner positions and best-of values for non-Smash games are **best guesses,
+  not checked against each game's HUD or NECC rules**; the user was told to
+  verify them over real gameplay. Picking a game applies only scoreboard
+  settings; it does not switch overlays.
+- **Team + match library.** Server-side (`library.json`) so the app window and
+  an OBS dock share it; changes broadcast as `{type:'library'}`. Teams upsert
+  by id, then by case-insensitive name, so re-importing an opponent updates
+  their entry. Every NECC import saves both teams. A saved match holds the
+  setup (teams, text, countdown, scoreboard settings, NECC links) but never
+  the current overlay or the live score; loading keeps both.
+- **Undo/redo** is client-side: whole-form snapshots (all views' text
+  included), edits within 1.2 s grouped into one step, 100 steps. Scoreboard
+  counters are excluded (they have their own Undo). A Revert and a match
+  load are each recorded as one undoable step. Restoring sends every view's
+  text, not just the current view's.
+- **Auto-update.** `electron-updater`, GitHub provider. It downloads in the
+  background and **asks** before restarting (a restart blanks every OBS
+  source for a few seconds); "Later" installs on quit. The installer's
+  `artifactName` has no spaces, because GitHub turns spaces into dots on upload
+  and `latest.yml` would then point at a file that doesn't exist. **Every
+  release must attach `latest.yml` and the `.blockmap` with the `.exe`.**
+  v0.8.0 and earlier have no updater, so v0.9.0 is a manual install; updates
+  work from v0.9.0 onward. `npm run dist` passes `--publish never` so a stray
+  `GH_TOKEN` can't publish from a local build.
+- **OBS reconnect.** `obs.js` remembers the last good connect config (memory
+  only) and retries every 5 s after `ConnectionClosed`, until an explicit
+  Disconnect. The panel remembers that it has connected before (`autoConnect`
+  in localStorage) and connects on startup with `retry:true`, so the app
+  connects even if OBS opens second. A header light shows OBS state; the panel
+  polls `/api/obs/status` every 4 s.
+- **OBS scene changes follow back.** `CurrentProgramSceneChanged` maps the
+  scene to a view and, with scene-sync on, sets `live.mode`, so the LIVE
+  marker and live monitor reflect a manual OBS switch. Draft is untouched,
+  so the panel correctly shows the preview as differing from live.
+- **Panel layout.** Show/Setup tabs (`data-tab` on each `.panel`, `hidden`
+  attribute; `.conn[hidden]` needed an explicit rule because `.conn` sets
+  `display:flex`). Overlay buttons are drawn from the hidden `overlaySelect`,
+  which stays the source of truth. The live monitor iframe loads lazily on
+  first use.
+- **Drag to reorder players**: rows become `draggable` only while the handle
+  is held, so text selection in the inputs still works.
+- **NECC loading state**: spinner until the iframe `load` event; after 12 s the
+  preview and monitor say LeagueOS hasn't answered. A cross-origin iframe
+  can't report failure, and Chromium fires `load` on its error page after
+  ~20 s, which clears the spinner. That is expected, not a bug.
+- **Housekeeping**: `OBS_INTEGRATION_SPEC.md` removed (the feature shipped in
+  v0.7.0; history keeps it). `Stream/` moved out of the repo folder.
+
+## v0.10.0: game montages
+
+- **Where the videos live.** Seven silent 1080p60 H.264 MP4s (CoD has none),
+  6.56 GB together, in the team Drive's Stream folder, shared "anyone with the
+  link". Far too big for the installer: NSIS fails above ~2 GB, GitHub release
+  assets cap at 2 GB, and every auto-update would download them again. So
+  `montages.js` downloads each one on demand from
+  `drive.usercontent.google.com/download?id=…&export=download&confirm=t`
+  (`confirm=t` skips Drive's "can't scan for viruses" page for big files).
+- **Download rules.** One at a time; the game just picked jumps the queue.
+  Writes to `<file>.part` and resumes with a Range request after a dropped
+  connection or app restart. A file is only used once its size matches
+  `games.json` and it starts with an MP4 `ftyp` box. An HTML response (the
+  file went private) fails at once and is never written. A finished file of
+  the wrong size is left alone and reported, not overwritten. Picking a game
+  doesn't retry a failed download (each edit would hit Drive again); the
+  Setup tab's Retry / Download all do.
+- **When downloads start.** On any draft update or push whose game is
+  missing a montage, and at startup for the live and draft games. The startup
+  calls sit at the end of `createServer`, after `wss` exists: called earlier,
+  the first progress broadcast threw and the server failed to start.
+- **Overlay.** `clipFor(state)`: `state.clip` if set, else the game's montage
+  if `have`. The server sends `{type:'montages'}` to every page on subscribe
+  and on change, so a montage that finishes downloading starts playing with
+  no push. The preview and live monitor show download progress in the
+  placeholder; the stream keeps its usual placeholder text.
+- **Paused video.** Chromium pauses muted autoplay video while a page is
+  hidden, and OBS reports a browser source hidden while its scene is off
+  program. It didn't always resume, so the montage froze after a scene
+  switch. The overlay now calls `play()` on `visibilitychange` and on any
+  `pause` while visible.
+- **Dev.** `WIDENER_MONTAGE_DIR` points the montage folder somewhere other
+  than `app/data`, which sits in OneDrive on the dev PC.
+- **Changing a montage.** Upload the new file to Drive, share it "anyone with
+  the link", put its ID and exact byte size in `games.json`, and ship a new
+  version. PCs with the old file report a size mismatch until it is deleted
+  from `<data>/montages`; use a new filename to have them download it on
+  their own instead.
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
 {
   mode, game, team, title, status, subtitle, next,
-  countdownMode: 'duration'|'at', durationSec, end,   // end is always the computed absolute ISO timestamp
+  countdownMode: 'duration'|'at', durationSec, end,   // end is the absolute ISO timestamp; in 'duration'
+                                                        // mode it only changes on a deliberate restart (v0.9.0)
   layout: 'left'|'right', clip, logo, montage: bool,
   neccUrl, neccType,                                    // only meaningful when mode === 'necc';
                                                         // neccType is the dropdown key (e.g. 'stageBracket')
   views: {                                              // per-overlay text (v0.7.2); everything else is global
-    'starting-soon'|'post-match'|'roster'|'brb'|'necc': { title, subtitle, status },
+    'starting-soon'|'post-match'|'roster'|'brb'|'necc'|'scoreboard': { title, subtitle, status },
   },
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
-  smash: { round, bestOf, scoreA, scoreB, crewSize, stocksEach,   // Smash scoreboard (v0.8.0);
-           lostA, lostB, showStocks, swap },                      // counters change via {type:'score'}
+  scoreboard: { round, unit, bestOf, position,                  // v0.9.0 (was `smash` in v0.8.0);
+                scoreA, scoreB, lostA, lostB, swap,            // counters change via {type:'score'}
+                crewSize, stocksEach, showStocks },
 }
 ```
 Both `live` and `draft` are this same shape, persisted together in one
@@ -534,8 +707,12 @@ new state fields.
 - Dev server: `node app/server.js` (or the `stream-app-dev` launch.json
   config, port 4311) - fastest iteration loop, no packaging needed.
 - Full app dev run: `npm start` in `app/` (runs `electron .`).
-- Package: `npm run dist` in `app/` (runs `electron-builder --win`) →
-  `app/dist/Widener Esports Stream Control Setup {version}.exe`.
+- Package: `npm run dist` in `app/` (runs `electron-builder --win --publish never`) →
+  `app/dist/Widener-Esports-Stream-Control-Setup-{version}.exe` plus `.blockmap`
+  and `latest.yml`. Release all three on GitHub (see the auto-update notes).
+- Server behaviour checks: a throwaway Node script against `createServer(port,
+  {dataDir: <temp dir>})` exercised migration, countdown, score, library and
+  corrupt-file recovery for v0.9.0. Worth turning into real tests.
 - **Always bump `version` in `app/package.json` before rebuilding** - the
   user explicitly asked for this on every shippable change.
 - Verification pattern used throughout this build: start the dev server via
@@ -559,10 +736,13 @@ new state fields.
   - see that section above. The two are unrelated; the app still has **no hard
   OBS dependency** (scene-sync is opt-in and fails soft).
 - No automated tests - everything has been verified manually via the
-  preview tool per session. There is no CI.
+  preview tool per session (plus ad-hoc server scripts in v0.9.0). There is no CI.
+- Not yet verified for v0.9.0: the NECC logo cache against a real import, OBS
+  reconnect and the legacy scene rename against a real OBS, and the
+  auto-updater end to end (needs a second release after v0.9.0 to update to).
 - The LeagueOS integration is inherently fragile (unofficial API) - if a
   future session finds `importMatch()` failing, check whether LeagueOS
   changed their header-signing scheme or endpoint shapes before assuming
   the code is broken.
-- `Stream/` and `archive/` at the project root are leftover from before this
-  app existed - safe to ignore, not part of the shipped app.
+- `archive/` at the project root is leftover from before this app existed -
+  safe to ignore, not part of the shipped app.
