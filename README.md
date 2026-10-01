@@ -19,7 +19,7 @@ checks.
 The app has one overlay page that OBS loads from `http://localhost:4310/overlay`.
 The control panel decides what that page shows. The available overlays are:
 
-- Starting Soon and Post-Match, with a title, subtitle, countdown, and optional montage clip
+- Starting Soon and Post-Match, with a title, subtitle, countdown, and the selected game's montage (or your own clip)
 - Rosters, a two-team lineup
 - Be Right Back
 - Scoreboard, an in-game scoreboard for any game (series score, with a stock counter for Smash)
@@ -71,6 +71,24 @@ edits. The Live button above the preview shows what is on stream right now,
 with a red border so it is not mistaken for the preview.
 
 Hover over any ⓘ in the panel for a short explanation of that setting.
+
+## Game montages
+
+Every game except Call of Duty has a highlight montage on the team Google
+Drive. Starting Soon, Post-Match and Be Right Back play the selected game's
+montage in the montage panel, and picking a different game swaps it. A clip
+typed into the Media section replaces the montage.
+
+The montages are too big to ship with the installer (6.5 GB in all), so each
+PC downloads them from Drive into the app's own data folder the first time a
+game is picked. The status line under the Game picker shows the progress. To
+avoid a download starting mid-stream, open Setup and click **Download all
+montages** before your first stream on a new PC. A download that is cut off
+picks up where it left off.
+
+The Drive files must stay shared as "Anyone with the link". If they are made
+private, downloads fail with a message saying so. Montages already on a PC keep
+working.
 
 ## Saved matches and the team library
 

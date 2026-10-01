@@ -566,7 +566,7 @@
         <div class="placeholder" id="placeholder">
           <div style="text-align:center">
             <div id="placeholder-title">Montage Area</div>
-            <small>Set a clip in the control panel, or align an OBS Media Source under this overlay.</small>
+            <small id="placeholder-sub">Pick a game with a montage, set a clip in the control panel, or align an OBS Media Source under this overlay.</small>
           </div>
         </div>
       </div>
@@ -638,7 +638,14 @@
     a: { logo: $('#roster-logo-a'), name: $('#roster-name-a'), tag: $('#roster-tag-a'), players: $('#roster-players-a') },
     b: { logo: $('#roster-logo-b'), name: $('#roster-name-b'), tag: $('#roster-tag-b'), players: $('#roster-players-b') },
   };
+  const placeholderSub = $('#placeholder-sub');
+  const placeholderSubDefault = placeholderSub.textContent;
   let videoEl = null;
+  // Game montage status from the server ({ gameId: { file, have, ... } }) and
+  // the last state applied, so a montage finishing its download can start
+  // playing without waiting for the next push.
+  let montageStatus = {};
+  let lastState = null;
   let countdownEnd = new Date(Date.now() + 10 * 60 * 1000);
 
   const icons = {
@@ -681,9 +688,32 @@
     return s;
   }
 
-  function applyClip(clip){
-    if(clip){
-      const src = mediaUrl(clip);
+  // A clip set in the panel always wins. Otherwise the selected game's
+  // montage plays, once it has finished downloading to this PC.
+  function clipFor(state){
+    if(state.clip) return mediaUrl(state.clip);
+    const m = montageStatus[state.game];
+    return m && m.have ? '/montages/' + encodeURIComponent(m.file) : '';
+  }
+
+  // While a montage downloads, the preview and live monitor say so. On
+  // stream the placeholder keeps its usual wording.
+  function placeholderNote(state){
+    const m = !state.clip && montageStatus[state.game];
+    if(!m || m.have || !(isPreview || isMonitor)) return placeholderSubDefault;
+    if(m.downloading) return "Downloading this game's montage: " + Math.floor(100 * m.received / m.bytes) + '%';
+    if(m.queued) return "This game's montage is waiting to download";
+    if(m.error) return 'Montage download failed: ' + m.error;
+    return placeholderSubDefault;
+  }
+
+  function resumeClip(){
+    if(videoEl && videoEl.paused) videoEl.play().catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) resumeClip(); });
+
+  function applyClip(src){
+    if(src){
       if(!videoEl){
         videoEl = document.createElement('video');
         videoEl.autoplay = true; videoEl.loop = true; videoEl.muted = true; videoEl.playsInline = true;
@@ -693,9 +723,15 @@
             placeholderTitle.textContent = 'Clip failed to load';
           }
         });
+        // Chromium pauses muted autoplay video while the page is hidden (OBS
+        // reports a browser source hidden when its scene is off program) and
+        // doesn't always resume it, which froze the montage on the first
+        // frame after a scene switch. Nothing here ever wants it paused.
+        videoEl.addEventListener('pause', () => { if(!document.hidden) resumeClip(); });
         montage.appendChild(videoEl);
       }
       if(videoEl.getAttribute('src') !== src) videoEl.src = src;
+      resumeClip();
       if(placeholder) placeholder.style.display = 'none';
     } else {
       if(videoEl){ videoEl.remove(); videoEl = null; }
@@ -987,7 +1023,9 @@
     if(vSubtitle !== undefined) $('#brb-sub').textContent = vSubtitle || '';
     if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || 'Widener Esports';
     if(state.socials) renderBrbSocials(state.socials);
-    if(state.clip !== undefined) applyClip(state.clip);
+    lastState = state;
+    applyClip(clipFor(state));
+    placeholderSub.textContent = placeholderNote(state);
     if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
     if(state.layout) applyLayout(state.layout.toLowerCase());
     // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc' | 'brb'.
@@ -1285,6 +1323,13 @@
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
+        if (msg.type === 'montages') {
+          montageStatus = msg.montages || {};
+          if (lastState && !stingerActive) {
+            applyClip(clipFor(lastState));
+            placeholderSub.textContent = placeholderNote(lastState);
+          }
+        }
         if (msg.type === 'state' && msg.channel === channel) {
           // Pushes flagged with the stinger transition play the curtain wipe
           // and swap content while covered; everything else applies instantly.

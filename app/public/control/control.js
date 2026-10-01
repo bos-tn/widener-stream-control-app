@@ -706,6 +706,7 @@ function populateForm(state) {
   else if (!isAt) durationInput.value = state.durationSec || '';
   const match = games.find((g) => g.name === state.game || g.id === state.game);
   gameSelect.value = match ? match.id : '';
+  renderMontages();
   // A full state carries the counters; an undo snapshot or saved match
   // doesn't, and then the current score is kept.
   scoreboard = { ...defaultScoreboard(), ...scoreboardCounters(), ...(state.scoreboard || {}) };
@@ -799,6 +800,10 @@ function connect() {
       renderOverlayButtons();
       toggleLayoutVisibility();
     }
+    if (msg.type === 'montages') {
+      montageStatus = msg.montages || {};
+      renderMontages();
+    }
     if (msg.type === 'library') {
       library = msg.library || { teams: [], matches: [] };
       renderLibrary();
@@ -837,7 +842,79 @@ gameSelect.addEventListener('change', () => {
   if (g) teamInput.value = g.name;
   applyGamePreset(gameSelect.value);
   pushDraft();
+  renderMontages();
 });
+
+// --- Game montages (v0.10.0) ---------------------------------------------
+// The server downloads each game's montage from Drive on demand (montages.js)
+// and broadcasts progress; this only displays it and asks for downloads.
+let montageStatus = {};
+const montageList = $id('montageList');
+const gameMontageStatus = $id('gameMontageStatus');
+
+function fmtGB(bytes) { return (bytes / 1e9).toFixed(2) + ' GB'; }
+
+function montageText(m) {
+  if (m.have) return 'Ready';
+  if (m.downloading) return `Downloading ${Math.floor(100 * m.received / m.bytes)}% of ${fmtGB(m.bytes)}`;
+  if (m.queued) return 'Waiting to download';
+  if (m.error) return 'Failed: ' + m.error;
+  if (m.received > 0) return `Paused at ${Math.floor(100 * m.received / m.bytes)}%`;
+  return `Not downloaded (${fmtGB(m.bytes)})`;
+}
+
+function requestMontage(game) {
+  fetch('/api/montages/download', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(game ? { game } : {}),
+  }).catch(() => {});
+}
+
+function renderMontages() {
+  // Status line under the Game picker, for the selected game only.
+  const game = gameSelect.value;
+  const m = montageStatus[game];
+  if (!game) gameMontageStatus.textContent = '';
+  else if (!m) gameMontageStatus.textContent = 'No montage for this game.';
+  else gameMontageStatus.textContent = clipInput.value.trim()
+    ? 'Montage: the clip under Media replaces it.'
+    : 'Montage: ' + montageText(m);
+  gameMontageStatus.classList.toggle('error', !!(m && m.error && !m.have));
+
+  // Setup tab list.
+  montageList.innerHTML = '';
+  let have = 0; let total = 0;
+  games.forEach((g) => {
+    const st = montageStatus[g.id];
+    if (!st) return;
+    total++;
+    if (st.have) have++;
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    const name = document.createElement('span');
+    name.className = 'lib-name';
+    name.textContent = g.name;
+    const meta = document.createElement('span');
+    meta.className = 'lib-meta';
+    meta.textContent = montageText(st);
+    if (st.error && !st.have) meta.title = st.error;
+    row.append(name, meta);
+    if (!st.have && !st.downloading && !st.queued) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-secondary lib-del';
+      btn.type = 'button';
+      btn.textContent = st.error ? 'Retry' : 'Download';
+      btn.addEventListener('click', () => requestMontage(g.id));
+      row.appendChild(btn);
+    }
+    montageList.appendChild(row);
+  });
+  $id('montageTotal').textContent = total ? `${have} of ${total} on this PC` : '';
+  $id('montageAllBtn').disabled = have === total;
+}
+
+$id('montageAllBtn').addEventListener('click', () => requestMontage(''));
+clipInput.addEventListener('input', renderMontages);
 
 copyUrlBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(obsUrl.value).then(() => flashText(copyUrlBtn, 'Copied!', 'Copy'));

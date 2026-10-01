@@ -26,6 +26,10 @@ sections are a history: each one records why something is the way it is.
   (`{live, draft}`), `library.json` (saved teams and matches), `logos/`
   (cached NECC logos). All JSON is written through `writeJsonSafe` (temp file
   + rename + `.bak`).
+- **Game montages** (v0.10.0, `montages.js`): `games.json` gives each game
+  except CoD a `montage: {file, driveId, bytes}`. The server downloads it from
+  Drive into `<data>/montages` on demand and serves it at `/montages/<file>`;
+  the overlay plays it when `clip` is blank. See the v0.10.0 section.
 - **Optional pieces**: NECC import (`necc.js`, unofficial LeagueOS API), OBS
   scene-sync (`obs.js`, obs-websocket v5), auto-update (`electron-updater`
   against GitHub releases).
@@ -632,6 +636,45 @@ The ones with non-obvious reasoning:
   ~20 s, which clears the spinner. That is expected, not a bug.
 - **Housekeeping**: `OBS_INTEGRATION_SPEC.md` removed (the feature shipped in
   v0.7.0; history keeps it). `Stream/` moved out of the repo folder.
+
+## v0.10.0: game montages
+
+- **Where the videos live.** Seven silent 1080p60 H.264 MP4s (CoD has none),
+  6.56 GB together, in the team Drive's Stream folder, shared "anyone with the
+  link". Far too big for the installer: NSIS fails above ~2 GB, GitHub release
+  assets cap at 2 GB, and every auto-update would download them again. So
+  `montages.js` downloads each one on demand from
+  `drive.usercontent.google.com/download?id=…&export=download&confirm=t`
+  (`confirm=t` skips Drive's "can't scan for viruses" page for big files).
+- **Download rules.** One at a time; the game just picked jumps the queue.
+  Writes to `<file>.part` and resumes with a Range request after a dropped
+  connection or app restart. A file is only used once its size matches
+  `games.json` and it starts with an MP4 `ftyp` box. An HTML response (the
+  file went private) fails at once and is never written. A finished file of
+  the wrong size is left alone and reported, not overwritten. Picking a game
+  doesn't retry a failed download (each edit would hit Drive again); the
+  Setup tab's Retry / Download all do.
+- **When downloads start.** On any draft update or push whose game is
+  missing a montage, and at startup for the live and draft games. The startup
+  calls sit at the end of `createServer`, after `wss` exists: called earlier,
+  the first progress broadcast threw and the server failed to start.
+- **Overlay.** `clipFor(state)`: `state.clip` if set, else the game's montage
+  if `have`. The server sends `{type:'montages'}` to every page on subscribe
+  and on change, so a montage that finishes downloading starts playing with
+  no push. The preview and live monitor show download progress in the
+  placeholder; the stream keeps its usual placeholder text.
+- **Paused video.** Chromium pauses muted autoplay video while a page is
+  hidden, and OBS reports a browser source hidden while its scene is off
+  program. It didn't always resume, so the montage froze after a scene
+  switch. The overlay now calls `play()` on `visibilitychange` and on any
+  `pause` while visible.
+- **Dev.** `WIDENER_MONTAGE_DIR` points the montage folder somewhere other
+  than `app/data`, which sits in OneDrive on the dev PC.
+- **Changing a montage.** Upload the new file to Drive, share it "anyone with
+  the link", put its ID and exact byte size in `games.json`, and ship a new
+  version. PCs with the old file report a size mismatch until it is deleted
+  from `<data>/montages`; use a new filename to have them download it on
+  their own instead.
 
 ## State shape (server.js `DEFAULT_STATE`)
 

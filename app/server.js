@@ -6,6 +6,7 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const { importMatch } = require('./necc');
 const { createObs } = require('./obs');
+const { createMontages } = require('./montages');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
@@ -196,6 +197,9 @@ function createServer(port, opts = {}) {
   const stateFile = path.join(dataDir, 'state.json');
   const libraryFile = path.join(dataDir, 'library.json');
   const logosDir = path.join(dataDir, 'logos');
+  // Game montages are several GB, so a dev run can point this somewhere other
+  // than app/data (which sits inside OneDrive on the dev PC).
+  const montageDir = opts.montageDir || process.env.WIDENER_MONTAGE_DIR || path.join(dataDir, 'montages');
   // Only this PC may reach the server. OBS, the app window and an OBS dock all
   // run on the streaming PC, and listening on every interface let anyone on the
   // campus network open the control panel and change the stream. Both loopback
@@ -391,12 +395,31 @@ function createServer(port, opts = {}) {
     },
   });
 
+  // Game montages (see montages.js). Every page gets the status: the panel
+  // shows progress, the overlay needs to know which montages are playable.
+  const montages = createMontages({
+    dir: montageDir,
+    games: GAMES,
+    onChange: () => sendToAll({ type: 'montages', montages: montages.status() }),
+  });
+  // Start the download the moment a game with a missing montage is picked
+  // (or pushed), so it is usually ready by the time the overlay is live.
+  function wantMontage(game) { if (game) montages.ensure(game, true); }
+
   const app = express();
   app.use(express.json({ limit: '2mb' }));
   app.use('/control', express.static(CONTROL_DIR));
   // Media the overlay itself loads (stinger transition video, fonts, etc).
   app.use('/overlay-assets', express.static(path.join(__dirname, 'public', 'overlay-assets')));
   app.use('/logos', express.static(logosDir));
+  // Only finished, verified montages are served; never a .part file.
+  app.get('/montages/:file', (req, res) => {
+    const file = montages.readyPath(req.params.file);
+    if (!file) return res.status(404).end();
+    res.sendFile(file, (err) => {
+      if (err && !res.headersSent) res.status(err.statusCode || 404).end();
+    });
+  });
 
   app.get('/games.json', (req, res) => {
     res.sendFile(path.join(TEMPLATES_DIR, 'games.json'));
@@ -489,6 +512,16 @@ function createServer(port, opts = {}) {
     res.json({ library });
   });
 
+  // --- Montage routes ---
+  app.get('/api/montages', (req, res) => res.json(montages.status()));
+
+  // { game } downloads one game's montage; no game downloads every missing one.
+  app.post('/api/montages/download', (req, res) => {
+    const game = (req.body || {}).game;
+    if (game) montages.ensure(game, true, true); else montages.ensureAll();
+    res.json(montages.status());
+  });
+
   // --- OBS integration routes (all optional, all fail soft) ----------------
   // The control panel drives OBS through these. Note the password is only ever
   // sent from the local panel to here over localhost; it is never persisted
@@ -564,6 +597,13 @@ function createServer(port, opts = {}) {
   function dirtyMessage() {
     return { type: 'dirty', dirty: isDirty(), liveMode: live.mode, liveNeccType: live.neccType || '' };
   }
+  function sendToAll(obj) {
+    const payload = JSON.stringify(obj);
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1 && client.subscribedChannel) client.send(payload);
+    });
+  }
+
   function broadcastDirty() { sendToPanels(dirtyMessage()); }
   function broadcastLibrary() { sendToPanels({ type: 'library', library }); }
 
@@ -576,6 +616,9 @@ function createServer(port, opts = {}) {
 
       if (msg.type === 'subscribe') {
         ws.subscribedChannel = msg.channel === 'draft' ? 'draft' : 'live';
+        // Montage status first, so an overlay's first render already knows
+        // whether the game's montage can play.
+        ws.send(JSON.stringify({ type: 'montages', montages: montages.status() }));
         ws.send(JSON.stringify({ type: 'state', channel: ws.subscribedChannel, data: ws.subscribedChannel === 'draft' ? draft : live }));
         if (ws.subscribedChannel === 'draft') {
           ws.send(JSON.stringify(dirtyMessage()));
@@ -590,6 +633,7 @@ function createServer(port, opts = {}) {
       if (msg.type === 'update') {
         const channel = msg.channel === 'draft' ? 'draft' : 'live';
         const newState = updateChannel(channel, msg.data || {});
+        wantMontage(newState.game);
         broadcast(channel, newState);
         broadcastDirty();
         return;
@@ -597,6 +641,7 @@ function createServer(port, opts = {}) {
 
       if (msg.type === 'push') {
         const newLive = pushLive();
+        wantMontage(newLive.game);
         // The stinger flag rides along to both channels: the live overlay
         // plays the wipe while swapping content, and the control panel's
         // preview plays it too as operator confirmation.
@@ -630,6 +675,11 @@ function createServer(port, opts = {}) {
       }
     });
   });
+
+  // Resume or start the montages for the games already picked. Only now that
+  // the WebSocket server exists to report their progress.
+  wantMontage(live.game);
+  wantMontage(draft.game);
 
   return server;
 }

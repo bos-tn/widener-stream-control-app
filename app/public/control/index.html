@@ -40,6 +40,7 @@
             </span>
             <select id="gameSelect"></select>
           </label>
+          <div class="necc-status" id="gameMontageStatus"></div>
         </div>
         <div class="field">
           <span class="lbl field-title">Overlay
@@ -270,9 +271,13 @@
           </div>
         </div>
         <div class="field">
-          <label for="clipInput"><span class="lbl">Montage clip path or URL</span></label>
+          <label for="clipInput">
+            <span class="lbl">Montage clip path or URL
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave blank to play the selected game's montage. A clip here replaces it.">i</span>
+            </span>
+          </label>
           <div class="copy-row">
-            <input type="text" id="clipInput" placeholder="C:\path\to\clip.mp4 or https://...">
+            <input type="text" id="clipInput" placeholder="Blank: the game's montage. Or C:\path\to\clip.mp4">
             <button id="browseClipBtn" class="btn-secondary" type="button">Browse…</button>
             <input type="file" id="clipFile" accept="video/*" hidden>
           </div>
@@ -394,6 +399,17 @@
             <button id="obsBuildBtn" class="btn-secondary" type="button">Build / update scenes in OBS</button>
           </div>
           <div class="necc-status" id="obsBuildStatus" style="margin-top:8px"></div>
+        </div>
+      </section>
+
+      <section class="panel" data-tab="setup">
+        <h2>Game montages
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Each game's montage downloads from the team Google Drive the first time the game is picked, then plays from this PC. Download them all before a stream so none starts mid-broadcast.">i</span>
+        </h2>
+        <div class="lib-list" id="montageList"></div>
+        <div class="push-row" style="margin-top:10px">
+          <button id="montageAllBtn" class="btn-secondary" type="button">Download all montages</button>
+          <span class="necc-status" id="montageTotal"></span>
         </div>
       </section>
 
