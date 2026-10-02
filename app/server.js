@@ -210,10 +210,12 @@ function createServer(port, opts = {}) {
   const libraryFile = path.join(dataDir, 'library.json');
   const logosDir = path.join(dataDir, 'logos');
   const settingsFile = path.join(dataDir, 'settings.json');
-  // Bundled music sits outside the app archive (electron-builder
-  // extraResources) because OBS reads it straight from disk.
-  const musicDir = opts.musicDir || path.join(__dirname, 'assets', 'music');
-  const DEFAULT_MUSIC = path.join(musicDir, 'rl-music-long.m4a');
+  // The included music track isn't in the installer: like the montages, it
+  // downloads from the team Drive into this PC's data folder on request
+  // (OBS reads it from there). A custom file needs no download.
+  const musicDir = opts.musicDir || process.env.WIDENER_MUSIC_DIR || path.join(dataDir, 'music');
+  const MUSIC_TRACK = { file: 'rl-music-long.m4a', driveId: '1M4encA-tBLZ3dBZzKcqDpvBESad2WX26', bytes: 36077636 };
+  const DEFAULT_MUSIC = path.join(musicDir, MUSIC_TRACK.file);
   // Game montages are several GB, so a dev run can point this somewhere other
   // than app/data (which sits inside OneDrive on the dev PC).
   const montageDir = opts.montageDir || process.env.WIDENER_MONTAGE_DIR || path.join(dataDir, 'montages');
@@ -428,10 +430,12 @@ function createServer(port, opts = {}) {
       volume: Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) : 55,
     };
   }
-  // A custom file that has gone missing falls back to the bundled one.
+  // A custom file that has gone missing falls back to the included track,
+  // once that is downloaded. '' = nothing to play yet.
   function musicFile() {
     const m = musicConfig();
-    return m.file && fs.existsSync(m.file) ? m.file : DEFAULT_MUSIC;
+    if (m.file && fs.existsSync(m.file)) return m.file;
+    return musicTrack.has('music') ? DEFAULT_MUSIC : '';
   }
   // The volume slider is 0-100; 100 is OBS's 0 dB, 0 is -40 dB.
   function musicDb(volume) { return -40 + 40 * (volume / 100); }
@@ -439,7 +443,8 @@ function createServer(port, opts = {}) {
     const m = musicConfig();
     return {
       ...m, db: Math.round(musicDb(m.volume)), path: musicFile(), defaultPath: DEFAULT_MUSIC,
-      defaultExists: fs.existsSync(DEFAULT_MUSIC), customMissing: !!m.file && !fs.existsSync(m.file), playing: musicOn,
+      download: musicTrack.status().music,
+      customMissing: !!m.file && !fs.existsSync(m.file), playing: musicOn,
       obsConnected: obs.status().connected,
     };
   }
@@ -457,12 +462,30 @@ function createServer(port, opts = {}) {
   let musicOn = false;
   function updateMusic(fadeMs) {
     const m = musicConfig();
-    const on = m.enabled && !gameplayOnScreen();
+    const on = m.enabled && !!musicFile() && !gameplayOnScreen();
     const changed = on !== musicOn;
     musicOn = on;
     obs.setMusic({ file: musicFile(), db: musicDb(m.volume), on }, fadeMs);
     if (changed) sendToPanels({ type: 'music', music: musicStatus() });
   }
+  // Fetch the included track when it's what would play: music on and no
+  // custom file. Picking the included track (or the panel's Download
+  // button) asks again, and also retries a failed download.
+  function wantMusicTrack(retry) {
+    const m = musicConfig();
+    if (m.enabled && !(m.file && fs.existsSync(m.file))) musicTrack.ensure('music', true, retry);
+  }
+  let musicHad = null;
+  const musicTrack = createMontages({
+    dir: musicDir,
+    games: [{ id: 'music', montage: MUSIC_TRACK }],
+    onChange: () => {
+      sendToPanels({ type: 'music', music: musicStatus() });
+      // Finished downloading: OBS can have the file now.
+      const has = musicTrack.has('music');
+      if (has !== musicHad) { musicHad = has; updateMusic(); }
+    },
+  });
 
   // Game montages (see montages.js). Every page gets the status: the panel
   // shows progress, the overlay needs to know which montages are playable.
@@ -720,11 +743,17 @@ function createServer(port, opts = {}) {
     }
     appSettings = { ...appSettings, music: m };
     writeJsonSafe(settingsFile, appSettings);
+    wantMusicTrack(body.file === '');
     // A volume change is a quick ramp; on/off is the usual slow fade.
     updateMusic(body.volume !== undefined && body.enabled === undefined ? 300 : undefined);
     const status = musicStatus();
     sendToPanels({ type: 'music', music: status });
     res.json(status);
+  });
+
+  app.post('/api/music/download', (req, res) => {
+    musicTrack.ensure('music', true, true);
+    res.json(musicStatus());
   });
 
   // --- Rocket League routes ---
@@ -923,6 +952,7 @@ function createServer(port, opts = {}) {
   wantMontage(draft.game);
   updateRlActive();
   updateMusic();
+  wantMusicTrack(false);
 
   return server;
 }
