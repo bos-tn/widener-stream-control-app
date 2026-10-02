@@ -1,6 +1,6 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Widener Esports stream overlay control app",
   "main": "main.js",
@@ -33,10 +33,17 @@
       "necc.js",
       "obs.js",
       "montages.js",
+      "rlstats.js",
       "package.json",
       "templates/**/*",
       "public/**/*",
       "build/icons/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/music",
+        "to": "music"
+      }
     ],
     "win": {
       "target": "nsis",

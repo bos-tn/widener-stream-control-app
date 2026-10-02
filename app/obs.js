@@ -35,6 +35,22 @@ const SCENES = [
   { view: 'necc',          scene: 'WU: NECC',          input: 'WU-src-necc' },
 ];
 
+// Background music (v0.11.0): ONE media source shared by every WU scene.
+// Because it is the same source everywhere, a scene switch never restarts it:
+// it keeps playing straight through transitions. It loops, doesn't restart
+// when a scene becomes active, and stays open while hidden. The app fades its
+// volume (fadeMusic) so it is only heard when no gameplay is on screen; that
+// is decided in server.js, since the Rocket League stats screens are inside
+// the same Scoreboard scene as the game.
+const MUSIC_INPUT = 'WU: Music';
+const MUSIC_OFF_DB = -60;
+function musicSettings(file) {
+  return {
+    is_local_file: true, local_file: file, looping: true,
+    restart_on_activate: false, close_when_inactive: false, clear_on_media_end: false,
+  };
+}
+
 function sceneForView(view) {
   return SCENES.find((s) => s.view === view) || null;
 }
@@ -67,6 +83,10 @@ function createObs(opts = {}) {
   let transitionName = '';      // '' -> leave OBS's current transition as-is
   let currentScene = '';
   let lastError = '';
+  // What the music should be doing; applied on connect, build and change.
+  let music = { file: '', db: -18, on: false };
+  let musicApplied = null;
+  let fadeTimer = null;
 
   obs.on('ConnectionClosed', () => {
     const was = connected;
@@ -126,6 +146,8 @@ function createObs(opts = {}) {
         const r = await obs.call('GetCurrentProgramScene');
         currentScene = r.currentProgramSceneName || r.sceneName || '';
       } catch (e) { /* non-fatal */ }
+      musicApplied = null;
+      applyMusic(0).catch(() => {});
       return status();
     } catch (e) {
       connected = false;
@@ -246,7 +268,78 @@ function createObs(opts = {}) {
       }
       built.push(t.scene);
     }
+
+    // The shared music source, added to every scene above. Created silent;
+    // applyMusic() then fades it to wherever it should be.
+    if (music.file) {
+      if (!existingInputs.has(MUSIC_INPUT)) {
+        await obs.call('CreateInput', {
+          sceneName: SCENES[0].scene, inputName: MUSIC_INPUT, inputKind: 'ffmpeg_source',
+          inputSettings: musicSettings(music.file), sceneItemEnabled: true,
+        });
+        existingInputs.add(MUSIC_INPUT);
+        try { await obs.call('SetInputVolume', { inputName: MUSIC_INPUT, inputVolumeDb: MUSIC_OFF_DB }); } catch (e) { /* non-fatal */ }
+      } else {
+        await obs.call('SetInputSettings', { inputName: MUSIC_INPUT, inputSettings: musicSettings(music.file), overlay: true });
+      }
+      for (const t of SCENES) {
+        try { await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: MUSIC_INPUT }); }
+        catch (e) { await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: MUSIC_INPUT, sceneItemEnabled: true }); }
+      }
+      built.push(MUSIC_INPUT);
+      musicApplied = null;
+      applyMusic(0).catch(() => {});
+    }
     return { built };
+  }
+
+  // Fade the music source to a level in dB (null = silent) over `ms`. Steps
+  // in dB, so it sounds even; the last step of a fade-out is a true zero.
+  async function fadeMusic(toDb, ms) {
+    let from;
+    try { from = (await obs.call('GetInputVolume', { inputName: MUSIC_INPUT })).inputVolumeDb; }
+    catch (e) { return false; } // no music source (scenes not built yet)
+    if (!Number.isFinite(from)) from = MUSIC_OFF_DB;
+    const target = toDb === null ? MUSIC_OFF_DB : toDb;
+    clearInterval(fadeTimer);
+    const steps = Math.max(1, Math.round(ms / 50));
+    let i = 0;
+    const step = () => {
+      i++;
+      const done = i >= steps;
+      const vol = done && toDb === null ? { inputVolumeMul: 0 } : { inputVolumeDb: from + (target - from) * (i / steps) };
+      obs.call('SetInputVolume', { inputName: MUSIC_INPUT, ...vol }).catch(() => {});
+      if (done) clearInterval(fadeTimer);
+    };
+    if (steps === 1) step(); else fadeTimer = setInterval(step, 50);
+    return true;
+  }
+
+  // Bring OBS in line with `music`: the right file, playing, at the right
+  // level. Skips anything that hasn't changed since the last call.
+  async function applyMusic(ms = 1500) {
+    if (!connected) return;
+    const want = { file: music.file, level: music.on ? music.db : null };
+    const was = musicApplied;
+    musicApplied = want;
+    try {
+      if (music.file && (!was || was.file !== music.file)) {
+        await obs.call('SetInputSettings', { inputName: MUSIC_INPUT, inputSettings: musicSettings(music.file), overlay: true });
+      }
+      if (music.on) {
+        const st = await obs.call('GetMediaInputStatus', { inputName: MUSIC_INPUT });
+        if (st.mediaState !== 'OBS_MEDIA_STATE_PLAYING') {
+          await obs.call('TriggerMediaInputAction', { inputName: MUSIC_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY' });
+        }
+      }
+    } catch (e) { musicApplied = null; return; } // source missing: nothing to do until scenes are built
+    if (!was || was.level !== want.level) await fadeMusic(want.level, ms);
+  }
+
+  // Server -> desired music state. `fadeMs` is shorter for volume tweaks.
+  function setMusic(next, fadeMs) {
+    music = { ...music, ...next };
+    return applyMusic(fadeMs).catch(() => {});
   }
 
   // Which of our target scenes currently exist in OBS (for status display).
@@ -322,7 +415,7 @@ function createObs(opts = {}) {
 
   return {
     connect, disconnect, setSettings, status, inspect,
-    buildScenes, switchToView, onPush, listTransitions,
+    buildScenes, switchToView, onPush, listTransitions, setMusic,
     isSceneSync: () => sceneSync && connected,
   };
 }

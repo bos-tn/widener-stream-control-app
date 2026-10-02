@@ -12,6 +12,13 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["app/server.js"],
       "port": 4311
+    },
+    {
+      "name": "stream-app-rl-mock",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/server.js"],
+      "env": { "PORT": "4312", "WIDENER_RL_PORT": "49155" },
+      "port": 4312
     }
   ]
 }

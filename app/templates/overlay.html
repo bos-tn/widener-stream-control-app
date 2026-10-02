@@ -297,19 +297,23 @@
   .sb-preview-bg span{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:34px;
     letter-spacing:.14em; text-transform:uppercase; color:rgba(234,242,255,.18); }
 
+  /* Flat panel colours shared by every scoreboard part (v0.11.0 cleanup:
+     the earlier gradients, glows and deep soft shadows read as blurry over
+     gameplay). */
+  .sb-view{ --sb-panel:rgba(9,19,40,.96); --sb-dark:#050b1a; }
   .sb{
     --a:#0054B8; --b:#F0B310; --a-ink:#fff; --b-ink:#111;
     position:absolute; top:22px; left:50%; transform:translateX(-50%);
     display:grid; grid-template-columns:470px 96px 190px 96px 470px; grid-template-rows:76px auto;
     font-family:'Inter', system-ui, sans-serif; color:var(--text);
-    filter:drop-shadow(0 10px 22px rgba(0,0,0,.55));
+    filter:drop-shadow(0 3px 8px rgba(0,0,0,.4));
     animation: sb-drop .7s cubic-bezier(.22,1,.36,1) both;
   }
   @keyframes sb-drop{ from{ opacity:0; transform:translate(-50%,-40px) } to{ opacity:1; transform:translate(-50%,0) } }
 
   .sb-team{
     position:relative; display:flex; align-items:center; gap:14px; min-width:0;
-    background:linear-gradient(180deg, rgba(14,26,52,.94), rgba(7,16,34,.94));
+    background:var(--sb-panel);
     padding:0 22px 0 40px;
     clip-path:polygon(26px 0, 100% 0, 100% 100%, 0 100%);
   }
@@ -345,7 +349,7 @@
 
   .sb-mid{
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
-    background:linear-gradient(180deg, #0a1b36, #050a18); border-bottom:4px solid var(--widener-gold);
+    background:var(--sb-dark); border-bottom:3px solid var(--widener-gold);
   }
   .sb-set{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
   .sb-bo{ font-weight:700; font-size:12px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
@@ -355,7 +359,7 @@
     grid-column:3; grid-row:2; justify-self:center; align-self:start;
     white-space:nowrap; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis;
     padding:7px 20px 8px; font-weight:800; font-size:13px; letter-spacing:.16em; text-transform:uppercase;
-    background:linear-gradient(90deg, var(--widener-blue), #0069e6); color:#fff;
+    background:var(--widener-blue); color:#fff;
     clip-path:polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%);
   }
   .sb-round:empty{ display:none; }
@@ -378,12 +382,12 @@
     padding:6px 8px 7px; background:rgba(7,16,34,.86); border-radius:8px;
     border-top:3px solid transparent; transition:opacity .3s, border-color .3s;
   }
-  .sb-chip.active{ border-top-color:var(--widener-gold); background:rgba(14,30,62,.95); box-shadow:0 0 18px rgba(240,179,16,.25); }
+  .sb-chip.active{ border-top-color:var(--widener-gold); background:rgba(14,30,62,.96); }
   .sb-chip.gone{ opacity:.38; }
   .sb-chip.gone .sb-pname{ text-decoration:line-through; }
   .sb-pname{ font-weight:700; font-size:17px; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sb-pips{ display:flex; gap:5px; }
-  .sb-pip{ width:15px; height:15px; border-radius:50%; background:var(--c); box-shadow:0 0 6px var(--c); }
+  .sb-pip{ width:15px; height:15px; border-radius:50%; background:var(--c); }
   .sb-pip.lost{ background:transparent; box-shadow:inset 0 0 0 2px rgba(234,242,255,.3); }
   .sb-pip.pop{ animation: sb-pop .7s ease-out; }
   @keyframes sb-pop{ 0%{ transform:scale(1.9); background:#fff; box-shadow:0 0 16px #fff } 100%{ transform:scale(1) } }
@@ -392,7 +396,7 @@
   .sbc{
     display:none; position:absolute; width:420px;
     font-family:'Inter', system-ui, sans-serif; color:var(--text);
-    filter:drop-shadow(0 10px 22px rgba(0,0,0,.55));
+    filter:drop-shadow(0 3px 8px rgba(0,0,0,.4));
     animation: sbc-in .6s cubic-bezier(.22,1,.36,1) both;
   }
   .sb-view.compact .sbc{ display:block; }
@@ -403,14 +407,14 @@
   @keyframes sbc-in{ from{ opacity:0; transform:translateY(-14px) } to{ opacity:1; transform:none } }
   .sbc-head{
     display:flex; justify-content:space-between; align-items:center;
-    padding:8px 14px; background:linear-gradient(90deg, #0a1b36, #050a18);
-    border-bottom:3px solid var(--widener-gold); border-radius:10px 10px 0 0;
+    padding:8px 14px; background:var(--sb-dark);
+    border-bottom:3px solid var(--widener-gold); border-radius:6px 6px 0 0;
   }
   .sbc-set{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:20px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
   .sbc-bo{ font-weight:700; font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
   .sbc-row{ display:flex; align-items:center; gap:12px; height:56px; padding-left:0; background:rgba(7,16,34,.92); }
   .sbc-row + .sbc-row{ border-top:1px solid rgba(255,255,255,.07); }
-  .sbc-row:last-of-type{ border-radius:0 0 10px 10px; overflow:hidden; }
+  .sbc-row:last-of-type{ border-radius:0 0 6px 6px; overflow:hidden; }
   .sbc.has-round .sbc-row:last-of-type{ border-radius:0; }
   .sbc-bar{ align-self:stretch; width:8px; background:var(--c); flex-shrink:0; }
   .sbc-logo{ width:36px; height:36px; border-radius:8px; object-fit:cover; flex-shrink:0; }
@@ -424,9 +428,223 @@
     background:var(--c); color:var(--ink); }
   .sbc-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
   .sbc-round{ padding:7px 14px 8px; font-weight:800; font-size:12px; letter-spacing:.18em; text-transform:uppercase;
-    background:linear-gradient(90deg, var(--widener-blue), #0069e6); color:#fff; border-radius:0 0 10px 10px;
+    background:var(--widener-blue); color:#fff; border-radius:0 0 6px 6px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sbc-round:empty{ display:none; }
+
+  /* Rocket League (v0.11.0, scoreboard style 'rl'). Its own board rather
+     than the wide name bar: a compact centre box (round strip, logos, goal
+     boxes, a white clock, series pips) with flat, square-edged panels, plus
+     each team's boost rows on the screen edges, a goal banner, the boost
+     meter, and two full-screen screens: post-game stats and the series
+     overview (.rls). Everything reads Rocket League's Stats API through the
+     server (rlstats.js); see the Rocket League section of the script. */
+  .rl-only{ display:none; }
+  .sb-view.rl .sb{ display:none; }
+  .sb-view.rl .rl-only{ display:block; }
+  .rl-only{ --rl-ink:#071022; --rl-white:#f3f6fb; }
+
+  .rlb{ position:absolute; top:18px; left:50%; transform:translateX(-50%); width:640px;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); animation: rlb-in .5s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes rlb-in{ from{ opacity:0; transform:translate(-50%,-24px) } to{ opacity:1; transform:translate(-50%,0) } }
+  .rlb-top{ height:34px; display:flex; align-items:center; justify-content:center; gap:14px;
+    background:var(--sb-dark); color:#c9d6ee; font-family:'Kanit', system-ui, sans-serif; font-weight:700;
+    font-size:17px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; overflow:hidden; }
+  .rlb-top i{ width:2px; height:16px; background:rgba(234,242,255,.35); }
+  .rlb-main{ display:grid; grid-template-columns:112px 100px 216px 100px 112px; height:86px; }
+  .rlb-team{ display:grid; place-items:center; background:var(--sb-panel); border-bottom:4px solid var(--c); }
+  .rlb-team img{ width:68px; height:68px; object-fit:contain; }
+  .rlb-team img[hidden]{ display:none; }
+  .rlb-team b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.02em; }
+  .rlb-score{ display:grid; place-items:center; background:var(--c); color:var(--ink);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:64px; line-height:1; font-variant-numeric:tabular-nums; }
+  .rlb-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
+  .rlb-clock{ display:grid; place-items:center; background:var(--rl-white); color:var(--rl-ink);
+    border-bottom:4px solid var(--widener-gold); font-family:'Kanit', system-ui, sans-serif; font-weight:800;
+    font-size:60px; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:.01em; transition:background .2s, color .2s; }
+  .rlb-clock.ot{ background:var(--widener-gold); border-bottom-color:var(--rl-ink); }
+  .rlb-clock.word{ font-size:34px; letter-spacing:.14em; text-transform:uppercase; }
+  .rlb-clock.replay{ background:var(--widener-blue); color:#fff; }
+  .rlb-clock.paused{ background:#2c3954; color:#fff; }
+  .rlb-foot{ display:grid; grid-template-columns:112px 208px 208px 112px; height:28px; }
+  .rlb-abbr{ display:grid; place-items:center; background:var(--sb-dark); font-family:'Kanit', system-ui, sans-serif;
+    font-weight:700; font-size:16px; letter-spacing:.14em; color:#c9d6ee; text-transform:uppercase; white-space:nowrap; overflow:hidden; }
+  .rlb-pips{ display:flex; align-items:center; gap:6px; padding:0 10px; background:var(--sb-dark); }
+  .rlb-pips.left{ justify-content:flex-end; }
+  .rlb-pips i{ width:34px; height:7px; background:var(--c); }
+  .rlb-pips i.empty{ background:rgba(234,242,255,.14); }
+
+  /* Each team's players on its screen edge: name, boost number, boost bar.
+     The player the camera follows is filled with the team colour. */
+  .rl-team{ position:absolute; top:18px; width:330px; display:flex; flex-direction:column; gap:3px;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.4)); transition:opacity .3s, transform .35s cubic-bezier(.22,1,.36,1); }
+  .rl-team.left{ left:0; }
+  .rl-team.right{ right:0; }
+  .rl-team.off{ opacity:0; }
+  .rl-team.left.off{ transform:translateX(-30px); }
+  .rl-team.right.off{ transform:translateX(30px); }
+  .rl-p{ position:relative; height:44px; display:flex; align-items:center; gap:10px; padding:0 18px 4px 20px;
+    background:rgba(5,11,26,.88); transition:opacity .3s, background .2s; }
+  .rl-team.right .rl-p{ flex-direction:row-reverse; }
+  .rl-p-name{ flex:1 1 auto; min-width:0; font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:21px;
+    text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rl-team.right .rl-p-name{ text-align:right; }
+  .rl-p-num{ flex:0 0 auto; min-width:40px; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px;
+    font-variant-numeric:tabular-nums; text-align:right; }
+  .rl-team.right .rl-p-num{ text-align:left; }
+  .rl-p-bar{ position:absolute; left:0; right:0; bottom:0; height:4px; background:rgba(255,255,255,.07); }
+  .rl-p-bar b{ position:absolute; top:0; bottom:0; left:0; width:0; background:var(--c); transition:width .12s linear; }
+  .rl-team.right .rl-p-bar b{ left:auto; right:0; }
+  .rl-p.full .rl-p-bar b{ background:var(--widener-gold); }
+  .rl-p.target{ background:var(--c); color:var(--ink); }
+  .rl-p.target .rl-p-bar{ background:rgba(0,0,0,.22); }
+  .rl-p.target .rl-p-bar b{ background:var(--rl-white); }
+  .rl-p.dead{ opacity:.4; }
+
+  /* Goal banner under the board. */
+  .rl-goal{ position:absolute; top:186px; left:50%; display:flex; align-items:stretch; height:50px;
+    transform:translateX(-50%); filter:drop-shadow(0 4px 10px rgba(0,0,0,.45));
+    opacity:0; transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); pointer-events:none; }
+  .rl-goal.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .rl-goal:not(.show){ transform:translateX(-50%) translateY(-12px); }
+  .rl-goal-tag{ display:grid; place-items:center; padding:0 22px; background:var(--c); color:var(--ink);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:27px; letter-spacing:.14em; }
+  .rl-goal-body{ display:flex; align-items:center; gap:20px; padding:0 24px;
+    background:var(--sb-panel); border-bottom:3px solid var(--widener-gold); white-space:nowrap; }
+  .rl-goal-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:26px; text-transform:uppercase; letter-spacing:.02em; }
+  .rl-goal-meta{ font-weight:700; font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+  .rl-goal-meta b{ color:var(--text); }
+  .rl-goal-meta:empty{ display:none; }
+
+  /* While a stats screen is up, the in-game parts step aside. */
+  .sb-view.rls-on .rlb, .sb-view.rls-on .rl-team, .sb-view.rls-on .rl-goal,
+  .sb-view.rls-on .rl-boost, .sb-view.rls-on .rl-sample{ visibility:hidden; }
+
+  /* Full-screen stats screens: one game's stats, and the series overview.
+     Opaque, so they cover the game capture. Widener stripes and a big faint
+     W in the background, square-edged panels in front. */
+  .rls{ display:none; position:absolute; inset:0; overflow:hidden; color:var(--text);
+    background:
+      repeating-linear-gradient(-12deg, rgba(0,84,184,.07) 0 18px, transparent 18px 48px, rgba(240,179,16,.035) 48px 66px, transparent 66px 96px),
+      linear-gradient(180deg, #081226 0%, #040812 100%); }
+  .rls.on{ display:block; animation: rls-in .55s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes rls-in{ from{ clip-path:inset(0 0 100% 0) } to{ clip-path:inset(0 0 0 0) } }
+  .rls.on.cut{ animation:none; }
+  .rls::before{ content:""; position:absolute; right:-80px; bottom:-120px; width:760px; height:760px; background:#eaf2ff; opacity:.025;
+    -webkit-mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; }
+  .rls > *{ position:relative; }
+
+  .rls-head{ position:absolute; top:58px; left:50%; transform:translateX(-50%); width:1720px; }
+  .rls-top{ height:46px; display:flex; align-items:center; justify-content:center; gap:16px; background:var(--sb-dark);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:24px; letter-spacing:.18em; text-transform:uppercase; color:#c9d6ee; }
+  .rls-top i{ width:2px; height:22px; background:rgba(234,242,255,.35); }
+  .rls-row{ display:grid; grid-template-columns:1fr 116px 116px 236px 116px 116px 1fr; height:112px; }
+  .rls-name{ position:relative; display:flex; align-items:center; justify-content:center; padding:0 30px; min-width:0;
+    background:var(--sb-panel); border-bottom:6px solid var(--c); }
+  .rls-name span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:50px; text-transform:uppercase;
+    letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .rls-name.win::before{ content:"Winner"; position:absolute; top:-30px; padding:4px 14px; background:var(--widener-gold); color:var(--rl-ink);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:16px; letter-spacing:.2em; text-transform:uppercase; }
+  .rls-logo{ display:grid; place-items:center; background:var(--sb-dark); }
+  .rls-logo img{ width:88px; height:88px; object-fit:contain; }
+  .rls-logo img[hidden]{ display:none; }
+  .rls-logo b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:36px; }
+  .rls-score{ display:grid; place-items:center; background:var(--c); color:var(--ink); font-family:'Kanit', system-ui, sans-serif;
+    font-weight:800; font-size:84px; line-height:1; font-variant-numeric:tabular-nums; }
+  .rls-center{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    background:var(--rl-white); color:var(--rl-ink); border-bottom:6px solid var(--widener-gold); }
+  .rls-center small{ font-weight:800; font-size:15px; letter-spacing:.24em; text-transform:uppercase; color:#46546e; }
+  .rls-center b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:46px; line-height:.95; text-transform:uppercase; letter-spacing:.02em; }
+  .rls-pips{ display:flex; justify-content:center; gap:22px; margin-top:12px; }
+  .rls-pips span{ display:flex; gap:8px; }
+  .rls-pips i{ width:54px; height:9px; background:var(--c); }
+  .rls-pips i.empty{ background:rgba(234,242,255,.14); }
+
+  /* The stats table: one column per player, labels and team-total bars in
+     the middle. Built as one grid so every row lines up across both teams. */
+  .rls-grid{ position:absolute; left:50%; transform:translateX(-50%); display:grid; justify-content:center;
+    grid-auto-rows:var(--rh); --rh:94px; --hh:92px; }
+  .rls-grid > .h{ height:var(--hh); }
+  .rls-pname{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding:0 8px 12px;
+    border-bottom:5px solid var(--c); min-width:0; }
+  .rls-pname span{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:28px; text-transform:uppercase;
+    letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .rls-pname em{ visibility:hidden; margin-bottom:8px; padding:3px 12px; background:var(--widener-gold); color:var(--rl-ink); font-style:normal;
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:15px; letter-spacing:.2em; }
+  .rls-pname.mvp em{ visibility:visible; }
+  .rls-cell{ display:grid; place-items:center; margin:0 7px; background:rgba(5,11,26,.82);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:48px; font-variant-numeric:tabular-nums; }
+  .rls-cell.first{ margin-top:14px; }
+  .rls-cell.last{ border-bottom:4px solid var(--c); }
+  .rls-cell.mvp{ color:var(--widener-gold); }
+  .rls-label{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:0 30px; }
+  .rls-label.first{ margin-top:14px; }
+  .rls-label span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:32px; letter-spacing:.06em; text-transform:uppercase; }
+  .rls-bar{ position:relative; display:flex; width:100%; height:7px; }
+  .rls-bar b{ height:100%; }
+  .rls-bar i{ position:absolute; top:-4px; width:3px; height:15px; background:var(--rl-white); transform:translateX(-50%); }
+  .rls-grid.compact{ --rh:70px; --hh:82px; }
+  .rls-grid.compact .rls-cell{ font-size:36px; }
+  .rls-grid.compact .rls-label span{ font-size:24px; }
+  .rls-grid.compact .rls-label{ gap:7px; }
+  .rls-grid.compact .rls-pname span{ font-size:24px; }
+
+  /* Series overview: one card per game above the series totals. */
+  .rls-games{ position:absolute; top:330px; left:50%; transform:translateX(-50%); display:flex; gap:12px; }
+  .rls-game{ width:186px; padding:12px 0 10px; display:flex; flex-direction:column; align-items:center; gap:4px;
+    background:rgba(5,11,26,.86); border-bottom:5px solid var(--c); }
+  .rls-game small{ font-weight:800; font-size:13px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
+  .rls-game b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:40px; line-height:1; font-variant-numeric:tabular-nums; }
+  .rls-game b u{ text-decoration:none; color:var(--muted); }
+  .rls-game b u.w{ color:var(--text); }
+  .rls-game em{ font-style:normal; font-weight:700; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+    max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rls-subtitle{ position:absolute; left:50%; transform:translateX(-50%); font-family:'Kanit', system-ui, sans-serif; font-weight:700;
+    font-size:20px; letter-spacing:.24em; text-transform:uppercase; color:#c9d6ee; white-space:nowrap; }
+
+  /* Boost meter for the player the camera follows: a gauge in the corner
+     with a faint Widener W behind the number, and that player's name and
+     stats on a plate tucked behind it. */
+  .rl-boost{ position:absolute; right:32px; bottom:28px; width:500px; height:184px; pointer-events:none;
+    transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); }
+  .rl-boost.off{ opacity:0; transform:translateY(16px); }
+  .rl-card{ position:absolute; right:168px; bottom:24px; width:322px; filter:drop-shadow(0 3px 8px rgba(0,0,0,.4)); }
+  .rl-card-name{ position:relative; height:42px; display:flex; align-items:center; padding:0 34px 0 30px;
+    background:var(--sb-panel); clip-path:polygon(16px 0, 100% 0, 100% 100%, 0 100%); }
+  .rl-card-name::before{ content:""; position:absolute; top:0; bottom:0; left:0; width:26px; background:var(--c);
+    clip-path:polygon(16px 0, 22px 0, 6px 100%, 0 100%); }
+  .rl-card-name span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px; text-transform:uppercase;
+    letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rl-card-stats{ display:flex; height:38px; margin-left:16px; padding-right:34px;
+    background:var(--sb-dark); border-bottom:3px solid var(--widener-gold); }
+  .rl-card-stats span{ flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
+  .rl-card-stats span + span{ border-left:1px solid rgba(255,255,255,.08); }
+  .rl-card-stats b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:18px; line-height:1; font-variant-numeric:tabular-nums; }
+  .rl-card-stats small{ font-size:8.5px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
+  .rl-gauge{ position:absolute; right:0; bottom:0; width:184px; height:184px; filter:drop-shadow(0 3px 8px rgba(0,0,0,.45)); }
+  .rl-gauge svg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .rl-g-disc{ fill:rgba(7,15,32,.97); }
+  .rl-g-rim{ fill:none; stroke:url(#rlg-rim); stroke-width:2; }
+  /* The watermark: the Widener W as a flat silhouette, barely there. */
+  .rl-g-mark{ position:absolute; left:50%; top:50%; width:104px; height:104px; transform:translate(-50%, -54%);
+    background:#eaf2ff; opacity:.06;
+    -webkit-mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat;
+    mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; }
+  .rl-g-track, .rl-g-fill{ fill:none; stroke-width:10; transform:rotate(135deg); transform-origin:92px 92px; }
+  .rl-g-track{ stroke:rgba(255,255,255,.07); stroke-dasharray:75 100; }
+  .rl-g-fill{ stroke:var(--c); stroke-dasharray:0 100; transition:stroke-dasharray .12s linear, stroke .2s; }
+  .rl-g-fill.zero{ opacity:0; }
+  .rl-boost.full .rl-g-fill{ stroke:var(--widener-gold); }
+  .rl-g-tick{ stroke:rgba(234,242,255,.28); stroke-width:1.5; }
+  .rl-g-tick.major{ stroke:rgba(234,242,255,.55); stroke-width:2; }
+  .rl-g-num{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding-bottom:4px; }
+  .rl-g-num b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:62px; line-height:.9;
+    font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .rl-g-num small{ margin-top:5px; font-weight:800; font-size:10px; letter-spacing:.32em; text-transform:uppercase; color:var(--widener-gold); }
+  /* Only in the preview, when the game isn't sending a match. */
+  .rl-sample{ position:absolute; left:50%; bottom:40px; transform:translateX(-50%); padding:8px 16px; border-radius:8px;
+    background:rgba(0,0,0,.55); color:var(--muted); font-weight:700; font-size:16px; letter-spacing:.06em; }
+  .rl-sample[hidden]{ display:none; }
 
   /* NECC graphics load from LeagueOS and can take a while (or never arrive).
      Show a spinner instead of an empty frame until the page loads; in the
@@ -540,6 +758,60 @@
         <div class="sb-crew side-left" id="sbL-crew"></div>
         <div class="sb-round" id="sb-round"></div>
         <div class="sb-crew side-right" id="sbR-crew"></div>
+      </div>
+      <div class="rl-only">
+        <div class="rlb" id="rlb">
+          <div class="rlb-top" id="rlb-top"></div>
+          <div class="rlb-main">
+            <div class="rlb-team" id="rlbL-team"><img id="rlbL-logo" alt="" hidden><b id="rlbL-mono"></b></div>
+            <div class="rlb-score" id="rlbL-score">0</div>
+            <div class="rlb-clock" id="rlb-clock">5:00</div>
+            <div class="rlb-score" id="rlbR-score">0</div>
+            <div class="rlb-team" id="rlbR-team"><img id="rlbR-logo" alt="" hidden><b id="rlbR-mono"></b></div>
+          </div>
+          <div class="rlb-foot">
+            <span class="rlb-abbr" id="rlbL-abbr"></span>
+            <span class="rlb-pips left" id="rlbL-pips"></span>
+            <span class="rlb-pips right" id="rlbR-pips"></span>
+            <span class="rlb-abbr" id="rlbR-abbr"></span>
+          </div>
+        </div>
+        <div class="rl-team left off" id="rlL-team"></div>
+        <div class="rl-team right off" id="rlR-team"></div>
+        <div class="rl-goal" id="rl-goal">
+          <div class="rl-goal-tag">GOAL</div>
+          <div class="rl-goal-body"><span class="rl-goal-name" id="rl-goal-name"></span><span class="rl-goal-meta" id="rl-goal-meta"></span></div>
+        </div>
+        <div class="rl-boost off" id="rl-boost">
+          <div class="rl-card">
+            <div class="rl-card-name"><span id="rlb-name"></span></div>
+            <div class="rl-card-stats">
+              <span><b id="rlb-goals">0</b><small>Goals</small></span>
+              <span><b id="rlb-assists">0</b><small>Assists</small></span>
+              <span><b id="rlb-saves">0</b><small>Saves</small></span>
+              <span><b id="rlb-shots">0</b><small>Shots</small></span>
+            </div>
+          </div>
+          <div class="rl-gauge">
+            <svg viewBox="0 0 184 184" aria-hidden="true">
+              <defs>
+                <linearGradient id="rlg-rim" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#0054B8"/><stop offset="1" stop-color="#F0B310"/>
+                </linearGradient>
+              </defs>
+              <circle class="rl-g-disc" cx="92" cy="92" r="90"/>
+              <circle class="rl-g-rim" cx="92" cy="92" r="90"/>
+              <g id="rlg-ticks"></g>
+              <circle class="rl-g-track" cx="92" cy="92" r="68" pathLength="100"/>
+              <circle class="rl-g-fill" id="rlg-fill" cx="92" cy="92" r="68" pathLength="100"/>
+            </svg>
+            <i class="rl-g-mark"></i>
+            <div class="rl-g-num"><b id="rlb-num">0</b><small>Boost</small></div>
+          </div>
+        </div>
+        <div class="rl-sample" id="rl-sample" hidden>Sample data: Rocket League is not sending a match</div>
+        <div class="rls" id="rls-game"><div class="rls-head"></div><div class="rls-grid"></div></div>
+        <div class="rls" id="rls-series"><div class="rls-head"></div><div class="rls-games"></div><div class="rls-subtitle">Series totals</div><div class="rls-grid compact"></div></div>
       </div>
       <div class="sbc" id="sbc">
         <div class="sbc-head"><span class="sbc-set" id="sbc-set">Game 1</span><span class="sbc-bo" id="sbc-bo">Best of 3</span></div>
@@ -806,7 +1078,11 @@
   }
   // Kanit arrives asynchronously; a width measured against the fallback font
   // would size the headline wrongly, so re-fit once the real font is ready.
-  if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitBrbHeadline);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+    fitBrbHeadline();
+    // Team names are fitted against the real font too.
+    if(lastState) renderScoreboard(lastState);
+  });
 
   // Social pills, built from the same socials object every other view uses so
   // there is one place to edit handles. Blank handles are skipped.
@@ -881,6 +1157,18 @@
     }
   }
 
+  // "Rowan University" becomes "Rowan" when the full name doesn't fit its
+  // box. Only a trailing University is dropped, and only when needed, so
+  // names that fit are shown exactly as entered. Measured live, so it needs
+  // the view visible and the real font loaded (both re-run this).
+  const UNI_SUFFIX = /\s+(University|Univ\.?)\s*$/i;
+  function fitTeamName(el, name, extra){
+    const set = (text) => { el.textContent = text; if(extra) el.appendChild(extra); };
+    set(name);
+    const short = name.replace(UNI_SUFFIX, '').trim();
+    if(short && short !== name && el.scrollWidth > el.clientWidth + 1) set(short);
+  }
+
   function bump(el){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 
   function renderScoreboard(state){
@@ -895,6 +1183,9 @@
       A: { team: state.teamA || {}, score: clampInt(sm.scoreA, 0, 99, 0), lost: clampInt(sm.lostA, 0, total, 0) },
       B: { team: state.teamB || {}, score: clampInt(sm.scoreB, 0, 99, 0), lost: clampInt(sm.lostB, 0, total, 0) },
     };
+    const isRl = sm.style === 'rl';
+    sbView.classList.toggle('rl', isRl);
+    if(isRl){ renderRlBoard(state); return; }
     const colA = safeColor(t.A.team.color, '#0054B8');
     const colB = safeColor(t.B.team.color, '#F0B310');
     [$('#sb'), $('#sbc')].forEach((box) => {
@@ -924,7 +1215,7 @@
       if(logoSrc){ if(logo.getAttribute('src') !== logoSrc) logo.src = logoSrc; logo.hidden = false; }
       else { logo.removeAttribute('src'); logo.hidden = true; }
       $('#sb' + slot + '-tag').textContent = d.team.tag || '';
-      $('#sb' + slot + '-name').textContent = name;
+      fitTeamName($('#sb' + slot + '-name'), name);
       const scoreEl = $('#sb' + slot + '-score');
       scoreEl.className = 'sb-score ' + side;
       scoreEl.textContent = String(d.score);
@@ -937,13 +1228,12 @@
       const clogo = $('#sbc' + slot + '-logo');
       if(logoSrc){ if(clogo.getAttribute('src') !== logoSrc) clogo.src = logoSrc; clogo.hidden = false; }
       else { clogo.removeAttribute('src'); clogo.hidden = true; }
-      const cname = $('#sbc' + slot + '-name');
-      cname.textContent = name;
+      let st = null;
       if(showStocks){
-        const st = document.createElement('small');
+        st = document.createElement('small');
         st.textContent = (total - d.lost) + ' stocks';
-        cname.appendChild(st);
       }
+      fitTeamName($('#sbc' + slot + '-name'), name, st);
       const cscore = $('#sbc' + slot + '-score');
       cscore.textContent = String(d.score);
       if(scoreChanged) bump(cscore);
@@ -961,6 +1251,441 @@
     $('#sbc-bo').textContent = 'Best of ' + bestOf;
     $('#sb-round').textContent = sm.round || '';
     $('#sbc-round').textContent = sm.round || '';
+  }
+
+  // --- Rocket League live data (v0.11.0) ------------------------------------
+  // The server forwards Rocket League's Stats API as {type:'rl'} snapshots
+  // (see rlstats.js). They are not part of live/draft state: the preview and
+  // the stream both show the same game. Team 0 (blue) is the left side.
+  const RL_BLUE = '#2D7DFF';
+  const RL_ORANGE = '#F07A16';
+  let rlCols = [RL_BLUE, RL_ORANGE];
+  let rlSnap = null;
+  // Recorded games and which screen is up, from the server (rlSeries).
+  let rlSeriesData = { games: [] };
+  let rlScreenState = { screen: 'live', game: -1 };
+
+  function rlOther(key){ return key === 'A' ? 'B' : 'A'; }
+  function rlBlueKey(sm){ return sm.swap ? 'B' : 'A'; }
+  // A roster team as the Rocket League screens show it. Without a tag, the
+  // initials stand in (a trailing "University" doesn't count).
+  function rlTeam(key){
+    const team = (lastState && (key === 'A' ? lastState.teamA : lastState.teamB)) || {};
+    const name = team.name || ('Team ' + key);
+    const initials = name.replace(UNI_SUFFIX, '').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 4);
+    return {
+      name,
+      tag: (team.tag || initials || key).toUpperCase(),
+      logo: team.logoUrl ? mediaUrl(team.logoUrl) : '',
+      color: safeColor(team.color, key === 'A' ? '#0054B8' : '#F0B310'),
+    };
+  }
+  // Colour for a roster team playing on a side (0 blue, 1 orange): the car
+  // colour, or the team's own colour when the board is set to use those.
+  function rlColor(key, side){
+    const sm = (lastState && lastState.scoreboard) || {};
+    if(sm.rlGameColors !== false) return side === 0 ? RL_BLUE : RL_ORANGE;
+    return rlTeam(key).color;
+  }
+  function setLogo(img, mono, team){
+    if(team.logo){ if(img.getAttribute('src') !== team.logo) img.src = team.logo; img.hidden = false; mono.textContent = ''; }
+    else { img.removeAttribute('src'); img.hidden = true; mono.textContent = team.tag; }
+  }
+  // Series pips: one per win needed, filled from the centre outwards.
+  function fillPips(el, won, need, fromRight){
+    if(el.children.length !== need) el.innerHTML = '<i></i>'.repeat(need);
+    Array.from(el.children).forEach((pip, i) => {
+      const fromCentre = fromRight ? need - 1 - i : i;
+      pip.classList.toggle('empty', fromCentre >= won);
+    });
+  }
+  function rlNeed(sm){ return Math.ceil(clampInt(sm.bestOf, 1, 9, 7) / 2); }
+
+  // The in-game board's settings side: teams, colours, series, labels. The
+  // live game side (goals, clock, players, boost) is renderRl().
+  function renderRlBoard(state){
+    const sm = state.scoreboard || {};
+    const blue = rlBlueKey(sm);
+    const keys = [blue, rlOther(blue)];
+    rlCols = [rlColor(keys[0], 0), rlColor(keys[1], 1)];
+    const need = rlNeed(sm);
+    const bestOf = clampInt(sm.bestOf, 1, 9, 7);
+    const won = keys.map((k) => clampInt(sm['score' + k], 0, 99, 0));
+    ['L', 'R'].forEach((slot, i) => {
+      const team = rlTeam(keys[i]);
+      const col = rlCols[i];
+      [$('#rlb' + slot + '-team'), $('#rlb' + slot + '-score'), $('#rlb' + slot + '-pips')].forEach((el) => {
+        el.style.setProperty('--c', col); el.style.setProperty('--ink', inkFor(col));
+      });
+      setLogo($('#rlb' + slot + '-logo'), $('#rlb' + slot + '-mono'), team);
+      // Under a logo, the tag names it; without one the tag is already in
+      // the box, so it isn't repeated.
+      $('#rlb' + slot + '-abbr').textContent = team.logo ? team.tag : '';
+      fillPips($('#rlb' + slot + '-pips'), won[i], need, slot === 'L');
+    });
+    const decided = won[0] >= need || won[1] >= need;
+    const top = $('#rlb-top');
+    top.textContent = '';
+    const parts = [sm.round, decided ? 'Series final' : 'Game ' + Math.min(won[0] + won[1] + 1, bestOf), 'Best of ' + bestOf].filter(Boolean);
+    parts.forEach((part, i) => { if(i) top.appendChild(document.createElement('i')); top.append(part); });
+    renderRl();
+    renderRlScreens();
+  }
+  const rlPrevGoals = [null, null];
+  let rlGoalTimer = 0;
+
+  // What the preview shows when the game isn't sending a match, so the
+  // operator can see (and place) the board. Never shown on stream.
+  const RL_SAMPLE = {
+    sample: true, inMatch: true, clock: 187, overtime: false, replay: false, paused: false, target: '0:1',
+    teams: [{ score: 2 }, { score: 1 }],
+    players: [
+      { key: '0:1', name: 'Pride Lion', team: 0, boost: 64, goals: 1, assists: 1, saves: 2, shots: 3 },
+      { key: '0:2', name: 'Blue Hen', team: 0, boost: 100, goals: 1, assists: 0, saves: 0, shots: 2 },
+      { key: '0:3', name: 'Chester', team: 0, boost: 12, goals: 0, assists: 1, saves: 1, shots: 1 },
+      { key: '1:4', name: 'Opponent One', team: 1, boost: 33, goals: 1, assists: 0, saves: 1, shots: 2 },
+      { key: '1:5', name: 'Opponent Two', team: 1, boost: 0, demolished: true, goals: 0, assists: 1, saves: 0, shots: 0 },
+      { key: '1:6', name: 'Opponent Three', team: 1, boost: 78, goals: 0, assists: 0, saves: 3, shots: 1 },
+    ],
+  };
+
+  // Tick marks around the gauge, every 10 boost, built once.
+  (function buildGaugeTicks(){
+    const g = $('#rlg-ticks');
+    for(let v = 0; v <= 100; v += 10){
+      const a = (135 + 2.7 * v) * Math.PI / 180;
+      const major = v % 50 === 0;
+      const r1 = 77, r2 = major ? 84 : 81;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', 92 + r1 * Math.cos(a)); line.setAttribute('y1', 92 + r1 * Math.sin(a));
+      line.setAttribute('x2', 92 + r2 * Math.cos(a)); line.setAttribute('y2', 92 + r2 * Math.sin(a));
+      line.setAttribute('class', 'rl-g-tick' + (major ? ' major' : ''));
+      g.appendChild(line);
+    }
+  })();
+
+  function fmtClock(sec, overtime){
+    sec = Math.max(0, Math.round(sec || 0));
+    return (overtime ? '+' : '') + Math.floor(sec / 60) + ':' + pad(sec % 60);
+  }
+
+  function rlData(){
+    if(rlSnap && rlSnap.inMatch) return rlSnap;
+    return isPreview ? RL_SAMPLE : null;
+  }
+
+  // One team's player rows. Rows are rebuilt only when the players change;
+  // every packet after that just updates numbers and widths.
+  function renderRlTeam(el, players, col, targetKey, show){
+    el.classList.toggle('off', !show || !players.length);
+    el.style.setProperty('--c', col);
+    const sig = players.map((p) => p.key + '|' + p.name).join(',');
+    if(el.dataset.sig !== sig){
+      el.dataset.sig = sig;
+      el.innerHTML = '';
+      players.forEach(() => {
+        const row = document.createElement('div');
+        row.className = 'rl-p';
+        row.innerHTML = '<span class="rl-p-name"></span><span class="rl-p-num"></span><span class="rl-p-bar"><b></b></span>';
+        el.appendChild(row);
+      });
+    }
+    players.forEach((p, i) => {
+      const row = el.children[i];
+      const known = p.boost !== null && p.boost !== undefined;
+      row.querySelector('.rl-p-name').textContent = p.name;
+      row.querySelector('.rl-p-num').textContent = known ? String(p.boost) : '\u2013';
+      row.querySelector('.rl-p-bar b').style.width = (known ? p.boost : 0) + '%';
+      row.classList.toggle('full', p.boost === 100);
+      row.classList.toggle('target', p.key === targetKey);
+      row.classList.toggle('dead', !!p.demolished);
+    });
+  }
+
+  function renderRl(){
+    if(!lastState) return;
+    const sm = lastState.scoreboard || {};
+    if(sm.style !== 'rl') return;
+    const d = rlData();
+    $('#rl-sample').hidden = !(d && d.sample);
+
+    // This game's goals in the score boxes, with a bump on each goal.
+    ['L', 'R'].forEach((slot, i) => {
+      const goals = d && d.teams[i] ? d.teams[i].score : 0;
+      const el = $('#rlb' + slot + '-score');
+      if(el.textContent !== String(goals)){
+        el.textContent = String(goals);
+        if(d && rlPrevGoals[i] !== null && goals > rlPrevGoals[i]) bump(el);
+      }
+      rlPrevGoals[i] = d ? goals : null;
+    });
+
+    const clock = $('#rlb-clock');
+    let text = fmtClock(d ? d.clock : 300, d && d.overtime);
+    let state = '';
+    if(d && d.replay){ text = 'Replay'; state = 'replay'; }
+    else if(d && d.paused){ text = 'Paused'; state = 'paused'; }
+    clock.textContent = text;
+    clock.className = 'rlb-clock' + (state ? ' word ' + state : (d && d.overtime ? ' ot' : ''));
+
+    const players = d ? d.players : [];
+    const showPlayers = !!d && sm.rlPlayers !== false && !d.replay;
+    renderRlTeam($('#rlL-team'), players.filter((p) => p.team === 0), rlCols[0], d && d.target, showPlayers);
+    renderRlTeam($('#rlR-team'), players.filter((p) => p.team === 1), rlCols[1], d && d.target, showPlayers);
+
+    // Boost meter: the player the spectator camera is following. Hidden in
+    // replays and when nobody is followed (free cam, menus).
+    const box = $('#rl-boost');
+    const tp = d && d.target ? players.find((p) => p.key === d.target) : null;
+    const show = !!tp && sm.rlBoost !== false && !d.replay;
+    box.classList.toggle('off', !show);
+    if(!tp) return;
+    const known = tp.boost !== null && tp.boost !== undefined;
+    const boost = known ? tp.boost : 0;
+    const col = rlCols[tp.team] || RL_BLUE;
+    box.style.setProperty('--c', col);
+    box.classList.toggle('full', boost === 100);
+    box.classList.toggle('boosting', !!tp.boosting);
+    box.classList.toggle('sonic', !!tp.supersonic);
+    $('#rlb-num').textContent = known ? String(boost) : '\u2013';
+    const fill = $('#rlg-fill');
+    fill.style.strokeDasharray = (boost * 0.75) + ' 100';
+    fill.classList.toggle('zero', boost <= 0);
+    $('#rlb-name').textContent = tp.name;
+    $('#rlb-goals').textContent = String(tp.goals || 0);
+    $('#rlb-assists').textContent = String(tp.assists || 0);
+    $('#rlb-saves').textContent = String(tp.saves || 0);
+    $('#rlb-shots').textContent = String(tp.shots || 0);
+  }
+
+  // Goal banner: who scored and the assist.
+  function showRlGoal(ev){
+    if(!lastState || (lastState.scoreboard || {}).style !== 'rl' || !ev.scorer) return;
+    const banner = $('#rl-goal');
+    const col = rlCols[ev.team] || rlCols[0];
+    banner.style.setProperty('--c', col);
+    banner.style.setProperty('--ink', inkFor(col));
+    $('#rl-goal-name').textContent = ev.scorer.name;
+    const meta = $('#rl-goal-meta');
+    meta.textContent = '';
+    if(ev.assister){
+      meta.append('Assist ');
+      const b = document.createElement('b'); b.textContent = ev.assister.name; meta.append(b);
+    }
+    // Shot speed (ev.kph) is left off: the numbers didn't match the game in
+    // testing. The event still carries it if it's worked out later.
+    banner.classList.add('show');
+    clearTimeout(rlGoalTimer);
+    rlGoalTimer = setTimeout(() => banner.classList.remove('show'), 5500);
+  }
+
+  // --- Rocket League stats screens ------------------------------------------
+  // The server records every finished game (rl-series.json) and decides which
+  // screen is up: it cuts to a game's stats a few seconds after it ends, to
+  // the series overview once the series is won, and back to the live board
+  // when the next game loads. The panel can switch them by hand too.
+  const RL_STATS = [['score', 'Score'], ['goals', 'Goals'], ['assists', 'Assists'], ['shots', 'Shots'], ['saves', 'Saves'], ['demos', 'Demos']];
+  // Map codes from the Stats API ("EuroStadium_Night_P") to their names.
+  const RL_MAPS = {
+    stadium: 'DFH Stadium', eurostadium: 'Mannfield', park: 'Beckwith Park', trainstation: 'Urban Central',
+    utopiastadium: 'Utopia Coliseum', cs: 'Champions Field', wasteland: 'Wasteland', neotokyo: 'Neo Tokyo',
+    farm: 'Farmstead', underwater: 'AquaDome', arc: 'Starbase ARC', beach: 'Salty Shores', music: 'Neon Fields',
+    outlaw: 'Deadeye Canyon', street: 'Sovereign Heights',
+  };
+  function mapName(code){
+    const base = String(code || '').split('_')[0];
+    if(!base) return '';
+    return RL_MAPS[base.toLowerCase()] || base.replace(/([a-z])([A-Z])/g, '$1 $2');
+  }
+  function mk(tag, cls, text){
+    const n = document.createElement(tag);
+    if(cls) n.className = cls;
+    if(text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  // Header shared by both screens: names, logos, scores, centre box, pips.
+  function renderRlsHead(box, o){
+    box.innerHTML = '';
+    const top = mk('div', 'rls-top');
+    o.top.filter(Boolean).forEach((part, i) => { if(i) top.appendChild(mk('i')); top.append(part); });
+    const row = mk('div', 'rls-row');
+    const side = (s) => {
+      const t = o[s];
+      const name = mk('div', 'rls-name' + (t.win ? ' win' : ''));
+      const span = mk('span');
+      name.appendChild(span);
+      const logo = mk('div', 'rls-logo');
+      const img = mk('img'); img.alt = '';
+      const mono = mk('b');
+      logo.append(img, mono);
+      setLogo(img, mono, t.team);
+      const score = mk('div', 'rls-score', String(t.score));
+      [name, score].forEach((n) => { n.style.setProperty('--c', t.col); n.style.setProperty('--ink', inkFor(t.col)); });
+      return { name, span, logo, score, team: t.team };
+    };
+    const L = side('L'), R = side('R');
+    const center = mk('div', 'rls-center');
+    center.append(mk('small', '', o.small), mk('b', '', o.big));
+    row.append(L.name, L.logo, L.score, center, R.score, R.logo, R.name);
+    const pips = mk('div', 'rls-pips');
+    ['L', 'R'].forEach((s) => {
+      const span = mk('span');
+      span.style.setProperty('--c', o[s].col);
+      fillPips(span, o[s].won, o.need, s === 'L');
+      pips.appendChild(span);
+    });
+    box.append(top, row, pips);
+    // Names are fitted once they're in the page and measurable.
+    [L, R].forEach((t) => {
+      fitTeamName(t.span, t.team.name);
+      // Still too long: step the type down before the ellipsis kicks in.
+      for(let size = 50; size > 30 && t.span.scrollWidth > t.span.clientWidth + 1; size -= 2) t.span.style.fontSize = size + 'px';
+    });
+  }
+
+  // The stats table. L and R are { players, col }; mvp is one player or null.
+  function renderRlsGrid(grid, L, R, mvp, top){
+    grid.innerHTML = '';
+    grid.style.top = top + 'px';
+    const n = L.players.length + R.players.length;
+    const cw = Math.min(236, Math.floor(1360 / Math.max(1, n)));
+    grid.style.gridTemplateColumns = `repeat(${L.players.length}, ${cw}px) 380px repeat(${R.players.length}, ${cw}px)`;
+    const total = (players, k) => players.reduce((a, p) => a + (Number(p[k]) || 0), 0);
+    const colour = (n2, col) => { n2.style.setProperty('--c', col); return n2; };
+    const head = (p, col) => {
+      const h = colour(mk('div', 'rls-pname h' + (p === mvp ? ' mvp' : '')), col);
+      h.append(mk('em', '', 'MVP'), mk('span', '', p.name));
+      return h;
+    };
+    L.players.forEach((p) => grid.appendChild(head(p, L.col)));
+    grid.appendChild(mk('div', 'h'));
+    R.players.forEach((p) => grid.appendChild(head(p, R.col)));
+    RL_STATS.forEach(([k, label], r) => {
+      const pos = (r === 0 ? ' first' : '') + (r === RL_STATS.length - 1 ? ' last' : '');
+      const cell = (p, col) => colour(mk('div', 'rls-cell' + pos + (p === mvp ? ' mvp' : ''), String(Number(p[k]) || 0)), col);
+      L.players.forEach((p) => grid.appendChild(cell(p, L.col)));
+      const lab = mk('div', 'rls-label' + (r === 0 ? ' first' : ''));
+      const bar = mk('div', 'rls-bar');
+      const a = total(L.players, k), b = total(R.players, k);
+      const share = a + b > 0 ? a / (a + b) : 0.5;
+      const lb = mk('b'); lb.style.width = (share * 100) + '%'; lb.style.background = L.col;
+      const rb = mk('b'); rb.style.width = ((1 - share) * 100) + '%'; rb.style.background = R.col;
+      const tick = mk('i'); tick.style.left = (share * 100) + '%';
+      bar.append(lb, rb, tick);
+      lab.append(mk('span', '', label), bar);
+      grid.appendChild(lab);
+      R.players.forEach((p) => grid.appendChild(cell(p, R.col)));
+    });
+  }
+
+  // MVP: the top scorer on the winning team, as in Rocket League itself.
+  function pickMvp(players){
+    return players.reduce((best, p) => (!best || (p.score || 0) > (best.score || 0) ? p : best), null);
+  }
+
+  // Series score after each recorded game, keyed by roster team.
+  function rlWinsThrough(games, upto){
+    const w = { A: 0, B: 0 };
+    games.slice(0, upto + 1).forEach((g) => { w[g.winner === 0 ? g.blue : rlOther(g.blue)]++; });
+    return w;
+  }
+
+  function renderRlGameScreen(idx){
+    const sm = lastState.scoreboard || {};
+    const g = rlSeriesData.games[idx];
+    if(!g) return false;
+    const keys = [g.blue, rlOther(g.blue)];
+    const cols = [rlColor(keys[0], 0), rlColor(keys[1], 1)];
+    const wins = rlWinsThrough(rlSeriesData.games, idx);
+    const side = (i) => ({
+      team: rlTeam(keys[i]), col: cols[i], score: g.goals[i] || 0, won: wins[keys[i]],
+      win: g.winner === i,
+    });
+    const scr = $('#rls-game');
+    renderRlsHead(scr.querySelector('.rls-head'), {
+      L: side(0), R: side(1), need: rlNeed(sm),
+      top: [sm.round, 'Game ' + (idx + 1), mapName(g.arena)],
+      small: 'Game ' + (idx + 1) + (g.overtime ? ' \u00b7 OT' : ''), big: 'Final',
+    });
+    const players = (t) => g.players.filter((p) => p.team === t);
+    const mvp = pickMvp(players(g.winner));
+    renderRlsGrid(scr.querySelector('.rls-grid'), { players: players(0), col: cols[0] }, { players: players(1), col: cols[1] }, mvp, 352);
+    return true;
+  }
+
+  function renderRlSeriesScreen(){
+    const sm = lastState.scoreboard || {};
+    const games = rlSeriesData.games;
+    // Same sides as the live board: the team on blue now is on the left.
+    const keys = [rlBlueKey(sm), rlOther(rlBlueKey(sm))];
+    const cols = [rlColor(keys[0], 0), rlColor(keys[1], 1)];
+    const need = rlNeed(sm);
+    const won = keys.map((k) => clampInt(sm['score' + k], 0, 99, 0));
+    const decided = won[0] >= need || won[1] >= need;
+    const winner = decided ? (won[0] > won[1] ? 0 : 1) : -1;
+    const scr = $('#rls-series');
+    renderRlsHead(scr.querySelector('.rls-head'), {
+      L: { team: rlTeam(keys[0]), col: cols[0], score: won[0], won: won[0], win: winner === 0 },
+      R: { team: rlTeam(keys[1]), col: cols[1], score: won[1], won: won[1], win: winner === 1 },
+      need, top: [sm.round, 'Series overview', 'Best of ' + clampInt(sm.bestOf, 1, 9, 7)],
+      small: 'Series', big: decided ? 'Final' : 'Game ' + (won[0] + won[1]),
+    });
+
+    // One card per game: score from the left team's point of view.
+    const strip = scr.querySelector('.rls-games');
+    strip.innerHTML = '';
+    games.forEach((g, i) => {
+      const leftIsBlue = g.blue === keys[0];
+      const goals = leftIsBlue ? [g.goals[0], g.goals[1]] : [g.goals[1], g.goals[0]];
+      const winKey = g.winner === 0 ? g.blue : rlOther(g.blue);
+      const card = mk('div', 'rls-game');
+      card.style.setProperty('--c', cols[keys.indexOf(winKey)]);
+      const score = mk('b');
+      const a = mk('u', winKey === keys[0] ? 'w' : '', String(goals[0] || 0));
+      const b = mk('u', winKey === keys[1] ? 'w' : '', String(goals[1] || 0));
+      score.append(a, ' - ', b);
+      card.append(mk('small', '', 'Game ' + (i + 1) + (g.overtime ? ' \u00b7 OT' : '')), score, mk('em', '', mapName(g.arena)));
+      strip.appendChild(card);
+    });
+
+    // Series totals per player, grouped by roster team.
+    const totals = { A: new Map(), B: new Map() };
+    games.forEach((g) => g.players.forEach((p) => {
+      const key = p.team === 0 ? g.blue : rlOther(g.blue);
+      const row = totals[key].get(p.name) || { name: p.name };
+      RL_STATS.forEach(([k]) => { row[k] = (row[k] || 0) + (Number(p[k]) || 0); });
+      totals[key].set(p.name, row);
+    }));
+    const L = [...totals[keys[0]].values()], R = [...totals[keys[1]].values()];
+    const lead = winner >= 0 ? winner : (won[0] >= won[1] ? 0 : 1);
+    const mvp = games.length ? pickMvp(lead === 0 ? L : R) : null;
+    scr.querySelector('.rls-subtitle').style.top = (games.length ? 476 : 340) + 'px';
+    renderRlsGrid(scr.querySelector('.rls-grid'), { players: L, col: cols[0] }, { players: R, col: cols[1] }, mvp, games.length ? 512 : 380);
+  }
+
+  // Show whichever screen the server says is up (only on the Rocket League
+  // board). Rebuilt on every change: these are static between games.
+  let rlShown = '';
+  function renderRlScreens(cut){
+    const sm = (lastState && lastState.scoreboard) || {};
+    let screen = sm.style === 'rl' ? rlScreenState.screen : 'live';
+    if(screen === 'game' && !renderRlGameScreen(rlScreenState.game)) screen = 'live';
+    if(screen === 'series') renderRlSeriesScreen();
+    const key = screen + ':' + rlScreenState.game;
+    // Under the stinger the screen just appears; its own wipe would play out
+    // after the curtain lifts. Set only when the screen changes: clearing it
+    // on a later redraw would restart the wipe.
+    if(key !== rlShown) ['#rls-game', '#rls-series'].forEach((id) => $(id).classList.toggle('cut', !!cut));
+    $('#rls-game').classList.toggle('on', screen === 'game');
+    $('#rls-series').classList.toggle('on', screen === 'series');
+    sbView.classList.toggle('rls-on', screen !== 'live');
+    // Re-run the entrance only when the screen actually changes.
+    if(key !== rlShown && screen !== 'live' && !cut){
+      const s = $(screen === 'game' ? '#rls-game' : '#rls-series');
+      s.style.animation = 'none'; void s.offsetWidth; s.style.animation = '';
+    }
+    rlShown = key;
   }
 
   function applyLayout(layout){
@@ -1230,17 +1955,25 @@
   // Preload immediately so the first push doesn't stall on a network fetch.
   getStingerVideo();
 
-  // Play the curtain stinger, applying `data` while the screen is covered.
+  // Play the curtain stinger, running `apply` while the screen is covered.
   // Every failure path (no WebGL, video missing, decode error, autoplay
-  // rejection) falls back to applying the state immediately - a push must
-  // never be lost or delayed past STINGER_MAX_MS.
-  function stingerTransition(data){
-    if(stingerActive){ stingerPending = data; return; } // mid-play repush: swap in the newer state
+  // rejection) falls back to applying immediately - a change must never be
+  // lost or delayed past STINGER_MAX_MS. Used by Push Live and by the Rocket
+  // League board cutting from the game to a stats screen.
+  function stingerTransition(data){ playStinger(() => applyState(data)); }
+  // Anything arriving mid-stinger runs after what is already waiting, so the
+  // newest change still wins and nothing queued earlier is dropped.
+  function queueStinger(apply){
+    const prev = stingerPending;
+    stingerPending = prev ? () => { prev(); apply(); } : apply;
+  }
+  function playStinger(apply){
+    if(stingerActive){ queueStinger(apply); return; }
     const glc = initStingerGL();
     const video = getStingerVideo();
-    if(!glc || !video){ applyState(data); return; }
+    if(!glc || !video){ apply(); return; }
 
-    stingerPending = data;
+    stingerPending = apply;
     stingerActive = true;
     let raf = 0;
     const finish = () => {
@@ -1253,7 +1986,7 @@
       video.pause();
     };
     const applyPending = () => {
-      if(stingerPending){ const d = stingerPending; stingerPending = null; applyState(d); }
+      if(stingerPending){ const f = stingerPending; stingerPending = null; f(); }
     };
     const safety = setTimeout(finish, STINGER_MAX_MS);
 
@@ -1330,6 +2063,22 @@
             placeholderSub.textContent = placeholderNote(lastState);
           }
         }
+        if (msg.type === 'rl') { rlSnap = msg.rl; renderRl(); }
+        if (msg.type === 'rlSeries') {
+          const next = msg.screen || { screen: 'live', game: -1 };
+          const apply = (cut) => () => {
+            rlSeriesData = msg.series || { games: [] };
+            rlScreenState = next;
+            renderRlScreens(cut);
+          };
+          // Leaving the live game for a stats screen is covered by the
+          // Widener stinger, with the screen swapped in while it's covered.
+          const boardUp = sbView.classList.contains('active') && sbView.classList.contains('rl');
+          if (boardUp && rlScreenState.screen === 'live' && next.screen !== 'live') playStinger(apply(true));
+          else if (stingerActive) queueStinger(apply(false));
+          else apply(false)();
+        }
+        if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'goal') showRlGoal(msg.event);
         if (msg.type === 'state' && msg.channel === channel) {
           // Pushes flagged with the stinger transition play the curtain wipe
           // and swap content while covered; everything else applies instantly.
@@ -1344,7 +2093,7 @@
           if (msg.transition === 'stinger' && !lockedView) stingerTransition(msg.data);
           // A scoreboard tick landing mid-stinger must not reveal the new
           // view early: queue it as the newest pending state instead.
-          else if (stingerActive) stingerPending = msg.data;
+          else if (stingerActive) queueStinger(() => applyState(msg.data));
           else applyState(msg.data);
         }
       } catch (e) {}

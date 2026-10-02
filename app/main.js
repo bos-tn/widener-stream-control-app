@@ -69,7 +69,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    const server = createServer(PORT, { dataDir: app.getPath('userData') });
+    const server = createServer(PORT, { dataDir: app.getPath('userData'), documentsDir: app.getPath('documents'),
+      musicDir: app.isPackaged ? path.join(process.resourcesPath, 'music') : path.join(__dirname, 'assets', 'music') });
     server.on('error', (err) => {
       dialog.showErrorBox(
         APP_TITLE,
