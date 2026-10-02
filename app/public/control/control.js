@@ -1936,23 +1936,34 @@ const musicVolume = $id('musicVolume');
 const musicVolumeText = $id('musicVolumeText');
 const musicStatusEl = $id('musicStatus');
 const musicDefaultBtn = $id('musicDefaultBtn');
+const musicDownloadBtn = $id('musicDownloadBtn');
 function musicDbText(v) { return `${Math.round(-40 + 40 * (v / 100))} dB`; }
 function renderMusic(m) {
   if (!m) return;
   musicEnable.checked = m.enabled;
+  const dl = m.download || {};
+  const usingTrack = !m.file || m.customMissing;
   musicFileText.value = m.file || 'Included track (rl-music-long.m4a)';
   musicFileText.title = m.path || '';
   if (document.activeElement !== musicVolume) musicVolume.value = String(m.volume);
   musicVolumeText.textContent = musicDbText(Number(musicVolume.value));
   musicDefaultBtn.disabled = !m.file;
+  musicDownloadBtn.hidden = !usingTrack || dl.have || dl.downloading || dl.queued;
   let text;
-  if (m.customMissing) text = 'The custom file is missing, so the included track is used.';
-  else if (!m.defaultExists && !m.file) text = 'The included track is missing from this install. Pick a file.';
+  let error = false;
+  if (usingTrack && dl.downloading) text = `Downloading the included track: ${Math.floor(100 * dl.received / dl.bytes)}%`;
+  else if (usingTrack && dl.queued) text = 'The included track is waiting to download.';
+  else if (usingTrack && !dl.have) {
+    text = dl.error ? `Download failed: ${dl.error}` : 'The included track is not downloaded yet.';
+    if (m.customMissing) text = 'The custom file is missing. ' + text;
+    error = !!dl.error || m.customMissing;
+  }
+  else if (m.customMissing) text = 'The custom file is missing, so the included track is used.';
   else if (!m.enabled) text = 'Music is off.';
   else if (!m.obsConnected) text = 'OBS is not connected, so no music is playing. Connect under scene-sync above.';
   else text = m.playing ? 'Playing now (no gameplay on screen).' : 'Faded out: gameplay is on screen.';
   musicStatusEl.textContent = text;
-  musicStatusEl.classList.toggle('error', !!m.customMissing || (!m.defaultExists && !m.file));
+  musicStatusEl.classList.toggle('error', error || (!!m.customMissing && !usingTrack));
 }
 function saveMusic(patch) {
   fetch('/api/music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
@@ -1975,6 +1986,9 @@ musicFile.addEventListener('change', () => {
   musicFile.value = '';
 });
 musicDefaultBtn.addEventListener('click', () => saveMusic({ file: '' }));
+musicDownloadBtn.addEventListener('click', () => {
+  fetch('/api/music/download', { method: 'POST' }).then((r) => r.json()).then(renderMusic).catch(() => {});
+});
 fetch('/api/music').then((r) => r.json()).then(renderMusic).catch(() => {});
 
 obsBuildBtn.addEventListener('click', async () => {

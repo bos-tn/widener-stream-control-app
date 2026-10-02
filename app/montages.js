@@ -5,6 +5,9 @@
 // picked, or all at once from the Setup tab. After that they play from disk
 // and never need the internet again.
 //
+// The same downloader also fetches the included background music track
+// (server.js, v0.11.0): an .m4a has the same 'ftyp' header check as an .mp4.
+//
 // The Drive files are shared "anyone with the link", so no sign-in is needed.
 // Downloads go one at a time (a 1.6 GB file competing with the stream's own
 // upload is bad enough), resume from a .part file after a dropped connection,
@@ -146,14 +149,14 @@ function createMontages(opts) {
       // A private or removed file comes back as a Google sign-in or error
       // page, with a 200. Never write that into an .mp4.
       if (type.includes('text/html')) {
-        throw fatal('Google Drive sent a web page instead of the video. Check the file is still shared "Anyone with the link".');
+        throw fatal('Google Drive sent a web page instead of the file. Check it is still shared "Anyone with the link".');
       }
-      if (res.status === 404) throw fatal('The montage is no longer on Google Drive.');
+      if (res.status === 404) throw fatal('The file is no longer on Google Drive.');
       if (res.status !== 200 && res.status !== 206) throw new Error(`Google Drive answered ${res.status}`);
       if (res.status === 200) start = 0; // range ignored: start over
       const len = Number(res.headers.get('content-length'));
       if (len && start + len !== e.bytes) {
-        throw fatal(`The montage on Drive is ${start + len} bytes, expected ${e.bytes}. It may have been replaced; update games.json.`);
+        throw fatal(`The file on Drive is ${start + len} bytes, expected ${e.bytes}. It may have been replaced; update the app's file list.`);
       }
       e.received = start;
       await new Promise((resolve, reject) => {
@@ -173,7 +176,7 @@ function createMontages(opts) {
     try { fs.readSync(fd, head, 0, 8, 0); } finally { fs.closeSync(fd); }
     if (head.toString('latin1', 4, 8) !== 'ftyp') {
       fs.unlinkSync(part);
-      throw fatal('The downloaded file is not an MP4 video.');
+      throw fatal('The downloaded file is not an MP4 or M4A file.');
     }
     fs.renameSync(part, filePath(e));
   }

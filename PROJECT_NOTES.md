@@ -794,10 +794,15 @@ meter in the bottom right.
     while a match is in progress **or the game feed isn't connected** (never
     risk music over a match). Updated on push, OBS program-scene changes,
     `rlScreen` changes, and RL feed status/inMatch changes.
-  - **File**: `app/assets/music/rl-music-long.m4a` (36 MB, about 25 minutes)
-    ships via electron-builder `extraResources` to `resources/music`. It has
-    to be outside the asar because OBS reads it from disk; main.js passes
-    `musicDir`. Settings (`enabled`, `file`, `volume` 0-100 mapped to -40..0 dB)
+  - **File**: the included track (`rl-music-long.m4a`, 36 MB, about 25
+    minutes) is **not in the installer**: the user didn't want it shipped in
+    public releases. It briefly was (extraResources, commit 146500b, so it is
+    still in git history); now it downloads from the team Drive into
+    `<data>/music` through a second `createMontages()` instance (same resume,
+    size and `ftyp` checks; an m4a has the MP4 header). It downloads on start
+    when music is on and no custom file is set; the panel shows progress and
+    a retry button. Until it exists `musicFile()` is '' and nothing plays or
+    gets built. Settings (`enabled`, `file`, `volume` 0-100 mapped to -40..0 dB)
     are machine-level in `settings.json`, not live/draft. A custom file that
     disappears falls back to the bundled track.
   - Tested against a fake obs-websocket (module swapped via `Module._load`):

@@ -39,12 +39,6 @@
       "public/**/*",
       "build/icons/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "assets/music",
-        "to": "music"
-      }
-    ],
     "win": {
       "target": "nsis",
       "icon": "build/icons/icon.ico"

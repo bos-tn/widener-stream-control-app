@@ -190,9 +190,10 @@ focus.
 
 Music plays whenever there is no gameplay on screen: Starting Soon, Be Right
 Back, Post-Match, Rosters, NECC, and the Rocket League stats screens and menus
-between games. It fades out when gameplay is on screen. A track is included
-with the app; Setup > Background music can pick a different file, change the
-volume, or turn it off.
+between games. It fades out when gameplay is on screen. The included track
+isn't in the installer: like the game montages, it downloads from the team
+Google Drive (36 MB) the first time it's needed. Setup > Background music can
+pick any audio file on the PC instead, change the volume, or turn music off.
 
 OBS plays the music, so it needs OBS connected (see below). Build / update
 scenes adds one media source, **WU: Music**, to every WU scene. Because it is
