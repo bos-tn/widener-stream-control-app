@@ -76,6 +76,25 @@
         <h2>Scoreboard
           <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="An in-game overlay with a transparent background. In OBS, put it above the game capture. Team names, logos, colours and player order come from Rosters.">i</span>
         </h2>
+        <div class="rl-status" id="rlStatus" hidden>
+          <div class="rl-status-line"><span class="dot" id="rlDot"></span><span id="rlText">Rocket League: not connected</span></div>
+          <div class="rl-status-sub" id="rlSub"></div>
+          <div class="rl-status-btns">
+            <button class="btn-secondary" type="button" id="rlEnableBtn" hidden>Turn on the Stats API</button>
+            <button class="btn-secondary" type="button" id="rlSwapHintBtn" hidden>Swap sides</button>
+          </div>
+          <div class="rl-screens">
+            <span class="lbl">On the board
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="After each game the board switches to that game's stats by itself, and to the series overview once the series is won. It goes back to the live board when the next game loads. These buttons switch by hand, live on stream.">i</span>
+            </span>
+            <div class="rl-screen-btns">
+              <button class="btn-secondary" type="button" data-rls="live">Live game</button>
+              <button class="btn-secondary" type="button" data-rls="game">Game stats</button>
+              <select id="rlGamePick" aria-label="Which game's stats"></select>
+              <button class="btn-secondary" type="button" data-rls="series">Series overview</button>
+            </div>
+          </div>
+        </div>
         <details class="help">
           <summary>How does scoring work?</summary>
           <div class="help-body">
@@ -88,6 +107,10 @@
               <li>When a team runs out, click <b>Won</b> on the winning team. It adds a point and refills both teams' stocks.</li>
               <li>Keyboard: 1 and 2 take a stock from each team, Shift+1 and Shift+2 undo, 3 and 4 give each team a win.</li>
             </ol>
+            <p style="margin-top:9px">Rocket League reads the game itself: goals, clock, boost and stats
+            come from Rocket League's Stats API, and each finished game adds a win to its team
+            automatically. Blue is the left side: if team A is playing orange, click <b>Swap sides</b>.
+            Use the <b>+</b> and <b>&minus;</b> buttons to correct a series score.</p>
           </div>
         </details>
         <div class="sb-grid">
@@ -114,7 +137,18 @@
               </label>
               <label style="flex:0 0 96px">
                 <span class="lbl">Best of</span>
-                <select id="sbBestOfInput"><option>1</option><option selected>3</option><option>5</option><option>7</option></select>
+                <select id="sbBestOfInput"><option>1</option><option selected>3</option><option>5</option><option>7</option><option>9</option></select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="grow">
+                <span class="lbl">Style
+                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Rocket League reads goals, the clock, boost and player stats from the game while it runs. Picking Rocket League as the game sets this.">i</span>
+                </span>
+                <select id="sbStyleInput">
+                  <option value="standard">Standard (scores by hand)</option>
+                  <option value="rl">Rocket League (live game data)</option>
+                </select>
               </label>
             </div>
             <div class="field-row">
@@ -122,7 +156,7 @@
                 <span class="lbl">Series counts in</span>
                 <select id="sbUnitInput"><option>Game</option><option>Map</option><option>Set</option><option>Round</option></select>
               </label>
-              <label class="grow">
+              <label class="grow" id="sbPositionField">
                 <span class="lbl">Position
                   <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Top center is the full bar. The corners use a smaller box, for games whose own HUD sits at the top. Check it over real gameplay and move it if it covers anything.">i</span>
                 </span>
@@ -135,7 +169,32 @@
                 </select>
               </label>
             </div>
-            <label class="checkbox">
+            <div id="sbRlFields">
+              <label class="checkbox">
+                <input type="checkbox" id="sbRlAutoInput" checked>
+                Count series wins automatically
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="When a game ends in Rocket League, the winning colour's team gets a win. Turn off for scrims or show matches you don't want counted.">i</span>
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" id="sbRlStatsInput" checked>
+                Show stats automatically after each game
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" id="sbRlPlayersInput" checked>
+                Player boost bars in the top corners
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" id="sbRlBoostInput" checked>
+                Boost meter (bottom right)
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Shows the boost, name and stats of the player the spectator camera is following. Hide the game's own HUD in spectator mode so the two don't overlap.">i</span>
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" id="sbRlColorsInput" checked>
+                Blue and orange team colours
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Matches the board to the cars on screen. Turn off to use each team's own colour from Rosters.">i</span>
+              </label>
+            </div>
+            <label class="checkbox" id="sbShowStocksField">
               <input type="checkbox" id="sbShowStocksInput">
               Stock counter (Smash crew battles)
             </label>
@@ -400,6 +459,42 @@
           </div>
           <div class="necc-status" id="obsBuildStatus" style="margin-top:8px"></div>
         </div>
+      </section>
+
+      <section class="panel" data-tab="setup">
+        <h2>Background music
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays on every screen without gameplay: Starting Soon, Be Right Back, Post-Match, Rosters, NECC, and the Rocket League stats screens and menus between games. It fades out when gameplay is on screen.">i</span>
+        </h2>
+        <details class="help">
+          <summary>How does the music play?</summary>
+          <div class="help-body">
+            <p>OBS plays it, through one media source called <b>WU: Music</b> that <b>Build / update
+            scenes</b> (under scene-sync above) adds to every WU scene. Being the same source in every
+            scene, it carries on through scene changes and transitions instead of starting over.
+            The app fades it up and down, so OBS must be connected here.</p>
+          </div>
+        </details>
+        <label class="checkbox">
+          <input type="checkbox" id="musicEnable" checked>
+          Play music when there's no gameplay on screen
+        </label>
+        <div class="field" style="margin-top:12px">
+          <label for="musicFileText"><span class="lbl">Music file</span></label>
+          <div class="field-row" style="margin-bottom:0">
+            <input type="text" id="musicFileText" readonly class="grow">
+            <button class="btn-secondary" type="button" id="musicBrowseBtn">Browse</button>
+            <input type="file" id="musicFile" accept="audio/*,.m4a,.mp3,.wav,.ogg,.flac,.aac" hidden>
+          </div>
+          <div class="push-row" style="margin-top:8px">
+            <button class="btn-secondary" type="button" id="musicDefaultBtn">Use the included track</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="musicVolume"><span class="lbl">Volume <b id="musicVolumeText"></b></span>
+            <input type="range" id="musicVolume" min="0" max="100" step="1" value="55">
+          </label>
+        </div>
+        <div class="necc-status" id="musicStatus"></div>
       </section>
 
       <section class="panel" data-tab="setup">

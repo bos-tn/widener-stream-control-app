@@ -30,6 +30,9 @@ sections are a history: each one records why something is the way it is.
   except CoD a `montage: {file, driveId, bytes}`. The server downloads it from
   Drive into `<data>/montages` on demand and serves it at `/montages/<file>`;
   the overlay plays it when `clip` is blank. See the v0.10.0 section.
+- **Rocket League live data** (v0.11.0, `rlstats.js`): the scoreboard's
+  `style: 'rl'` reads Psyonix's Stats API over local TCP and the server
+  forwards `{type:'rl'}` snapshots to every page. See the v0.11.0 section.
 - **Optional pieces**: NECC import (`necc.js`, unofficial LeagueOS API), OBS
   scene-sync (`obs.js`, obs-websocket v5), auto-update (`electron-updater`
   against GitHub releases).
@@ -676,6 +679,148 @@ The ones with non-obvious reasoning:
   from `<data>/montages`; use a new filename to have them download it on
   their own instead.
 
+## v0.11.0: Rocket League scoreboard (`rlstats.js`)
+
+The user asked for a dedicated Rocket League board that "works the same way
+the BARL overlay works", matching the other boards' look, plus a custom boost
+meter in the bottom right.
+
+- **The data source.** After the EAC update locked BakkesMod out of online
+  play, Psyonix shipped an official Stats API (`MatchStatsExporter_TA`).
+  BARL 2.x reads it (the installed BARL 1.6.4 on the dev PC is the old
+  BakkesMod/RCON version; that is not what this copies). Despite Psyonix's
+  docs calling it a websocket, it is a **raw TCP socket** on 127.0.0.1:49123
+  streaming **concatenated JSON objects with no delimiter**, and each
+  message's `Data` is a **JSON-encoded string**. `createFramer()` splits the
+  stream by brace depth while tracking string/escape state (player names can
+  contain braces). Speeds are Unreal units/s (`x0.036` for KPH). The goal
+  banner's KPH was dropped after real-game testing: the user reported it was
+  always wrong. `rlstats.js` still sends `kph` on goal events.
+- **Turning it on.** Off by default: `PacketSendRate=0` in
+  `Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini` (the game's
+  own copy of the install folder's `DefaultStatsAPI.ini`; the install copy
+  needs admin and isn't what the game reads after first launch). On the dev
+  PC Documents is redirected into OneDrive, so `configCandidates()` tries
+  Electron's documents path, `%OneDrive%\Documents`, `~\OneDrive\Documents`
+  and `~\Documents`. The panel's button calls `POST /api/rl/enable`, which
+  edits only that section's keys. The game reads the file at launch only.
+  **Careful testing this**: `configStatus()` falls through to the next
+  candidate when the first has no file, so a test pointing `documentsDir` at
+  a temp folder will happily find and edit the real file. Override
+  `USERPROFILE`, `HOME` and `OneDrive` too (this happened once in development
+  and was reverted).
+- **Not state.** The game feed is not in `live`/`draft`: it is high-frequency
+  (throttled to ~30/s), not persisted, and both preview and stream show the
+  same game. Only the board's settings (`style`, `rlAutoSeries`, `rlPlayers`,
+  `rlBoost`, `rlGameColors`) live in `scoreboard` and go through Push Live.
+  The socket is only open while either channel's style is `'rl'`
+  (`updateRlActive()`).
+- **Series auto-count** (`countSeriesWin`): `MatchEnded.WinnerTeamNum` (falls
+  back to the last team scores) adds a win via `applyScore`, the same path as a
+  panel click. Team 0 (blue) is the **left side**, i.e. team A unless `swap`.
+  Guarded by MatchGuid and a 15 s window (bot matches have no GUID), and stops
+  once a team has clinched so a post-series show match doesn't count. Uses the
+  **live** board's settings: previewing the RL style without pushing counts
+  nothing.
+- **Overlay.** Reuses the `.sb` bar markup (narrower columns) so it matches
+  the Smash board: score boxes show this game's goals, the centre shows the
+  clock (`+m:ss` in overtime, REPLAY/PAUSED as words), series pips hang under
+  each team. Around it: per-team boost bars (top corners), a goal banner, and
+  the boost meter (SVG ring with `pathLength=100`, 270 degree sweep starting
+  bottom-left, team-colour arc, blue-to-gold Widener rim, stats plate). Boost
+  is spectator-only in the API: absent means unknown and renders as a dash.
+  The meter follows `Game.Target` and hides in replays and free cam. The
+  preview (never the stream or live monitor) shows `RL_SAMPLE` when no match
+  is running so the layout can be checked.
+- **Cleanup pass (user feedback on the first test build).** "Looks a bit
+  soft": the scoreboard view (every game, not just Rocket League, so Smash
+  still matches) dropped its gradients, glows and deep soft shadows for flat
+  panels (`--sb-panel`, `--sb-dark` on `.sb-view`) and a tight
+  `drop-shadow(0 3px 8px)`. The boost meter shrank from 264px to 184px, uses
+  square arc ends, and has a faint Widener W watermark behind the number:
+  `widener-logo.png` used as a CSS **mask** over a flat fill, so it reads as a
+  single-colour silhouette rather than a faded colour logo.
+- **Long team names** (all scoreboard layouts): `fitTeamName()` drops a
+  trailing "University" only when the full name overflows its box. It
+  measures live, so it re-runs once the real font has loaded.
+- **Series length from NECC.** `importMatch()` now returns `bestOf` from the
+  match's own `matchFormat`/`matchGameCount` (no extra request; verified
+  against a real NECC match: `bestOf`, 5). Only odd best-of counts are used.
+  The panel keeps it in `neccBestOf` so picking the game afterwards doesn't
+  reset it to the preset; changing Best of by hand clears it. Rocket League's
+  preset is now best of 7, and Best of gained a 9.
+- **RLCS-style rework (second round of feedback).** The user sent RLCS
+  screenshots and asked for a stats screen like theirs, automatic switching to
+  it after each game, a series overview when the series ends, and a board
+  "more like the RLCS one, don't copy it, use it to make ours cleaner and
+  sharper". So the Rocket League style no longer reuses the wide `.sb` bar:
+  - `.rlb`, a compact centre box: round/game strip, logo (or tag) boxes,
+    goal boxes, a white clock box (gold in OT, blue for REPLAY), tags and
+    series pips under it. The edge player rows are flush to the screen edge
+    and the followed player's row fills with the team colour.
+  - `.rls` screens (`#rls-game`, `#rls-series`): opaque full-stage screens
+    with the Widener stripes and a big faint W. One CSS grid per stats table
+    so rows line up across both teams; the middle column has each stat's
+    team-total comparison bar. MVP is the top scorer on the winning team (the
+    game's own rule); series MVP the same over series totals.
+  - **Game records** (`rl-series.json` in the data dir): on MatchEnded the
+    server stores score, map, OT, which roster team was blue, and each
+    player's final stats (rlstats now attaches `players`/`arena` to the event).
+    Players are mapped to roster teams per game through `blue`, so teams that
+    change colour between games still total correctly. Reset match sends
+    `rlSeriesReset`. Games after the series is clinched are not recorded.
+  - **Screen state** (`rlScreen`, server-owned, not in live/draft, sent as
+    `{type:'rlSeries'}`): 3 s after a game ends -> that game's stats; if it
+    clinched the series, 15 s later -> overview. A match loading
+    (`matchStart`, from MatchCreated/MatchInitialized or the first UpdateState
+    after none) returns to live **only mid-series**: found in testing that the
+    mock's next lobby loaded 12 s after the final and cancelled the overview.
+    The panel's On the board buttons send `{type:'rlScreen'}`.
+  - Tested with `test_screens`-style scripts against a fake TCP game (auto
+    stats, return to live, clinch, overview staying up, manual switching,
+    reset) and visually with the mock.
+- **Background music (third round).** Asked for: music whenever there's no
+  gameplay, the supplied track bundled, a custom file option, and in built
+  scenes a looping media source that doesn't restart when a scene opens, so
+  transitions stay smooth.
+  - **One shared source**, `WU: Music` (`ffmpeg_source`, looping,
+    `restart_on_activate:false`, `close_when_inactive:false`), added to every
+    WU scene by `buildScenes()`. A source in several scenes is one source:
+    it never restarts on a scene switch and plays once during a transition.
+  - **When**: decided by the server (`gameplayOnScreen()`), applied by
+    `obs.setMusic()` as a dB fade on that source (1.5 s; 300 ms for volume
+    changes). Needed because the RL stats screens live in the same Scoreboard
+    scene as the game. Silent on any non-RL scoreboard, and on the RL board
+    while a match is in progress **or the game feed isn't connected** (never
+    risk music over a match). Updated on push, OBS program-scene changes,
+    `rlScreen` changes, and RL feed status/inMatch changes.
+  - **File**: `app/assets/music/rl-music-long.m4a` (36 MB, about 25 minutes)
+    ships via electron-builder `extraResources` to `resources/music`. It has
+    to be outside the asar because OBS reads it from disk; main.js passes
+    `musicDir`. Settings (`enabled`, `file`, `volume` 0-100 mapped to -40..0 dB)
+    are machine-level in `settings.json`, not live/draft. A custom file that
+    disappears falls back to the bundled track.
+  - Tested against a fake obs-websocket (module swapped via `Module._load`):
+    source settings, every scene, one source, fades per view and RL state,
+    volume, custom/missing file, persistence. **Not yet tried in real OBS.**
+- **Stinger into stats.** The game -> stats cut plays the in-overlay curtain
+  stinger. `stingerTransition(data)` became `playStinger(apply)` (a callback),
+  and anything arriving mid-stinger is chained with `queueStinger` so nothing
+  is dropped. It plays even on a view-locked page, because this change happens
+  inside the Scoreboard view where OBS has no transition. The screen is swapped
+  in under the curtain with its own wipe suppressed (`.cut`, set only when the
+  screen changes so a later redraw doesn't restart the wipe).
+- **Swap hint.** The panel matches in-game names against roster
+  gamertags and offers "X is on blue: swap sides" when they disagree.
+- **Testing without the game**: `node app/dev/mock-rlstats.js 49155 --fast`
+  plus the `stream-app-rl-mock` launch config (server on 4312 with
+  `WIDENER_RL_PORT=49155`). The mock plays whole games with goals, replays,
+  overtime and a MatchEnded in under a minute. `dev/` is not in the build.
+- Verified with the mock in the preview tool at 1920x1080 (board, bars, meter,
+  goal banner, replay, auto-count on push, swap hint, API-off panel state)
+  and a scripted fake-game test of the series logic. **Not yet verified
+  against the real game**, which on the dev PC still has the API turned off.
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
@@ -693,7 +838,9 @@ The ones with non-obvious reasoning:
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
   scoreboard: { round, unit, bestOf, position,                  // v0.9.0 (was `smash` in v0.8.0);
                 scoreA, scoreB, lostA, lostB, swap,            // counters change via {type:'score'}
-                crewSize, stocksEach, showStocks },
+                crewSize, stocksEach, showStocks,
+                style: 'standard'|'rl',                        // v0.11.0
+                rlAutoSeries, rlPlayers, rlBoost, rlGameColors },
 }
 ```
 Both `live` and `draft` are this same shape, persisted together in one

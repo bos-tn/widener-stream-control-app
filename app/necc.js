@@ -170,6 +170,11 @@ async function importMatch(matchUrl) {
     eventName: match.eventName || '',
     division: (match.divisions && match.divisions[0]) || '',
     scheduledAt: match.date ? new Date(match.date * 1000).toISOString() : null,
+    // Series length (v0.11.0): matches carry their stage's format, e.g.
+    // { matchFormat: 'bestOf', matchGameCount: 5 }. Only a best-of with an
+    // odd count maps onto the scoreboard; anything else (a fixed number of
+    // games) is left for the operator to set.
+    bestOf: match.matchFormat === 'bestOf' && [1, 3, 5, 7, 9].includes(match.matchGameCount) ? match.matchGameCount : null,
     teams,
     overlayUrls,
   };

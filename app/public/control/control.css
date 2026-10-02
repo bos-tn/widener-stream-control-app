@@ -364,6 +364,28 @@ input:focus, select:focus{outline:2px solid var(--widener-blue); outline-offset:
 .sb-settings{ margin-top:14px; margin-bottom:0; }
 .sb-settings .help-body{ color:var(--text); }
 
+/* Rocket League game connection (v0.11.0). */
+.rl-status{
+  background:#0d1420; border:1px solid var(--panel-border); border-radius:10px;
+  padding:10px 12px; margin-bottom:12px; display:flex; flex-direction:column; gap:6px;
+}
+.rl-status[hidden]{ display:none; }
+#sbRlFields{ display:flex; flex-direction:column; gap:10px; margin-bottom:12px; }
+#sbRlFields .checkbox{ display:flex; }
+.rl-status-line{ display:flex; align-items:center; gap:9px; font-weight:700; font-size:14px; }
+.rl-status-line .dot{ flex-shrink:0; }
+.rl-status-sub{ font-size:12.5px; color:var(--muted); line-height:1.45; }
+.rl-status-sub:empty{ display:none; }
+.rl-status-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+.rl-status-btns .btn-secondary{ padding:8px 12px; }
+.rl-status-btns .btn-secondary[hidden]{ display:none; }
+.rl-screens{ display:flex; flex-direction:column; gap:6px; margin-top:4px; padding-top:9px; border-top:1px solid var(--panel-border); }
+.rl-screens .lbl{ font-size:12.5px; color:var(--muted); }
+.rl-screen-btns{ display:flex; gap:6px; flex-wrap:wrap; align-items:stretch; }
+.rl-screen-btns .btn-secondary{ padding:8px 12px; }
+.rl-screen-btns .btn-secondary.on{ border-color:var(--widener-gold); color:var(--text); box-shadow:inset 0 -2px 0 var(--widener-gold); }
+.rl-screen-btns select{ width:auto; padding:6px 8px; }
+
 /* Show / Setup tabs (v0.9.0). Sticky so they stay reachable while scrolling. */
 .tabs{
   position:sticky; top:-20px; z-index:5; display:flex; gap:6px;

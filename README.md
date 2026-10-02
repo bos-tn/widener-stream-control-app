@@ -22,7 +22,8 @@ The control panel decides what that page shows. The available overlays are:
 - Starting Soon and Post-Match, with a title, subtitle, countdown, and the selected game's montage (or your own clip)
 - Rosters, a two-team lineup
 - Be Right Back
-- Scoreboard, an in-game scoreboard for any game (series score, with a stock counter for Smash)
+- Scoreboard, an in-game scoreboard for any game (series score, with a stock counter for Smash).
+  For Rocket League it reads the game itself: goals, clock, boost, and player stats
 - NECC graphics (bracket, match preview, and others) pulled from LeagueOS
 
 Edits made in the control panel show up in the preview first. The stream does
@@ -128,6 +129,48 @@ both teams' stocks.
 Score changes go to the stream immediately, without Push Live or the curtain
 wipe. Uncheck "Scores go live instantly" to preview them first instead.
 
+### Rocket League
+
+Picking Rocket League as the game switches the scoreboard to its Rocket League
+style, which reads live data from the game through Rocket League's official
+Stats API (the same feed BARL uses since the EAC update; BakkesMod is not
+needed). It shows:
+
+- a compact centre board: round and game number, team logos, this game's goals, and
+  the match clock (gold in overtime, REPLAY during goal replays)
+- the series score as pips under each team, counted automatically when a game ends
+  (best of 7 by default; a NECC Fetch sets it from the match)
+- each player's boost in the top corners
+- a goal banner with the scorer and assist
+- a boost meter in the bottom right for the player the camera is following, with their stats
+- a full-screen stats screen after each game (every player's score, goals, assists,
+  shots, saves and demos, with the game's MVP), and a series overview once the
+  series is won (each game's score and map, and series totals with a series MVP)
+
+The board switches by itself: to the game's stats 3 seconds after a game ends
+(under the Widener curtain stinger),
+to the series overview 15 seconds after the deciding game, and back to the live
+board when the next game loads (not once the series is won). The **On the board**
+buttons in the Scoreboard section switch by hand, including to an earlier game's
+stats. Reset match starts a new series record.
+
+One-time setup on the streaming PC:
+
+1. With the Scoreboard overlay selected, the Scoreboard section shows the game
+   connection. If it says the Stats API is turned off, click **Turn on the
+   Stats API**. This sets `PacketSendRate=30` in
+   `Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini`.
+2. Fully close and restart Rocket League. It only reads that file at launch.
+3. Spectate the match. Hide the game's own HUD in spectator mode so its
+   scoreboard and boost meter don't sit under ours.
+
+Blue is always the left side. If team A is playing orange, click Swap sides;
+the panel offers this itself when the roster gamertags match the players on
+blue. Auto-counting stops once a team has clinched the series, and can be
+turned off under Scoreboard settings for scrims. The plus and minus buttons
+still correct the series score. The preview shows sample data when the game
+isn't in a match, so the layout can be checked any time; the stream never does.
+
 ## Keyboard shortcuts
 
 | Keys | Action |
@@ -142,6 +185,19 @@ wipe. Uncheck "Scores go live instantly" to preview them first instead.
 The scoreboard keys work while the scoreboard controls are showing and you are
 not typing in a box. In an OBS dock, click the dock first so it has keyboard
 focus.
+
+## Background music
+
+Music plays whenever there is no gameplay on screen: Starting Soon, Be Right
+Back, Post-Match, Rosters, NECC, and the Rocket League stats screens and menus
+between games. It fades out when gameplay is on screen. A track is included
+with the app; Setup > Background music can pick a different file, change the
+volume, or turn it off.
+
+OBS plays the music, so it needs OBS connected (see below). Build / update
+scenes adds one media source, **WU: Music**, to every WU scene. Because it is
+the same source in every scene, it carries on through scene changes instead of
+starting over, and it loops.
 
 ## Optional OBS features
 
@@ -187,6 +243,8 @@ Push Live still works normally.
 | NECC Fetch fails | LeagueOS may have changed their site. Enter the rosters by hand or load a saved match. |
 | A NECC graphic shows only a spinner | LeagueOS is slow or unreachable. The preview says so after about 12 seconds. |
 | Scoreboard is not visible over the game | The browser source is below the game capture in the OBS source list. Move it above. |
+| Rocket League stays on "Waiting for Rocket League" | Turn on the Stats API from the Scoreboard section, then fully restart the game. The board fills in once a match is loaded. |
+| Rocket League boost shows a dash | The game only sends boost while spectating (or for your own team). Spectate the match from the streaming PC. |
 | Another computer can't open the control panel | That is intended: the app only accepts connections from the streaming PC. |
 
 ## For developers
@@ -226,6 +284,8 @@ app/
   server.js          local server, overlay state, library, WebSocket messages
   necc.js            NECC / LeagueOS import
   obs.js             optional OBS scene-sync
+  rlstats.js         Rocket League Stats API client (live game data)
+  dev/mock-rlstats.js  fake Rocket League feed for testing without the game
   templates/
     overlay.html     the overlay page (all overlays)
     games.json       game list and per-game scoreboard settings

@@ -64,6 +64,13 @@ const sbShowStocksInput = $id('sbShowStocksInput');
 const sbStockFields = $id('sbStockFields');
 const sbInstantInput = $id('sbInstantInput');
 const sbRefillBtn = $id('sbRefillBtn');
+const sbStyleInput = $id('sbStyleInput');
+const sbRlFields = $id('sbRlFields');
+const sbRlAutoInput = $id('sbRlAutoInput');
+const sbRlPlayersInput = $id('sbRlPlayersInput');
+const sbRlBoostInput = $id('sbRlBoostInput');
+const sbRlColorsInput = $id('sbRlColorsInput');
+const sbRlStatsInput = $id('sbRlStatsInput');
 
 const matchSelect = $id('matchSelect');
 const matchLoadBtn = $id('matchLoadBtn');
@@ -436,7 +443,10 @@ function renderRosterEditor(letter) {
 
 const SB_COUNTERS = ['scoreA', 'scoreB', 'lostA', 'lostB', 'swap'];
 function defaultScoreboard() {
-  return { round: '', unit: 'Game', bestOf: 3, scoreA: 0, scoreB: 0, crewSize: 4, stocksEach: 3, lostA: 0, lostB: 0, showStocks: false, swap: false, position: 'top' };
+  return {
+    round: '', unit: 'Game', bestOf: 3, scoreA: 0, scoreB: 0, crewSize: 4, stocksEach: 3, lostA: 0, lostB: 0, showStocks: false, swap: false, position: 'top',
+    style: 'standard', rlAutoSeries: true, rlPlayers: true, rlBoost: true, rlGameColors: true, rlAutoStats: true,
+  };
 }
 let scoreboard = defaultScoreboard();
 
@@ -449,6 +459,12 @@ function scoreboardConfig() {
     crewSize: clampInt(sbCrewInput.value, 1, 8, 4),
     stocksEach: clampInt(sbStocksInput.value, 1, 5, 3),
     showStocks: sbShowStocksInput.checked,
+    style: sbStyleInput.value === 'rl' ? 'rl' : 'standard',
+    rlAutoSeries: sbRlAutoInput.checked,
+    rlPlayers: sbRlPlayersInput.checked,
+    rlBoost: sbRlBoostInput.checked,
+    rlGameColors: sbRlColorsInput.checked,
+    rlAutoStats: sbRlStatsInput.checked,
   };
 }
 function setScoreboardConfig(c) {
@@ -459,6 +475,12 @@ function setScoreboardConfig(c) {
   sbCrewInput.value = c.crewSize || 4;
   sbStocksInput.value = c.stocksEach || 3;
   sbShowStocksInput.checked = c.showStocks === true;
+  sbStyleInput.value = c.style === 'rl' ? 'rl' : 'standard';
+  sbRlAutoInput.checked = c.rlAutoSeries !== false;
+  sbRlPlayersInput.checked = c.rlPlayers !== false;
+  sbRlBoostInput.checked = c.rlBoost !== false;
+  sbRlColorsInput.checked = c.rlGameColors !== false;
+  sbRlStatsInput.checked = c.rlAutoStats !== false;
 }
 function scoreboardCounters() {
   const out = {};
@@ -492,11 +514,18 @@ function buildScoreSide(t) {
 }
 
 function renderScorePanel() {
-  const { crewSize, stocksEach, showStocks, unit } = scoreboardConfig();
+  const { crewSize, stocksEach, unit, style } = scoreboardConfig();
+  const isRl = style === 'rl';
+  // Rocket League has no stocks and always uses the full top bar.
+  const showStocks = scoreboardConfig().showStocks && !isRl;
   const total = crewSize * stocksEach;
   scorePanel.classList.toggle('no-stocks', !showStocks);
   sbStockFields.style.display = showStocks ? '' : 'none';
   sbRefillBtn.style.display = showStocks ? '' : 'none';
+  sbRlFields.style.display = isRl ? '' : 'none';
+  $id('sbShowStocksField').style.display = isRl ? 'none' : '';
+  $id('sbPositionField').style.visibility = isRl ? 'hidden' : '';
+  renderRlStatus();
   ['A', 'B'].forEach((t) => {
     const team = rosterPayload(rosterFor(t));
     const lost = Math.min(scoreboard['lost' + t] || 0, total);
@@ -561,6 +590,8 @@ function scoreAction(action, t, btn) {
     case 'reset':
       if (btn && !armed(btn, 'Reset match')) return;
       Object.assign(scoreboard, { scoreA: 0, scoreB: 0, lostA: 0, lostB: 0, swap: false });
+      // A new match also starts a new Rocket League series record.
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'rlSeriesReset' }));
       break;
     default: return;
   }
@@ -576,14 +607,165 @@ scorePanel.addEventListener('click', (e) => {
   if (btn) scoreAction(btn.dataset.sb, btn.dataset.team, btn);
 });
 
+// --- Rocket League game connection (v0.11.0) -------------------------------
+//
+// The server reads Rocket League's Stats API (rlstats.js) and sends every
+// page {type:'rl'} snapshots. Here they only drive the status box: whether
+// the game is connected, whether the API is turned on in the game's config
+// (with a button to turn it on), and a hint when the teams look swapped.
+
+const rlStatusBox = $id('rlStatus');
+const rlDot = $id('rlDot');
+const rlText = $id('rlText');
+const rlSub = $id('rlSub');
+const rlEnableBtn = $id('rlEnableBtn');
+const rlSwapHintBtn = $id('rlSwapHintBtn');
+let rlSnap = null;
+let rlConfig = null;
+let rlNote = '';
+let rlNoteTimer = 0;
+let rlConfigAt = 0;
+
+function fmtClock(sec, overtime) {
+  sec = Math.max(0, Math.round(sec || 0));
+  return (overtime ? '+' : '') + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+
+// Which roster team the in-game blue players belong to, judged by matching
+// in-game names against roster gamertags. null when nothing matches.
+function rlBlueTeam() {
+  if (!rlSnap || !rlSnap.inMatch) return null;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const tags = (t) => new Set(rosterPayload(rosterFor(t)).players.flatMap((p) => [norm(p.gamertag), norm(p.name)]).filter(Boolean));
+  const a = tags('A'), b = tags('B');
+  let score = 0;
+  rlSnap.players.forEach((p) => {
+    const n = norm(p.name);
+    const sign = p.team === 0 ? 1 : -1;
+    if (a.has(n)) score += sign;
+    if (b.has(n)) score -= sign;
+  });
+  return score > 0 ? 'A' : score < 0 ? 'B' : null;
+}
+
+function refreshRlConfig(force) {
+  if (!force && Date.now() - rlConfigAt < 8000) return;
+  rlConfigAt = Date.now();
+  fetch('/api/rl/status').then((r) => r.json()).then((st) => { rlConfig = st.config; renderRlStatus(); }).catch(() => {});
+}
+
+function renderRlStatus() {
+  const isRl = sbStyleInput.value === 'rl';
+  rlStatusBox.hidden = !isRl;
+  if (!isRl) return;
+  const st = rlSnap ? rlSnap.status : 'off';
+  let dot = '', text, sub = '';
+  let canEnable = false;
+  if (st === 'connected' && rlSnap.inMatch) {
+    dot = 'connected';
+    const [blue, orange] = rlSnap.teams;
+    text = `In a match: Blue ${blue ? blue.score : 0} - ${orange ? orange.score : 0} Orange, ${fmtClock(rlSnap.clock, rlSnap.overtime)}`;
+    if (!rlSnap.target) sub = 'No player is being followed, so the boost meter is hidden. Spectate a player to show it.';
+  } else if (st === 'connected') {
+    dot = 'connected';
+    text = 'Connected to Rocket League';
+    sub = 'Waiting for a match. Join or spectate one and the board fills in.';
+  } else {
+    dot = 'warn';
+    text = 'Waiting for Rocket League';
+    refreshRlConfig();
+    if (rlConfig && !rlConfig.path) {
+      sub = 'Rocket League\'s settings folder was not found on this PC. Launch the game once, then check again.';
+    } else if (rlConfig && !rlConfig.enabled) {
+      dot = '';
+      text = 'The Stats API is turned off in Rocket League';
+      sub = 'Turn it on below, then restart Rocket League. The game only reads this setting when it starts.';
+      canEnable = true;
+    } else {
+      sub = 'Start Rocket League and it connects by itself. If the game was already running when the Stats API was turned on, restart it.';
+    }
+  }
+  if (rlNote) sub = rlNote;
+  rlDot.className = 'dot' + (dot ? ' ' + dot : '');
+  rlText.textContent = text;
+  rlSub.textContent = sub;
+  rlEnableBtn.hidden = !canEnable;
+  // The left (blue) side is team A unless swapped. Offer a swap when the
+  // roster names say the other team is on blue.
+  const blue = rlBlueTeam();
+  const shownBlue = scoreboard.swap ? 'B' : 'A';
+  rlSwapHintBtn.hidden = !blue || blue === shownBlue;
+  if (!rlSwapHintBtn.hidden) {
+    const name = rosterPayload(rosterFor(blue)).name || `Team ${blue}`;
+    rlSwapHintBtn.textContent = `${name} is on blue: swap sides`;
+  }
+}
+
+function showRlNote(text) {
+  rlNote = text;
+  clearTimeout(rlNoteTimer);
+  rlNoteTimer = setTimeout(() => { rlNote = ''; renderRlStatus(); }, 12000);
+  renderRlStatus();
+}
+
+rlEnableBtn.addEventListener('click', () => {
+  rlEnableBtn.disabled = true;
+  fetch('/api/rl/enable', { method: 'POST' })
+    .then((r) => r.json())
+    .then((res) => {
+      if (res.error) { showRlNote(res.error); return; }
+      rlConfig = res.config;
+      showRlNote('Turned on. Restart Rocket League (fully close it first) and it will connect.');
+    })
+    .catch(() => showRlNote('Could not reach the app server.'))
+    .finally(() => { rlEnableBtn.disabled = false; });
+});
+
+rlSwapHintBtn.addEventListener('click', () => scoreAction('swap'));
+
+// Which screen the board shows (live game, a game's stats, the series
+// overview). The server switches these by itself around each game; these
+// buttons do it by hand. They act on stream immediately, like the score.
+let rlSeries = { games: [] };
+let rlScreen = { screen: 'live', game: -1 };
+const rlGamePick = $id('rlGamePick');
+function renderRlScreens() {
+  const games = rlSeries.games || [];
+  const want = rlScreen.screen === 'game' ? rlScreen.game : games.length - 1;
+  rlGamePick.innerHTML = '';
+  games.forEach((g, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = `Game ${i + 1}: ${g.goals[0]}-${g.goals[1]}`;
+    rlGamePick.appendChild(o);
+  });
+  if (games.length) rlGamePick.value = String(Math.max(0, want));
+  rlGamePick.hidden = !games.length;
+  document.querySelectorAll('[data-rls]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.rls === rlScreen.screen);
+    b.disabled = b.dataset.rls === 'game' && !games.length;
+  });
+}
+function sendRlScreen(screen) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'rlScreen', screen, game: Number(rlGamePick.value || -1) }));
+}
+document.querySelectorAll('[data-rls]').forEach((b) => b.addEventListener('click', () => sendRlScreen(b.dataset.rls)));
+rlGamePick.addEventListener('change', () => sendRlScreen('game'));
+
 // Per-game presets (games.json): picking a game loads that game's scoreboard
 // settings into the draft. Counters are left alone.
+// A series length from a NECC import wins over the game's preset, so picking
+// the game after fetching the match doesn't undo it. Changing Best of by hand
+// clears it.
+let neccBestOf = null;
 function applyGamePreset(gameId) {
   const g = games.find((x) => x.id === gameId);
   if (!g || !g.scoreboard) return;
-  setScoreboardConfig({ ...defaultScoreboard(), ...g.scoreboard });
+  setScoreboardConfig({ ...defaultScoreboard(), ...g.scoreboard, ...(neccBestOf ? { bestOf: neccBestOf } : {}) });
   renderScorePanel();
 }
+sbBestOfInput.addEventListener('change', () => { neccBestOf = null; });
 
 // --- Draft form -------------------------------------------------------------------
 
@@ -799,6 +981,27 @@ function connect() {
       liveNeccType = msg.liveNeccType || '';
       renderOverlayButtons();
       toggleLayoutVisibility();
+    }
+    if (msg.type === 'rl') {
+      const was = rlSnap;
+      rlSnap = msg.rl;
+      // Snapshots arrive up to 30 times a second; the status box only needs
+      // redrawing when something it shows has changed.
+      const key = (s) => s ? [s.status, s.inMatch, s.clock, s.overtime, s.target, (s.teams || []).map((t) => t.score).join('-'), (s.players || []).map((p) => p.team + p.name).join()].join('|') : '';
+      if (key(was) !== key(rlSnap)) renderRlStatus();
+    }
+    if (msg.type === 'music') renderMusic(msg.music);
+    if (msg.type === 'rlSeries') {
+      rlSeries = msg.series || { games: [] };
+      rlScreen = msg.screen || { screen: 'live', game: -1 };
+      renderRlScreens();
+    }
+    if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'matchEnded' && msg.event.series) {
+      const t = msg.event.series;
+      const name = rosterPayload(rosterFor(t)).name || `Team ${t}`;
+      const side = $id('sbSide' + t);
+      side.classList.remove('flash'); void side.offsetWidth; side.classList.add('flash');
+      showRlNote(`Game over: ${name} won, and the series score was updated. Use + or \u2212 to correct it.`);
     }
     if (msg.type === 'montages') {
       montageStatus = msg.montages || {};
@@ -1209,6 +1412,8 @@ neccFetchBtn.addEventListener('click', async () => {
     // behind - only filling empty fields meant a second import kept showing
     // the old opponent in the subtitle.
     if (data.game) teamInput.value = data.game;
+    neccBestOf = data.bestOf || null;
+    if (neccBestOf) sbBestOfInput.value = String(neccBestOf);
     const widener = data.teams.find((t) => /widener/i.test(t.org || t.name || ''));
     const opponent = data.teams.find((t) => t !== widener) || data.teams[1];
     if (opponent && opponent.name) subtitleInput.value = `vs ${opponent.name}`;
@@ -1224,7 +1429,7 @@ neccFetchBtn.addEventListener('click', async () => {
     }
 
     const urlCount = Object.keys(lastImportedOverlayUrls).length;
-    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${urlCount ? ` (${urlCount} overlay links ready)` : ' (no overlay links resolved, so NECC graphics are unavailable for this match)'}. Both teams were saved to the team library.`;
+    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${data.bestOf ? `, best of ${data.bestOf}` : ''}${urlCount ? ` (${urlCount} overlay links ready)` : ' (no overlay links resolved, so NECC graphics are unavailable for this match)'}. Both teams were saved to the team library.`;
     pushDraft();
   } catch (err) {
     neccStatus.textContent = err.message || 'Failed to import match';
@@ -1720,6 +1925,57 @@ async function pushObsSettings() {
 }
 obsSyncEnable.addEventListener('change', pushObsSettings);
 obsTransitionSelect.addEventListener('change', pushObsSettings);
+
+// --- Background music (v0.11.0) ----------------------------------------------
+// The server keeps the settings and tells OBS what to do (see obs.js); this
+// only edits them. Music settings are machine-wide, not part of a match.
+const musicEnable = $id('musicEnable');
+const musicFileText = $id('musicFileText');
+const musicFile = $id('musicFile');
+const musicVolume = $id('musicVolume');
+const musicVolumeText = $id('musicVolumeText');
+const musicStatusEl = $id('musicStatus');
+const musicDefaultBtn = $id('musicDefaultBtn');
+function musicDbText(v) { return `${Math.round(-40 + 40 * (v / 100))} dB`; }
+function renderMusic(m) {
+  if (!m) return;
+  musicEnable.checked = m.enabled;
+  musicFileText.value = m.file || 'Included track (rl-music-long.m4a)';
+  musicFileText.title = m.path || '';
+  if (document.activeElement !== musicVolume) musicVolume.value = String(m.volume);
+  musicVolumeText.textContent = musicDbText(Number(musicVolume.value));
+  musicDefaultBtn.disabled = !m.file;
+  let text;
+  if (m.customMissing) text = 'The custom file is missing, so the included track is used.';
+  else if (!m.defaultExists && !m.file) text = 'The included track is missing from this install. Pick a file.';
+  else if (!m.enabled) text = 'Music is off.';
+  else if (!m.obsConnected) text = 'OBS is not connected, so no music is playing. Connect under scene-sync above.';
+  else text = m.playing ? 'Playing now (no gameplay on screen).' : 'Faded out: gameplay is on screen.';
+  musicStatusEl.textContent = text;
+  musicStatusEl.classList.toggle('error', !!m.customMissing || (!m.defaultExists && !m.file));
+}
+function saveMusic(patch) {
+  fetch('/api/music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+    .then((r) => r.json())
+    .then((m) => {
+      if (m.error) { musicStatusEl.textContent = m.error; musicStatusEl.classList.add('error'); return; }
+      renderMusic(m);
+    })
+    .catch(() => {});
+}
+musicEnable.addEventListener('change', () => saveMusic({ enabled: musicEnable.checked }));
+musicVolume.addEventListener('input', () => { musicVolumeText.textContent = musicDbText(Number(musicVolume.value)); });
+musicVolume.addEventListener('change', () => saveMusic({ volume: Number(musicVolume.value) }));
+$id('musicBrowseBtn').addEventListener('click', () => musicFile.click());
+// The app window gives a real path for a picked file (Electron); a plain
+// browser only gives a name, which the server rejects with a message.
+musicFile.addEventListener('change', () => {
+  const f = musicFile.files[0];
+  if (f) saveMusic({ file: f.path || f.name });
+  musicFile.value = '';
+});
+musicDefaultBtn.addEventListener('click', () => saveMusic({ file: '' }));
+fetch('/api/music').then((r) => r.json()).then(renderMusic).catch(() => {});
 
 obsBuildBtn.addEventListener('click', async () => {
   obsBuildStatus.classList.remove('error');
