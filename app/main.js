@@ -7,9 +7,10 @@ const ICON_PATH = path.join(__dirname, 'build', 'icons', 'icon-256.png');
 const APP_TITLE = 'Widener Esports Stream Control';
 
 function createWindow() {
+  // Wide enough for the preview and live monitors side by side (v0.12.0).
   const win = new BrowserWindow({
-    width: 1150,
-    height: 820,
+    width: 1280,
+    height: 860,
     title: APP_TITLE,
     icon: ICON_PATH,
   });

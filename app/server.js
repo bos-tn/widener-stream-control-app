@@ -421,6 +421,44 @@ function createServer(port, opts = {}) {
   // Settings are machine-level, so they live in settings.json, not in the
   // live/draft overlay state.
   let appSettings = readJsonSafe(settingsFile) || {};
+
+  // --- Panel preferences (v0.12.0) ------------------------------------------
+  // Options that used to live in each window's own browser storage: the
+  // transition on Push Live, push on pick, instant scores, which NECC buttons
+  // show, the last import's NECC links, and whether the setup guide has run.
+  // Kept here so the app window and an OBS dock always agree.
+  const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
+  const PREF_FLAGS = ['stingerOnPush', 'switchPush', 'scoresInstant', 'setupDone'];
+  function panelPrefs() {
+    const p = appSettings.panel || {};
+    return {
+      stingerOnPush: p.stingerOnPush !== false,
+      switchPush: p.switchPush === true,
+      scoresInstant: p.scoresInstant !== false,
+      neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => typeof t === 'string') : DEFAULT_NECC_TYPES.slice(),
+      neccOverlayUrls: p.neccOverlayUrls && typeof p.neccOverlayUrls === 'object' ? p.neccOverlayUrls : {},
+      setupDone: p.setupDone === true,
+    };
+  }
+  function savePanelPrefs(patch) {
+    const next = panelPrefs();
+    PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
+    if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => typeof t === 'string').slice(0, 20);
+    if (patch.neccOverlayUrls && typeof patch.neccOverlayUrls === 'object') {
+      // Only LeagueOS overlay links are ever stored here (https pages the
+      // overlay embeds), never anything else a request might carry.
+      next.neccOverlayUrls = {};
+      Object.keys(patch.neccOverlayUrls).forEach((k) => {
+        const u = patch.neccOverlayUrls[k];
+        if (typeof u === 'string' && /^https:\/\//i.test(u)) next.neccOverlayUrls[k] = u;
+      });
+    }
+    appSettings = { ...appSettings, panel: next };
+    writeJsonSafe(settingsFile, appSettings);
+    sendToPanels({ type: 'prefs', prefs: next });
+    return next;
+  }
+
   function musicConfig() {
     const m = appSettings.music || {};
     const volume = Number(m.volume);
@@ -756,6 +794,131 @@ function createServer(port, opts = {}) {
     res.json(musicStatus());
   });
 
+  // --- Panel preference routes ---
+  // `saved` is false until a panel has written them once, so the first panel
+  // to connect after an upgrade can carry its old browser-storage choices up.
+  app.get('/api/prefs', (req, res) => res.json({ prefs: panelPrefs(), saved: !!appSettings.panel }));
+  app.post('/api/prefs', (req, res) => res.json({ prefs: savePanelPrefs(req.body || {}), saved: true }));
+
+  // --- Remote control routes (v0.12.0) ---
+  // A Stream Deck (through a web-request plugin or Bitfocus Companion), a
+  // macro pad, or a script on this PC can run the show with plain POST
+  // requests: Push Live, discard, pick an overlay, keep score. The server only
+  // listens on this PC, and a request sent by a web page (an Origin other
+  // than this app) is refused, so a website open in a browser on the
+  // streaming PC can't press these buttons. Score changes always go live at
+  // once, like the panel's default.
+  const REMOTE_VIEWS = ['starting-soon', 'post-match', 'roster', 'brb', 'scoreboard'];
+  const VIEW_COUNTDOWN = { 'starting-soon': 600, 'post-match': 120 };
+  function remoteAllowed(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    try {
+      const u = new URL(origin);
+      return ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) && String(u.port) === String(port);
+    } catch (e) {
+      return false;
+    }
+  }
+  app.use('/api/remote', (req, res, next) => {
+    if (req.method === 'GET') return next();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
+    if (!remoteAllowed(req)) return res.status(403).json({ error: 'Requests from web pages are not accepted' });
+    next();
+  });
+
+  function remoteTransition() {
+    return panelPrefs().stingerOnPush && !obs.isSceneSync() ? 'stinger' : undefined;
+  }
+
+  // The same steps as picking an overlay in the panel: the overlay goes into
+  // the preview, a view with its own countdown restarts it, and with "push
+  // live as soon as I pick an overlay" on it goes straight to stream. Every
+  // open panel reloads its form from the new draft.
+  function remoteSelectOverlay(view) {
+    let patch;
+    if (REMOTE_VIEWS.includes(view)) {
+      patch = { mode: view, neccUrl: '', neccType: '' };
+      if (VIEW_COUNTDOWN[view]) Object.assign(patch, { countdownMode: 'duration', durationSec: VIEW_COUNTDOWN[view], restartCountdown: true });
+    } else if (/^necc-/.test(view)) {
+      const type = view.slice(5);
+      const url = panelPrefs().neccOverlayUrls[type];
+      if (!url) return { error: 'Import a match first to get that NECC graphic' };
+      patch = { mode: 'necc', neccType: type, neccUrl: url };
+    } else {
+      return { error: `Unknown overlay. Use one of: ${REMOTE_VIEWS.join(', ')}, or necc-<type>` };
+    }
+    const newDraft = updateChannel('draft', patch);
+    wantMontage(newDraft.game);
+    updateRlActive();
+    broadcast('draft', newDraft, { repopulate: true });
+    broadcastDirty();
+    if (panelPrefs().switchPush) doPush(remoteTransition());
+    return { mode: newDraft.mode, pushed: panelPrefs().switchPush };
+  }
+
+  function remoteScore(team, action) {
+    const T = team === 'b' ? 'B' : team === 'a' ? 'A' : '';
+    const sb = draft.scoreboard;
+    const total = (Number(sb.crewSize) || 4) * (Number(sb.stocksEach) || 3);
+    const score = (k) => Number(sb['score' + k]) || 0;
+    const lost = (k) => Number(sb['lost' + k]) || 0;
+    const out = {};
+    if (action === 'swap') {
+      out.swap = !sb.swap;
+    } else if (!T) {
+      return { error: 'Team must be a or b' };
+    } else if (action === 'win') {
+      // A game, map or set won: a point, and both crews' stocks refill.
+      Object.assign(out, { ['score' + T]: Math.min(9, score(T) + 1), lostA: 0, lostB: 0 });
+    } else if (action === 'point') {
+      out['score' + T] = Math.min(9, score(T) + 1);
+    } else if (action === 'unpoint') {
+      out['score' + T] = Math.max(0, score(T) - 1);
+    } else if (action === 'stock' || action === 'unstock') {
+      if (!sb.showStocks) return { error: 'The stock counter is off for this scoreboard' };
+      out['lost' + T] = action === 'stock' ? Math.min(total, lost(T) + 1) : Math.max(0, Math.min(total, lost(T)) - 1);
+    } else {
+      return { error: 'Unknown score action. Use win, point, unpoint, stock, unstock or swap' };
+    }
+    applyScore(out);
+    broadcast('live', live);
+    broadcast('draft', draft);
+    broadcastDirty();
+    const s = live.scoreboard;
+    return { scoreA: s.scoreA, scoreB: s.scoreB, lostA: s.lostA, lostB: s.lostB, swap: s.swap };
+  }
+
+  function remoteReply(res, out) {
+    if (out && out.error) return res.status(400).json(out);
+    res.json({ ok: true, ...out });
+  }
+
+  app.get('/api/remote', (req, res) => {
+    const base = `http://localhost:${port}/api/remote`;
+    res.json({
+      note: 'Send each as a POST request from this PC.',
+      actions: [
+        `${base}/push`, `${base}/discard`,
+        ...REMOTE_VIEWS.map((v) => `${base}/overlay/${v}`),
+        ...Object.keys(panelPrefs().neccOverlayUrls).map((t) => `${base}/overlay/necc-${t}`),
+        `${base}/score/a/win`, `${base}/score/b/win`, `${base}/score/a/point`, `${base}/score/a/unpoint`,
+        `${base}/score/a/stock`, `${base}/score/a/unstock`, `${base}/score/swap`,
+      ],
+    });
+  });
+  app.post('/api/remote/push', (req, res) => { doPush(remoteTransition()); remoteReply(res, { mode: live.mode }); });
+  app.post('/api/remote/discard', (req, res) => {
+    const newDraft = revertDraft();
+    updateRlActive();
+    broadcast('draft', newDraft, { repopulate: true });
+    broadcastDirty();
+    remoteReply(res, {});
+  });
+  app.post('/api/remote/overlay/:view', (req, res) => remoteReply(res, remoteSelectOverlay(String(req.params.view))));
+  app.post('/api/remote/score/swap', (req, res) => remoteReply(res, remoteScore('', 'swap')));
+  app.post('/api/remote/score/:team/:action', (req, res) => remoteReply(res, remoteScore(String(req.params.team).toLowerCase(), String(req.params.action))));
+
   // --- Rocket League routes ---
   // The panel shows whether the Stats API is turned on in the game's config,
   // and can turn it on (the game reads it at launch, so it needs a restart).
@@ -860,6 +1023,25 @@ function createServer(port, opts = {}) {
   function broadcastDirty() { sendToPanels(dirtyMessage()); }
   function broadcastLibrary() { sendToPanels({ type: 'library', library }); }
 
+  // Push Live, from the panel or a remote button. The stinger flag rides
+  // along to both channels: the live overlay plays the wipe while swapping
+  // content, and the panel's preview plays it too as confirmation. With
+  // scene-sync on, OBS then switches to the newly live view's scene and plays
+  // its own transition. That is fire-and-forget: it must never delay or fail
+  // the push that already went out.
+  function doPush(transition) {
+    const newLive = pushLive();
+    wantMontage(newLive.game);
+    updateRlActive();
+    const extra = transition === 'stinger' ? { transition: 'stinger' } : undefined;
+    broadcast('live', newLive, extra);
+    broadcast('draft', draft, extra);
+    broadcastDirty();
+    obs.onPush(newLive).catch(() => {});
+    updateMusic();
+    return newLive;
+  }
+
   wss.on('connection', (ws) => {
     ws.subscribedChannel = null;
 
@@ -879,6 +1061,7 @@ function createServer(port, opts = {}) {
           ws.send(JSON.stringify(dirtyMessage()));
           ws.send(JSON.stringify({ type: 'library', library }));
           ws.send(JSON.stringify({ type: 'music', music: musicStatus() }));
+          ws.send(JSON.stringify({ type: 'prefs', prefs: panelPrefs() }));
         }
         return;
       }
@@ -897,21 +1080,7 @@ function createServer(port, opts = {}) {
       }
 
       if (msg.type === 'push') {
-        const newLive = pushLive();
-        wantMontage(newLive.game);
-        updateRlActive();
-        // The stinger flag rides along to both channels: the live overlay
-        // plays the wipe while swapping content, and the control panel's
-        // preview plays it too as operator confirmation.
-        const extra = msg.transition === 'stinger' ? { transition: 'stinger' } : undefined;
-        broadcast('live', newLive, extra);
-        broadcast('draft', draft, extra);
-        broadcastDirty();
-        // Scene-sync (if connected + enabled): OBS switches to the scene for
-        // the newly-live view and fires its own transition. Fire-and-forget -
-        // it must never delay or fail the push that already went out.
-        obs.onPush(newLive).catch(() => {});
-        updateMusic();
+        doPush(msg.transition);
         return;
       }
 
@@ -935,12 +1104,14 @@ function createServer(port, opts = {}) {
         return;
       }
 
-      // Discard the draft: snap the preview (and the control panel form,
-      // which repopulates from the draft broadcast) back to the live state.
+      // Discard the draft: snap the preview (and every open control panel's
+      // form, which repopulates from the draft broadcast) back to the live
+      // state. `repopulate` reaches a second panel (an OBS dock) too, so it
+      // can't later send its stale form back over the reverted draft.
       if (msg.type === 'revert') {
         const newDraft = revertDraft();
         updateRlActive();
-        broadcast('draft', newDraft);
+        broadcast('draft', newDraft, { repopulate: true });
         broadcastDirty();
       }
     });

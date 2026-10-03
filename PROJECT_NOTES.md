@@ -1,9 +1,11 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.9.0**. If you're starting a new chat, read the summary
-below first, then the sections relevant to what you're changing. The later
-sections are a history: each one records why something is the way it is.
+updated through **v0.12.0** (test build on branch `test/gui-overhaul`). If
+you're starting a new chat, read the summary below first, then the sections
+relevant to what you're changing. The later sections are a history: each one
+records why something is the way it is. The control panel was rebuilt in
+v0.12.0; read that section before touching `public/control/`.
 
 ## How the app works now (v0.9.0 summary)
 
@@ -18,10 +20,13 @@ sections are a history: each one records why something is the way it is.
 - **One overlay page, six modes**: `starting-soon`, `post-match`, `roster`,
   `brb`, `scoreboard`, `necc`. `?view=<mode>` pins a page to one mode (OBS
   scene-sync sources); `?monitor=1` is the panel's live monitor.
-- **Panel** (`public/control/`): Show and Setup tabs, overlay buttons (drawn
-  from a hidden `<select>` that stays the source of truth), rosters with team
-  library, match save/load, scoreboard controls, undo/redo, keyboard
-  shortcuts. It sends the whole draft on every edit (debounced 150 ms).
+- **Panel** (`public/control/`, rebuilt in v0.12.0): Studio Mode monitors
+  (Preview, Push Live, Live) beside three pages: Prep (game, match, teams, team
+  library cards), Live (overlay strip drawn from a hidden `<select>` that stays
+  the source of truth, scoreboard card, an inspector showing only the
+  previewed overlay's fields) and Settings. Undo/redo, keyboard shortcuts, a
+  setup guide, toasts with Undo. It sends the whole draft on every edit
+  (debounced 150 ms).
 - **Data on disk** (Electron userData, or `app/data` in dev): `state.json`
   (`{live, draft}`), `library.json` (saved teams and matches), `logos/`
   (cached NECC logos). All JSON is written through `writeJsonSafe` (temp file
@@ -825,6 +830,90 @@ meter in the bottom right.
   goal banner, replay, auto-count on push, swap hint, API-off panel state)
   and a scripted fake-game test of the series logic. **Not yet verified
   against the real game**, which on the dev PC still has the API turned off.
+
+## v0.12.0: control panel rebuild (test build)
+
+From a usability review for a general audience (written up in the
+"Adapting the Stream App for a New Esports League" doc, Control panel
+usability tab). Measured on v0.11.0 at 1440x900: the Show tab was 2,513 px of
+scrolling with 124 controls while the scoreboard was up, the preview got 397 x
+223 px with black bands filling 61% of its column, and preview and live were
+never on screen together. The rebuild keeps the overlay page, the state shape
+and the WS protocol; nearly all of it is `index.html`, `control.css` and
+`control.js`, plus two server additions.
+
+- **Studio Mode monitors.** `#monitors` holds Preview (green, `?preview=1`),
+  the push column, and Live (red, `?monitor=1`, now always loaded). The same
+  DOM serves every page; only `.layout[data-page]` CSS moves it: across the top
+  on Live, a right-hand column on Prep and Settings, stacked on top below 980
+  px (OBS dock: preview full width, live as a small thumbnail beside Push
+  Live). Never move the iframes in the DOM: that reloads them. `fitMonitor()`
+  sizes each 16:9 box from its wrap, same reasoning as the old preview.
+  Settings, Display can turn the live monitor off (it loads `about:blank`) for
+  slower PCs.
+- **Pages.** Prep (game, match import and saved matches, teams, team library),
+  Live (overlay strip, scoreboard card, inspector), Settings. `widener-page`
+  in localStorage; v0.11's `widener-tab` maps setup to settings.
+- **Inspector.** Every field group in `#inspector` lists its overlays in
+  `data-modes`; `applyInspector()` hides the rest. It follows what the overlay
+  page actually draws: Rosters shows logo and next match (frame) but not the
+  title, Be Right Back shows title and subtitle only, Scoreboard hides the
+  inspector entirely (the Scoreboard card is its fields). The scoreboard card
+  still shows while the scoreboard is live, after the inspector (`order:2`).
+- **Overlay strip.** Cards with thumbnails drawn from the panel's own fields
+  (`thumbHtml`), redrawn on every edit through `scheduleStripRender()`; no
+  extra overlay pages. NECC cards without an imported match are dashed, say
+  "Needs a match import", and take you to the import box.
+- **Panel preferences on the server.** Transition on push, push on pick,
+  instant scores, enabled NECC types, the last import's NECC links and
+  `setupDone` used to be per-window localStorage, so the app window and an OBS
+  dock disagreed. Now `settings.json` `panel`, `GET/POST /api/prefs`, broadcast
+  as `{type:'prefs'}`. The first panel after the upgrade copies its old
+  localStorage values up (`legacyPrefs`, only while `saved` is false).
+  Text size, live monitor, page and folded cards stay per window on purpose.
+- **Repopulate.** A draft broadcast can carry `repopulate: true`; every panel
+  then reloads its form from it. Used by revert (so a second panel can't send
+  its stale form back over a reverted draft, which v0.11 allowed) and by the
+  remote overlay switch.
+- **Remote control (`/api/remote/*`).** POST only. `push`, `discard`,
+  `overlay/<view>` (and `overlay/necc-<type>`), `score/<a|b>/<win|point|
+  unpoint|stock|unstock>`, `score/swap`. Overlay picks mirror the panel
+  (countdown restart for Starting Soon / Post-Match, push if switchPush).
+  Scores always go to both channels. A request with an Origin header other
+  than this app's own is refused (403), so a web page can't drive it by CSRF;
+  Stream Deck plugins and Companion send no Origin. `doPush()` is now shared
+  by the WS handler and the remote route.
+- **Setup guide.** A modal: managed scenes (recommended) or one browser
+  source, connect, build scenes, download videos, done. Opens by itself only
+  when the install looks fresh (no library teams or matches and OBS never
+  connected from this window); an upgraded install is marked done silently.
+  Settings can run it again.
+- **Smaller pieces.** Browse-first file fields (`makeFileField`: name chip,
+  Browse, Paste a link, Clear; the hidden text input stays the value) for the
+  logo, background video and team logos. A window with no file path access
+  (an OBS dock) says so instead of storing a bare file name. Countdown typed
+  as minutes:seconds (`parseDuration`; the server still gets seconds).
+  Rosters fold to one line once filled. Team library as cards with search and
+  a side sheet editor. Deletes (saved match, library team) happen at once with
+  an Undo toast. `?` opens the shortcut list; Ctrl+plus/minus/0 set text size
+  (fonts are rem against `--ui-scale`; Ctrl+= is taken so Electron's page zoom
+  doesn't also run). Collapsible cards remember their state. Renames: Revert to
+  Discard changes, Status pill to Badge text, Curtain stinger on push to Play
+  transition, Fetch to Import, montage clip to Background video, Turn on the
+  Stats API to Connect to Rocket League, scene-sync to "Let the app switch OBS
+  scenes", music volume in % instead of dB. Window default 1280 x 860.
+- **NECC import subtitle.** "vs <opponent>" now goes into Starting Soon's view
+  text whichever overlay is in the preview (it used to land in the current
+  overlay's subtitle), and the import sends all views.
+- **Verified** in the preview tool at 1440x900, 1280x860 and 400x900 (no
+  horizontal overflow): page switching, strip selection, inspector per
+  overlay, push/discard, scoreboard card order, team sheet, delete + Undo,
+  file field paste/clear, text size, live monitor toggle, the setup guide's
+  steps (OBS connect error path; no OBS on the dev PC), and the remote routes
+  with curl (403 for a foreign Origin, overlay switch repopulating an open
+  panel, score changes). **Not yet tried:** real OBS through the guide, a real
+  Stream Deck, and the OBS dock's CEF (older Chromium: `:has()` only styles the
+  guide's choice cards, so nothing breaks without it).
 
 ## State shape (server.js `DEFAULT_STATE`)
 
