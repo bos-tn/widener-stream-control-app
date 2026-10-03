@@ -1,55 +1,61 @@
-// Optional OBS integration (obs-websocket v5). This is strictly ADDITIVE and
-// opt-in: the app's single-URL live-push model works with zero OBS connection.
-// When the operator connects and enables "scene-sync", OBS owns the *between-
-// view* transitions (one scene per overlay type, switched with OBS's own
-// configured transition, e.g. the league's stinger) while the existing WebSocket
-// push keeps driving the *content* inside each view live.
+// OBS integration (obs-websocket v5). Since v2.0.0 the app is OBS-first: OBS
+// is the switcher, and the app builds and maintains everything OBS shows.
 //
-// Everything here fails soft: OBS being unreachable, mid-call errors, or a
-// user having renamed things must never block a Push Live or crash the app.
+// - Setup creates (or reuses) a scene collection for the league, so the
+//   app's scenes never mix with someone's own.
+// - One scene per overlay, each holding one locked browser source at
+//   /overlay?view=<view>: Starting Soon, Post-Match, Rosters, Be Right Back,
+//   Scoreboard (with a Game Capture under it), Rocket League Stats, and one
+//   scene per league graphic the operator picked (Bracket, Match Preview...).
+// - The league's stinger: the app selects the operator's Stinger transition
+//   and points it at the league's video with the right cut point.
+// - The app reports which scene is on program (the panel's On air readout,
+//   music, Post-Match's countdown) and switches scenes itself only where it
+//   helps: to Rocket League Stats after a game, and back for the next one.
+//
+// Everything fails soft: OBS being unreachable or a call failing must never
+// crash the app or stop the overlays, which the server keeps serving.
 //
 // SECURITY: the obs-websocket password is a secret. It is held in memory only
 // for the life of a connection, never persisted server-side, and never logged.
 
 const { OBSWebSocket } = require('obs-websocket-js');
 
-// One scene per overlay type, each holding a single locked browser source at
-// /overlay?view=<view>. Names are the stable idempotency key - re-running
-// "build scenes" reuses anything already matching these names instead of
-// duplicating. Switching overlay type becomes a scene switch; the pushed state
-// still updates the content inside whichever scene is live.
-//
-// Since v1.0.0 the prefix comes from the league profile ("WU" for Widener,
-// "LotE" for League of the East), so each league's app builds and switches
-// only its own scenes, and both sets can live in one OBS.
-function sceneList(prefix, leagueScene) {
-  return [
-    { view: 'starting-soon', scene: `${prefix}: Starting Soon`, input: `${prefix}-src-starting-soon` },
-    { view: 'post-match',    scene: `${prefix}: Post-Match`,    input: `${prefix}-src-post-match` },
-    { view: 'roster',        scene: `${prefix}: Rosters`,       input: `${prefix}-src-roster` },
-    { view: 'brb',           scene: `${prefix}: Be Right Back`, input: `${prefix}-src-brb` },
-    // Transparent scoreboard: the game capture goes in this scene *under* the
-    // browser source, so it's the one scene the operator adds their own source to.
-    // It was Smash-only in v0.8.0; `legacy` names are renamed in place on the
-    // next build so the operator's game capture inside it is kept.
-    { view: 'scoreboard',    scene: `${prefix}: Scoreboard`,    input: `${prefix}-src-scoreboard`,
-      legacy: { scene: `${prefix}: Smash Scoreboard`, input: `${prefix}-src-smash` } },
-    // One league scene covers every league graphic: the locked page reads the
-    // pushed neccUrl, so picking bracket vs match-preview is a live content
-    // update inside this same scene, not a new scene.
-    { view: 'necc',          scene: `${prefix}: ${leagueScene}`, input: `${prefix}-src-necc` },
-  ];
-}
-let SCENES = sceneList('WU', 'NECC');
+// Scenes for the base overlays. `key` identifies a scene in the app (a view,
+// or necc:<type> for a league graphic). Names are the idempotency key: a
+// rebuild reuses anything already matching instead of duplicating it.
+const BASE_VIEWS = [
+  { view: 'starting-soon', label: 'Starting Soon', src: 'starting-soon' },
+  { view: 'post-match', label: 'Post-Match', src: 'post-match' },
+  { view: 'roster', label: 'Rosters', src: 'roster' },
+  { view: 'brb', label: 'Be Right Back', src: 'brb' },
+  // Transparent: the game capture sits under the browser source. It was
+  // Smash-only in v0.8.0; the legacy names are renamed in place on a build.
+  { view: 'scoreboard', label: 'Scoreboard', src: 'scoreboard', legacy: 'Smash Scoreboard', legacySrc: 'smash' },
+];
+const STATS_VIEW = { view: 'stats', label: 'Rocket League Stats', src: 'stats' };
 
-// Background music (v0.11.0): ONE media source shared by every app scene.
-// Because it is the same source everywhere, a scene switch never restarts it:
-// it keeps playing straight through transitions. It loops, doesn't restart
-// when a scene becomes active, and stays open while hidden. The app fades its
-// volume (fadeMusic) so it is only heard when no gameplay is on screen; that
-// is decided in server.js, since the Rocket League stats screens are inside
-// the same Scoreboard scene as the game.
-let MUSIC_INPUT = 'WU: Music';
+function sceneEntries(prefix, opts) {
+  const list = BASE_VIEWS.map((v) => ({
+    key: v.view, view: v.view,
+    scene: `${prefix}: ${v.label}`, input: `${prefix}-src-${v.src}`,
+    legacy: v.legacy ? { scene: `${prefix}: ${v.legacy}`, input: `${prefix}-src-${v.legacySrc}` } : null,
+  }));
+  if (opts.includeStats) {
+    list.push({ key: 'stats', view: 'stats', scene: `${prefix}: ${STATS_VIEW.label}`, input: `${prefix}-src-stats` });
+  }
+  (opts.neccTypes || []).forEach((t) => {
+    list.push({
+      key: `necc:${t.key}`, view: 'necc', necc: t.key,
+      scene: `${prefix}: ${t.label}`, input: `${prefix}-src-necc-${t.key}`,
+    });
+  });
+  return list;
+}
+
+// Background music (v0.11.0): ONE media source shared by every app scene, so
+// a scene switch never restarts it. The server decides when it is heard
+// (fadeMusic), since the Rocket League menus count as "no gameplay".
 const MUSIC_OFF_DB = -60;
 function musicSettings(file) {
   return {
@@ -58,40 +64,32 @@ function musicSettings(file) {
   };
 }
 
-function sceneForView(view) {
-  return SCENES.find((s) => s.view === view) || null;
-}
-
-function viewForScene(sceneName) {
-  const t = SCENES.find((s) => s.scene === sceneName || (s.legacy && s.legacy.scene === sceneName));
-  return t ? t.view : null;
-}
-
 // How long to wait between reconnect attempts after OBS goes away.
 const RECONNECT_MS = 5000;
 
-// opts.getOverlayBase() -> e.g. "http://localhost:4310" (where OBS should point
-// its browser sources; OBS runs on the same machine, so localhost is correct).
+// opts: getOverlayBase() -> "http://localhost:<port>", prefix ("WU"),
+// leagueScene (fallback league graphic scene name), collection (scene
+// collection name), stingerName (the OBS transition name to look for),
+// onProgram({ key, view, necc, scene }) when the program scene changes.
 function createObs(opts = {}) {
-  if (opts.prefix) {
-    SCENES = sceneList(opts.prefix, opts.leagueScene || 'League Graphics');
-    MUSIC_INPUT = `${opts.prefix}: Music`;
-  }
+  const prefix = opts.prefix || 'APP';
   const getOverlayBase = opts.getOverlayBase || (() => 'http://localhost:4310');
-  const onProgramView = opts.onProgramView || (() => {});
+  const onProgram = opts.onProgram || (() => {});
+  const collectionName = opts.collection || `${prefix} Stream`;
+  const stingerName = opts.stingerName || `${prefix} Stinger`;
+  const musicInput = `${prefix}: Music`;
+  const captureInput = `${prefix}-game-capture`;
   const obs = new OBSWebSocket();
 
+  // The scenes the app manages, from the last build (or the base set).
+  let scenes = sceneEntries(prefix, { includeStats: true, neccTypes: [] });
   let connected = false;
   // Set by a successful connect and cleared only by an explicit Disconnect.
-  // While set, a dropped connection (OBS closed or restarted) is retried in the
-  // background, so scene-sync comes back on its own instead of silently
-  // staying off for the rest of the stream. Held in memory only, like the
-  // password inside it.
+  // While set, a dropped connection (OBS closed or restarted) is retried in
+  // the background. Held in memory only, like the password inside it.
   let wanted = null;
   let reconnectTimer = null;
   let reconnecting = false;
-  let sceneSync = false;        // does a Push Live drive an OBS scene switch?
-  let transitionName = '';      // '' -> leave OBS's current transition as-is
   let currentScene = '';
   let lastError = '';
   // What the music should be doing; applied on connect, build and change.
@@ -99,22 +97,49 @@ function createObs(opts = {}) {
   let musicApplied = null;
   let fadeTimer = null;
 
+  function entryForScene(name) {
+    return scenes.find((s) => s.scene === name || (s.legacy && s.legacy.scene === name)) || null;
+  }
+  function entryForKey(key) { return scenes.find((s) => s.key === key) || null; }
+
+  function reportProgram() {
+    const t = entryForScene(currentScene);
+    try { onProgram(t ? { key: t.key, view: t.view, necc: t.necc || '', scene: currentScene } : { key: '', view: '', necc: '', scene: currentScene }); }
+    catch (e) { /* never break OBS events */ }
+  }
+
   obs.on('ConnectionClosed', () => {
     const was = connected;
     connected = false;
     currentScene = '';
     if (was && wanted) scheduleReconnect();
+    reportProgram();
   });
   obs.on('CurrentProgramSceneChanged', (d) => {
     currentScene = (d && (d.sceneName || d.currentProgramSceneName)) || currentScene;
-    // Report which of our overlays is now on program, whether the switch came
-    // from a Push Live or from someone clicking a scene in OBS.
-    const view = viewForScene(currentScene);
-    if (view) { try { onProgramView(view); } catch (e) { /* never break OBS events */ } }
+    reportProgram();
   });
+  obs.on('CurrentSceneCollectionChanged', () => { refreshProgram(); });
+
+  async function refreshProgram() {
+    try {
+      const r = await obs.call('GetCurrentProgramScene');
+      currentScene = r.currentProgramSceneName || r.sceneName || '';
+    } catch (e) { /* non-fatal */ }
+    reportProgram();
+  }
+
+  function onAir() {
+    const t = entryForScene(currentScene);
+    return t ? { key: t.key, view: t.view, necc: t.necc || '' } : { key: '', view: '', necc: '' };
+  }
 
   function status() {
-    return { connected, reconnecting: !connected && reconnecting, sceneSync, transitionName, currentScene, error: lastError };
+    return {
+      connected, reconnecting: !connected && reconnecting, currentScene, onAir: onAir(),
+      collection: collectionName, stingerName, error: lastError,
+      scenes: scenes.map((s) => ({ key: s.key, scene: s.scene })),
+    };
   }
 
   function scheduleReconnect() {
@@ -136,8 +161,8 @@ function createObs(opts = {}) {
     currentScene = '';
   }
 
-  // cfg.retry (sent by the panel's automatic connect when the app starts) keeps
-  // trying in the background if OBS isn't open yet, instead of giving up.
+  // cfg.retry (the panel's automatic connect when the app starts) keeps trying
+  // in the background if OBS isn't open yet, instead of giving up.
   async function connect(cfg = {}, fromRetry = false) {
     clearTimeout(reconnectTimer);
     disconnectQuiet();
@@ -145,18 +170,13 @@ function createObs(opts = {}) {
     const port = cfg.port || 4455;
     const url = `ws://${host}:${port}`;
     try {
-      // Empty password -> pass undefined so an unauthenticated OBS server works.
+      // Empty password -> undefined, so an unauthenticated OBS server works.
       await obs.connect(url, cfg.password || undefined);
       connected = true;
       reconnecting = false;
       lastError = '';
       wanted = { ...cfg };
-      sceneSync = !!cfg.sceneSync;
-      transitionName = cfg.transitionName || '';
-      try {
-        const r = await obs.call('GetCurrentProgramScene');
-        currentScene = r.currentProgramSceneName || r.sceneName || '';
-      } catch (e) { /* non-fatal */ }
+      await refreshProgram();
       musicApplied = null;
       applyMusic(0).catch(() => {});
       return status();
@@ -176,16 +196,7 @@ function createObs(opts = {}) {
     reconnecting = false;
     clearTimeout(reconnectTimer);
     disconnectQuiet();
-    return status();
-  }
-
-  // Update sync/transition preferences without tearing down the connection.
-  function setSettings(cfg = {}) {
-    if (cfg.sceneSync !== undefined) sceneSync = !!cfg.sceneSync;
-    if (cfg.transitionName !== undefined) transitionName = cfg.transitionName || '';
-    // A reconnect should come back with the current preferences, not the ones
-    // from the original connect.
-    if (wanted) wanted = { ...wanted, sceneSync, transitionName };
+    reportProgram();
     return status();
   }
 
@@ -198,8 +209,7 @@ function createObs(opts = {}) {
     }
   }
 
-  // Stretch a scene item to fill the whole canvas. Non-fatal if it fails - the
-  // source was already created at canvas size, this is just belt-and-braces.
+  // Stretch a scene item over the whole canvas. Non-fatal if it fails.
   async function fitItem(sceneName, sceneItemId, base) {
     try {
       await obs.call('SetSceneItemTransform', {
@@ -215,11 +225,81 @@ function createObs(opts = {}) {
     } catch (e) { /* non-fatal */ }
   }
 
-  // Idempotently create (or reconcile) one scene + one locked browser source
-  // per overlay type. Safe to run repeatedly: existing scenes/inputs are reused
-  // by name and only their URL/size are corrected, so it never duplicates.
-  async function buildScenes() {
+  // Switch to the league's own scene collection, creating it the first time.
+  // Creating one switches to it; both calls return once OBS has finished.
+  async function useCollection() {
+    const r = await obs.call('GetSceneCollectionList');
+    if (r.currentSceneCollectionName === collectionName) return 'current';
+    if ((r.sceneCollections || []).includes(collectionName)) {
+      await obs.call('SetCurrentSceneCollection', { sceneCollectionName: collectionName });
+      return 'switched';
+    }
+    await obs.call('CreateSceneCollection', { sceneCollectionName: collectionName });
+    return 'created';
+  }
+
+  async function ensureBrowserSource(t, base, url, existingInputs) {
+    if (!existingInputs.has(t.input)) {
+      // CreateInput both creates the browser source AND adds it to the scene.
+      // It keeps running while off program, so a scene is ready the moment
+      // it is cut to.
+      const created = await obs.call('CreateInput', {
+        sceneName: t.scene,
+        inputName: t.input,
+        inputKind: 'browser_source',
+        inputSettings: { url, width: base.w, height: base.h, shutdown: false, restart_when_active: false },
+        sceneItemEnabled: true,
+      });
+      existingInputs.add(t.input);
+      await fitItem(t.scene, created.sceneItemId, base);
+      return;
+    }
+    await obs.call('SetInputSettings', { inputName: t.input, inputSettings: { url, width: base.w, height: base.h }, overlay: true });
+    let sceneItemId;
+    try {
+      ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: t.input }));
+    } catch (e) {
+      ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: t.input, sceneItemEnabled: true }));
+    }
+    await fitItem(t.scene, sceneItemId, base);
+  }
+
+  // The Scoreboard scene's game capture, under the browser source. "Capture
+  // any fullscreen application" picks up the game (or the spectator client)
+  // with no setup; the operator can point it at one window in OBS instead.
+  async function ensureGameCapture(sceneName, existingInputs) {
+    const kinds = await obs.call('GetInputKindList', { unversioned: true }).catch(() => ({ inputKinds: [] }));
+    if (!(kinds.inputKinds || []).includes('game_capture')) return 'manual';
+    let sceneItemId;
+    let made = 'exists';
+    if (!existingInputs.has(captureInput)) {
+      ({ sceneItemId } = await obs.call('CreateInput', {
+        sceneName, inputName: captureInput, inputKind: 'game_capture',
+        inputSettings: { capture_mode: 'any_fullscreen', capture_cursor: false, allow_transparency: false },
+        sceneItemEnabled: true,
+      }));
+      existingInputs.add(captureInput);
+      made = 'created';
+    } else {
+      try {
+        ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName, sourceName: captureInput }));
+      } catch (e) {
+        ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName, sourceName: captureInput, sceneItemEnabled: true }));
+      }
+    }
+    // Bottom of the scene, under the transparent scoreboard.
+    try { await obs.call('SetSceneItemIndex', { sceneName, sceneItemId, sceneItemIndex: 0 }); } catch (e) { /* non-fatal */ }
+    return made;
+  }
+
+  // Build or update everything. opts: { neccTypes: [{ key, label }],
+  // includeStats, gameCapture, studioMode }. Safe to run again: scenes and
+  // sources are reused by name, URLs and sizes are corrected, nothing is
+  // duplicated, and scenes the operator added are left alone.
+  async function buildScenes(buildOpts = {}) {
     if (!connected) throw softError('Not connected to OBS');
+    const collection = await useCollection();
+    scenes = sceneEntries(prefix, buildOpts);
     const base = await videoBase();
     const overlayBase = getOverlayBase();
 
@@ -229,10 +309,8 @@ function createObs(opts = {}) {
     const existingInputs = new Set((inputList.inputs || []).map((i) => i.inputName));
 
     const built = [];
-    for (const t of SCENES) {
-      const url = `${overlayBase}/overlay?view=${t.view}`;
-      // Rename a scene/source left from an older version rather than creating
-      // a second one next to it.
+    for (const t of scenes) {
+      const url = `${overlayBase}/overlay?view=${t.view}${t.necc ? `&necc=${encodeURIComponent(t.necc)}` : ''}`;
       if (t.legacy) {
         if (!existingScenes.has(t.scene) && existingScenes.has(t.legacy.scene)) {
           await obs.call('SetSceneName', { sceneName: t.legacy.scene, newSceneName: t.scene });
@@ -249,66 +327,98 @@ function createObs(opts = {}) {
         await obs.call('CreateScene', { sceneName: t.scene });
         existingScenes.add(t.scene);
       }
-
-      if (!existingInputs.has(t.input)) {
-        // CreateInput both creates the browser source AND adds it to the scene.
-        const created = await obs.call('CreateInput', {
-          sceneName: t.scene,
-          inputName: t.input,
-          inputKind: 'browser_source',
-          inputSettings: { url, width: base.w, height: base.h },
-          sceneItemEnabled: true,
-        });
-        existingInputs.add(t.input);
-        await fitItem(t.scene, created.sceneItemId, base);
-      } else {
-        // Keep the URL/size correct even if the base canvas changed since.
-        await obs.call('SetInputSettings', {
-          inputName: t.input,
-          inputSettings: { url, width: base.w, height: base.h },
-          overlay: true,
-        });
-        // Make sure the (existing) source is actually present in its scene.
-        let sceneItemId;
-        try {
-          ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: t.input }));
-        } catch (e) {
-          ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: t.input, sceneItemEnabled: true }));
-        }
-        await fitItem(t.scene, sceneItemId, base);
-      }
+      await ensureBrowserSource(t, base, url, existingInputs);
       built.push(t.scene);
     }
 
-    // The shared music source, added to every scene above. Created silent;
+    let gameCapture = 'skipped';
+    if (buildOpts.gameCapture !== false) {
+      const sb = entryForKey('scoreboard');
+      gameCapture = await ensureGameCapture(sb.scene, existingInputs).catch(() => 'manual');
+    }
+
+    // The shared music source, in every app scene. Created silent;
     // applyMusic() then fades it to wherever it should be.
     if (music.file) {
-      if (!existingInputs.has(MUSIC_INPUT)) {
+      if (!existingInputs.has(musicInput)) {
         await obs.call('CreateInput', {
-          sceneName: SCENES[0].scene, inputName: MUSIC_INPUT, inputKind: 'ffmpeg_source',
+          sceneName: scenes[0].scene, inputName: musicInput, inputKind: 'ffmpeg_source',
           inputSettings: musicSettings(music.file), sceneItemEnabled: true,
         });
-        existingInputs.add(MUSIC_INPUT);
-        try { await obs.call('SetInputVolume', { inputName: MUSIC_INPUT, inputVolumeDb: MUSIC_OFF_DB }); } catch (e) { /* non-fatal */ }
+        existingInputs.add(musicInput);
+        try { await obs.call('SetInputVolume', { inputName: musicInput, inputVolumeDb: MUSIC_OFF_DB }); } catch (e) { /* non-fatal */ }
       } else {
-        await obs.call('SetInputSettings', { inputName: MUSIC_INPUT, inputSettings: musicSettings(music.file), overlay: true });
+        await obs.call('SetInputSettings', { inputName: musicInput, inputSettings: musicSettings(music.file), overlay: true });
       }
-      for (const t of SCENES) {
-        try { await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: MUSIC_INPUT }); }
-        catch (e) { await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: MUSIC_INPUT, sceneItemEnabled: true }); }
+      for (const t of scenes) {
+        try { await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: musicInput }); }
+        catch (e) { await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: musicInput, sceneItemEnabled: true }); }
       }
-      built.push(MUSIC_INPUT);
+      built.push(musicInput);
       musicApplied = null;
       applyMusic(0).catch(() => {});
     }
-    return { built };
+
+    // A new collection starts on OBS's empty "Scene": go to Starting Soon and
+    // remove it, so the collection holds only the app's scenes.
+    await refreshProgram();
+    if (!entryForScene(currentScene)) {
+      try { await obs.call('SetCurrentProgramScene', { sceneName: scenes[0].scene }); } catch (e) { /* non-fatal */ }
+    }
+    if (collection === 'created' && existingScenes.has('Scene')) {
+      try {
+        const items = await obs.call('GetSceneItemList', { sceneName: 'Scene' });
+        if (!(items.sceneItems || []).length) await obs.call('RemoveScene', { sceneName: 'Scene' });
+      } catch (e) { /* non-fatal */ }
+    }
+    if (buildOpts.studioMode) {
+      try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
+    }
+    await refreshProgram();
+    return { built, gameCapture, collection, collectionName };
+  }
+
+  // The league's stinger. obs-websocket can't create a transition, so the
+  // operator adds a Stinger transition named `stingerName` once (the setup
+  // guide shows how); from then on the app finds it, makes it OBS's current
+  // transition and points it at the league's video with the right cut point.
+  // st: { file, transitionPoint (ms), trackMatte }.
+  async function setupStinger(st) {
+    if (!connected) throw softError('Not connected to OBS');
+    const r = await obs.call('GetSceneTransitionList');
+    const t = (r.transitions || []).find((x) => x.transitionName === stingerName);
+    if (!t) return { found: false, name: stingerName, current: r.currentSceneTransitionName || '' };
+    if (t.transitionKind && t.transitionKind !== 'obs_stinger_transition') {
+      return { found: true, configured: false, name: stingerName, error: `"${stingerName}" is not a Stinger transition` };
+    }
+    await obs.call('SetCurrentSceneTransition', { transitionName: stingerName });
+    await obs.call('SetCurrentSceneTransitionSettings', {
+      transitionSettings: {
+        path: st.file,
+        tp_type: 0,                          // transition point in milliseconds
+        transition_point: st.transitionPoint,
+        track_matte_enabled: !!st.trackMatte,
+        track_matte_layout: 0,               // matte beside the video, same file
+      },
+      overlay: true,
+    });
+    return { found: true, configured: true, name: stingerName };
+  }
+
+  async function stingerStatus() {
+    if (!connected) return { found: false, current: false, name: stingerName };
+    try {
+      const r = await obs.call('GetSceneTransitionList');
+      const found = (r.transitions || []).some((x) => x.transitionName === stingerName);
+      return { found, current: r.currentSceneTransitionName === stingerName, name: stingerName };
+    } catch (e) { return { found: false, current: false, name: stingerName }; }
   }
 
   // Fade the music source to a level in dB (null = silent) over `ms`. Steps
   // in dB, so it sounds even; the last step of a fade-out is a true zero.
   async function fadeMusic(toDb, ms) {
     let from;
-    try { from = (await obs.call('GetInputVolume', { inputName: MUSIC_INPUT })).inputVolumeDb; }
+    try { from = (await obs.call('GetInputVolume', { inputName: musicInput })).inputVolumeDb; }
     catch (e) { return false; } // no music source (scenes not built yet)
     if (!Number.isFinite(from)) from = MUSIC_OFF_DB;
     const target = toDb === null ? MUSIC_OFF_DB : toDb;
@@ -319,7 +429,7 @@ function createObs(opts = {}) {
       i++;
       const done = i >= steps;
       const vol = done && toDb === null ? { inputVolumeMul: 0 } : { inputVolumeDb: from + (target - from) * (i / steps) };
-      obs.call('SetInputVolume', { inputName: MUSIC_INPUT, ...vol }).catch(() => {});
+      obs.call('SetInputVolume', { inputName: musicInput, ...vol }).catch(() => {});
       if (done) clearInterval(fadeTimer);
     };
     if (steps === 1) step(); else fadeTimer = setInterval(step, 50);
@@ -335,12 +445,12 @@ function createObs(opts = {}) {
     musicApplied = want;
     try {
       if (music.file && (!was || was.file !== music.file)) {
-        await obs.call('SetInputSettings', { inputName: MUSIC_INPUT, inputSettings: musicSettings(music.file), overlay: true });
+        await obs.call('SetInputSettings', { inputName: musicInput, inputSettings: musicSettings(music.file), overlay: true });
       }
       if (music.on) {
-        const st = await obs.call('GetMediaInputStatus', { inputName: MUSIC_INPUT });
+        const st = await obs.call('GetMediaInputStatus', { inputName: musicInput });
         if (st.mediaState !== 'OBS_MEDIA_STATE_PLAYING') {
-          await obs.call('TriggerMediaInputAction', { inputName: MUSIC_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY' });
+          await obs.call('TriggerMediaInputAction', { inputName: musicInput, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY' });
         }
       }
     } catch (e) { musicApplied = null; return; } // source missing: nothing to do until scenes are built
@@ -353,37 +463,24 @@ function createObs(opts = {}) {
     return applyMusic(fadeMs).catch(() => {});
   }
 
-  // Which of our target scenes currently exist in OBS (for status display).
+  // Which of the app's scenes exist in OBS right now.
   async function scenesExist() {
     if (!connected) return {};
     try {
       const sceneList = await obs.call('GetSceneList');
       const have = new Set((sceneList.scenes || []).map((s) => s.sceneName));
       const out = {};
-      SCENES.forEach((t) => { out[t.view] = have.has(t.scene) || !!(t.legacy && have.has(t.legacy.scene)); });
+      scenes.forEach((t) => { out[t.key] = have.has(t.scene) || !!(t.legacy && have.has(t.legacy.scene)); });
       return out;
     } catch (e) { return {}; }
   }
 
-  async function listTransitions() {
-    if (!connected) return { transitions: [], current: '' };
-    try {
-      const r = await obs.call('GetSceneTransitionList');
-      return {
-        transitions: (r.transitions || []).map((x) => x.transitionName),
-        current: r.currentSceneTransitionName || '',
-      };
-    } catch (e) { return { transitions: [], current: '' }; }
-  }
-
-  // Switch OBS's program scene to the one for `view`. Optionally selects the
-  // configured transition first (so the league's stinger fires). Only does
-  // anything when connected AND scene-sync is enabled.
-  async function switchToView(view) {
-    if (!connected || !sceneSync) return { switched: false };
-    const t = sceneForView(view);
-    if (!t) return { switched: false };
-    // Scenes built by v0.8.0 and not rebuilt since still carry the old name.
+  // Put one of the app's scenes on program, with OBS's current transition
+  // (the league's stinger once set up). `key` is a view or necc:<type>.
+  async function switchTo(key) {
+    if (!connected) return { switched: false, error: 'Not connected to OBS' };
+    const t = entryForKey(key);
+    if (!t) return { switched: false, error: `No scene for ${key}` };
     let sceneName = t.scene;
     if (t.legacy) {
       try {
@@ -392,42 +489,42 @@ function createObs(opts = {}) {
         if (!names.has(t.scene) && names.has(t.legacy.scene)) sceneName = t.legacy.scene;
       } catch (e) { /* use the current name */ }
     }
-    if (transitionName) {
-      try { await obs.call('SetCurrentSceneTransition', { transitionName }); } catch (e) { /* non-fatal */ }
-    }
-    await obs.call('SetCurrentProgramScene', { sceneName });
-    return { switched: true, scene: sceneName };
-  }
-
-  // Called by the server right after a Push Live. Fire-and-forget, fully soft:
-  // a failed scene switch must never break the push that already happened.
-  async function onPush(liveState) {
-    if (!connected || !sceneSync || !liveState) return { switched: false };
     try {
-      return await switchToView(liveState.mode);
+      await obs.call('SetCurrentProgramScene', { sceneName });
+      return { switched: true, scene: sceneName };
     } catch (e) {
       lastError = scrub(e && e.message ? e.message : String(e), '');
       return { switched: false, error: lastError };
     }
   }
 
-  // A richer status that hits OBS live (connection + scenes + transitions).
-  // Safe when disconnected: returns the cached status with empty extras.
-  async function inspect() {
-    const base = status();
-    if (!connected) return { ...base, scenes: {}, transitions: [] };
-    const [exists, trans] = await Promise.all([scenesExist(), listTransitions()]);
+  // A small JPEG of what is on program, for the panel's thumbnail.
+  async function programShot(width = 480) {
+    if (!connected || !currentScene) return null;
     try {
-      const r = await obs.call('GetCurrentProgramScene');
-      currentScene = r.currentProgramSceneName || r.sceneName || currentScene;
-    } catch (e) { /* non-fatal */ }
-    return { ...status(), scenes: exists, transitions: trans.transitions };
+      const r = await obs.call('GetSourceScreenshot', {
+        sourceName: currentScene, imageFormat: 'jpg', imageWidth: width, imageCompressionQuality: 70,
+      });
+      return r.imageData || null;
+    } catch (e) { return null; }
   }
 
+  // A richer status that hits OBS live. Safe when disconnected.
+  async function inspect() {
+    if (!connected) return { ...status(), exists: {}, stinger: { found: false, current: false, name: stingerName } };
+    await refreshProgram();
+    const [exists, stinger] = await Promise.all([scenesExist(), stingerStatus()]);
+    return { ...status(), exists, stinger };
+  }
+
+  // Which scenes the app manages, without touching OBS (the server restores
+  // this from the last build's options at start-up).
+  function setLayout(buildOpts) { scenes = sceneEntries(prefix, buildOpts || {}); }
+
   return {
-    connect, disconnect, setSettings, status, inspect,
-    buildScenes, switchToView, onPush, listTransitions, setMusic,
-    isSceneSync: () => sceneSync && connected,
+    connect, disconnect, status, inspect, buildScenes, setupStinger, stingerStatus,
+    switchTo, programShot, setMusic, setLayout,
+    isConnected: () => connected,
   };
 }
 
@@ -437,11 +534,11 @@ function softError(msg) {
   return e;
 }
 
-// Defensive: strip the password out of any string before it's stored/returned.
+// Strip a password out of any string before it is shown or logged.
 function scrub(msg, password) {
   let out = String(msg || '');
   if (password) out = out.split(password).join('***');
   return out;
 }
 
-module.exports = { createObs, SCENES, sceneForView };
+module.exports = { createObs };

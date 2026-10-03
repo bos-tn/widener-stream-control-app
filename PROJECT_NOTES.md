@@ -1,15 +1,14 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v1.0.0**. If you're starting a new chat, read the summary
-below first, then the sections relevant to what you're changing. The later
-sections are a history: each one records why something is the way it is. The
-control panel was rebuilt in v0.12.0, and v1.0.0 split everything
-league-specific into profiles (Widener and League of the East); read those two
-sections before touching `public/control/`, `templates/overlay.html` or the
-build.
+updated through **v2.0.0-beta.1**. If you're starting a new chat, read the
+v2.0.0 section first: it changed the app's whole model (OBS first, one state,
+no Push Live), so much of the history below describes things that are gone.
+The later sections are a history: each one records why something is the way
+it is. v1.0.0 split everything league-specific into profiles (Widener and
+League of the East); read that section before touching the build.
 
-## How the app works now (v0.9.0 summary, see v1.0.0 for profiles)
+## How the app worked in v0.9 to v1.0 (see v2.0.0 for what changed)
 
 - **One app per league (v1.0.0).** `profiles/<id>/` holds a league's name,
   colours, art, stinger, games, OBS prefix, port and installer identity;
@@ -1014,6 +1013,133 @@ background 09, Mark Shine).
   brand route for both profiles. Both installers built and their packaged
   servers smoke-tested on spare ports.
 
+## v2.0.0: OBS first (test build, branch test/obs-first)
+
+The user's idea: drop the one-link browser source and the app's own
+preview/Push Live, make the OBS connection required, build every scene, and
+let OBS (Studio Mode) be the preview and the switcher. The panel becomes a
+step-by-step match setup plus a Live page for scores, rosters and scene text.
+Their answers to the open questions, which decided the design:
+
+- Edits going straight to air is fine; text goes out on **Enter or blur**,
+  never per keystroke.
+- A hard OBS dependency is fine (small studio, OBS is dependable, everyone runs
+  the latest OBS).
+- Rocket League stats get **their own scene**, and the app **cuts to it by
+  default after each game** (the cast can go back to it to fill time).
+- The app may switch scenes "when needed".
+- The app creates the game capture, or explains how when it can't.
+- The app handles the stinger, and the first-time setup shows how to add it.
+- LotE's member schools (names, short names, colours, the league's logos) are in
+  the app by default, for manual setups without a match link.
+
+### Server (`server.js`)
+
+- **One state.** `live`/`draft`, `pushLive`, `revertDraft`, `isDirty`, the
+  `dirty` message, `push`/`revert` WS messages and the in-overlay stinger flag
+  are gone. `state.json` still holds `{ live, draft }` (both the same object)
+  so a downgrade can read it; loading prefers the old `live`.
+- **WS roles.** `subscribe` carries `role: 'panel' | 'overlay'` (a v1 page's
+  `channel: 'draft'` counts as a panel). `state` messages have no channel.
+  Panels also get `library`, `music`, `prefs` and `onair` on subscribe.
+  `update` (panels only) ignores `mode`, `neccType` and `neccUrl`: OBS owns
+  those.
+- **OBS follows, state follows OBS.** `obs.js` reports every program scene
+  change (`onProgram`); the server sets `state.mode` to that scene's view (so
+  an unlocked `/overlay` still follows), sets `neccType`/`neccUrl` for a
+  league graphic scene, starts Post-Match's own countdown (`postEnd` =
+  now + `postMatchSec`), updates music, and tells panels `{type:'onair'}`.
+  A scene the app didn't build reports `key: ''`.
+- **Rocket League Stats scene.** `rlScreen` is `{screen: 'game'|'series',
+  game}` (no more `'live'`). `onGameEnded` records the game, sets the screen to
+  it, and after 3 s cuts OBS to `stats` **only if the Scoreboard is on air**;
+  once the series is won it moves to the overview 15 s later. `onGameStarting`
+  cuts back to `scoreboard` mid-series only if the app made the cut
+  (`autoStatsUp`, cleared by any manual cut away from Stats). Panel buttons
+  send `{type:'rlScreen', screen, game, show}`.
+- **League schools.** `profiles/<id>/teams.json` is seeded into the library
+  once per school id (`library.seeded`), so a deleted school stays deleted and
+  a school added to the file later still arrives. Logos are served from
+  `/brand/teams/*`. An imported team whose name starts with a school's name
+  (or short name) gets the league's logo instead of the LeagueOS one, and
+  `league: true`.
+- **Routes.** `/api/obs/build-scenes` builds with `buildOptions()` (league
+  graphic scenes from prefs, the Stats scene when any game uses the RL board,
+  game capture, Studio Mode) and re-points the stinger if it exists.
+  `GET/POST /api/obs/stinger` copies the profile's stinger video out of the
+  asar to `<data>/obs/<file>` and configures OBS. `GET /api/obs/program-shot`
+  (a 480 px JPEG of program), `POST /api/obs/switch {key}`. Remote:
+  `/api/remote/scene/<key>` (`necc-<type>` for league graphics), v1's
+  `/overlay/<view>` kept as an alias, `/stats/game|series`, the score routes.
+  `/push`, `/discard` and `/api/obs/settings` are gone.
+- **Prefs** (`settings.json` `panel`): `neccTypes`, `gameCapture`, `studioMode`,
+  `setupDone`, `guideV2` (the v2 guide has run; it opens once for upgrades too,
+  since they need the new collection and stinger). v1's `neccOverlayUrls` moves
+  into `state.neccUrls` on first start.
+
+### OBS (`obs.js`, rewritten)
+
+- `useCollection()` switches to (or creates) the league's own scene collection,
+  `<shortName> Stream`. Creating one leaves OBS's empty `Scene`; the build
+  removes it once the app's scenes exist.
+- Scenes: the five base views, `Rocket League Stats` (`includeStats`), and one
+  per picked league graphic (`<prefix>: <label>`, input
+  `<prefix>-src-necc-<type>`, URL `?view=necc&necc=<type>`). Browser sources
+  are created with `shutdown: false` so a scene is ready the moment it is cut to.
+- `<prefix>-game-capture` (`game_capture`, `capture_mode: any_fullscreen`) goes
+  at the bottom of the Scoreboard scene; `'manual'` if the input kind doesn't
+  exist (the panel then gives Window Capture steps).
+- **Stinger.** obs-websocket can't create transitions, so the operator adds a
+  Stinger named `<shortName> Stinger` once. `setupStinger` makes it current and
+  sets `path`, `tp_type: 0` (ms), `transition_point`, `track_matte_enabled`,
+  `track_matte_layout: 0` (side by side). `path` and `track_matte_enabled` were
+  confirmed against a stinger saved by the user's OBS 32; the rest are OBS's
+  own defaults/names. **Transitions are stored per scene collection**, which is
+  why the guide builds the collection first and says to keep it open.
+- `setLayout()` restores the scene list at start-up without touching OBS.
+
+### Overlay (`templates/overlay.html`)
+
+- The in-page stinger (WebGL track-matte player and the drawn CSS one) is
+  gone: OBS plays the stinger. LotE's drawn stinger became a real video,
+  `profiles/lote/assets/stinger.webm` (VP9 with alpha, 1220 ms, cut at 590 ms),
+  rendered by `build/make-stinger.js` in Electron and encoded by ffmpeg.
+- New locked view `stats`: the scoreboard view with `.stats-scene`, showing the
+  `.rls` screens only. Before game 1 it shows the series overview with the two
+  rosters and "Up next". The Scoreboard view never shows stats any more.
+- A `necc` page locked to a type shows `state.neccUrls[type]`.
+- Post-Match counts down to `state.postEnd`. `?backdrop=1` (or v1's
+  `?preview=1`/`?monitor=1`) draws the stand-in behind transparent views.
+
+### Control panel (`public/control/`, rewritten)
+
+- Pages: **Match** (stepper: Game, Teams, Details, Scenes; saved matches at the
+  top), **Live** (On air with a program screenshot, Score, Scenes with per-scene
+  text and Put on air, Rosters), **Settings** (setup guide, OBS, stinger, music,
+  videos, frame and socials, team library, display, remote, shortcuts).
+  `?page=` and `?step=` open a page or step.
+- The panel shows the server's state; `setVal` skips the focused field, and
+  `onCommit` sends on `change` (Enter blurs). Sends merge into the local copy
+  at once (`mergeLocal`) so nothing flickers back before the echo. The roster
+  editor is one DOM element moved between the Match and Live pages; it keeps a
+  working copy per team and re-syncs from the state when that team isn't
+  being edited.
+- The setup guide: connect, build the scenes (game capture and Studio Mode
+  options), add the stinger (steps plus the exact settings), videos.
+- Undo/redo, the overlay strip, the monitors and Push Live are gone.
+
+### Verified for v2.0.0-beta.1
+
+Against a mock obs-websocket server (scratch tool, msgpack and JSON): the guide's
+connect, build (new collection, empty `Scene` removed, game capture at the
+bottom, Studio Mode), stinger setup (file copied, settings applied, transition
+selected), on-air following OBS cuts, Post-Match's own countdown, league
+graphic scenes. With `dev/mock-rlstats.js --fast`: game end, score 1-0, cut
+to Stats 3 s later, back to the Scoreboard when the next game loaded. Panel
+text going out only on Enter. Both leagues' panels and the Stats scene
+renders. **Not yet verified against a real OBS** (the user's OBS was open and
+in use during the build, so it was left alone).
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
@@ -1021,9 +1147,10 @@ background 09, Mark Shine).
   mode, game, team, title, status, subtitle, next,
   countdownMode: 'duration'|'at', durationSec, end,   // end is the absolute ISO timestamp; in 'duration'
                                                         // mode it only changes on a deliberate restart (v0.9.0)
+  postMatchSec, postEnd,                                // Post-Match's own countdown (v2.0.0), set as it goes on air
   layout: 'left'|'right', clip, logo, montage: bool,
-  neccUrl, neccType,                                    // only meaningful when mode === 'necc';
-                                                        // neccType is the dropdown key (e.g. 'stageBracket')
+  neccUrl, neccType,                                    // the league graphic on air (follows OBS, v2.0.0)
+  neccUrls: { [type]: url },                            // every league graphic from the last import (v2.0.0)
   views: {                                              // per-overlay text (v0.7.2); everything else is global
     'starting-soon'|'post-match'|'roster'|'brb'|'necc'|'scoreboard': { title, subtitle, status },
   },
@@ -1033,11 +1160,11 @@ background 09, Mark Shine).
                 scoreA, scoreB, lostA, lostB, swap,            // counters change via {type:'score'}
                 crewSize, stocksEach, showStocks,
                 style: 'standard'|'rl',                        // v0.11.0
-                rlAutoSeries, rlPlayers, rlBoost, rlGameColors },
+                rlAutoSeries, rlPlayers, rlBoost, rlGameColors, rlAutoStats },
 }
 ```
-Both `live` and `draft` are this same shape, persisted together in one
-`state.json` as `{ live, draft }`. `normalizeLoaded()` merges any loaded file
+Since v2.0.0 there is one state; `state.json` stores it as both `live` and
+`draft` so an older version can still read it. `normalizeLoaded()` merges any loaded file
 over fresh defaults (not a straight replace) specifically so old state files
 missing newer fields don't break the app - **keep doing this** when adding
 new state fields.
@@ -1073,8 +1200,8 @@ new state fields.
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
   removed at v0.4.1 in favor of the iframe approach. A **new, different**
   obs-websocket integration was then added at **v0.7.0** (`obs.js`, scene-sync)
-  - see that section above. The two are unrelated; the app still has **no hard
-  OBS dependency** (scene-sync is opt-in and fails soft).
+  - see that section above. Since **v2.0.0** OBS is required: the app builds
+  the scenes and OBS switches them.
 - No automated tests - everything has been verified manually via the
   preview tool per session (plus ad-hoc server scripts in v0.9.0). There is no CI.
 - Not yet verified for v0.9.0: the NECC logo cache against a real import, OBS

@@ -17,107 +17,212 @@
       <span class="brand-sub">Stream Control <span id="appVersion"></span></span>
     </div>
     <nav class="pages" role="tablist" aria-label="Pages">
-      <button class="page-btn" type="button" role="tab" data-page="prep" title="Game, match, teams">Prep</button>
-      <button class="page-btn" type="button" role="tab" data-page="live" title="Overlays and scores">Live</button>
-      <button class="page-btn" type="button" role="tab" data-page="settings" title="OBS, music, display">Settings</button>
+      <button class="page-btn" type="button" role="tab" data-page="match" title="Set up a match, step by step">Match</button>
+      <button class="page-btn" type="button" role="tab" data-page="live" title="Scores, rosters and scene text">Live</button>
+      <button class="page-btn" type="button" role="tab" data-page="settings" title="OBS, stinger, music, display">Settings</button>
     </nav>
     <div class="lights">
       <div class="conn" id="rlConn" hidden><span class="dot" id="rlConnDot"></span><span id="rlConnText">Rocket League</span></div>
-      <div class="conn" id="obsConn" hidden><span class="dot" id="obsConnDot"></span><span id="obsConnText">OBS</span></div>
+      <button class="conn conn-btn" id="obsConn" type="button" title="OBS connection"><span class="dot" id="obsConnDot"></span><span id="obsConnText">OBS</span></button>
       <div class="conn" id="conn"><span class="dot" id="connDot"></span><span id="connText">Connecting…</span></div>
     </div>
     <button class="icon-btn help-btn" id="helpBtn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
   </header>
 
-  <div class="layout" id="layout" data-page="live">
+  <!-- OBS is required: while it is not connected, say so on every page. -->
+  <div class="obs-banner" id="obsBanner" hidden>
+    <span class="dot warn"></span>
+    <span id="obsBannerText">OBS is not connected, so the scenes can't change.</span>
+    <button class="btn-accent" type="button" id="obsBannerBtn">Connect to OBS</button>
+  </div>
 
-    <!-- ===================== MONITORS (every page) ===================== -->
-    <!-- Studio Mode: what you are editing on the left, what is on stream on
-         the right, Push Live between them. On Prep and Settings the three
-         stack in a column beside the page. -->
-    <section class="monitors" id="monitors" aria-label="Preview and live">
-      <div class="monitor monitor-preview" id="previewMonitor">
-        <div class="monitor-label">
-          <span class="tally tally-preview" aria-hidden="true"></span>
-          <b>Preview</b>
-          <span class="monitor-what" id="previewWhat"></span>
-          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Your draft. Nothing in it reaches the stream until you click Push Live.">i</span>
-        </div>
-        <div class="monitor-wrap" id="previewWrap">
-          <div class="monitor-box box-preview" id="previewBox">
-            <div class="monitor-scaler" id="previewScaler">
-              <iframe id="previewFrame" src="/overlay?preview=1" title="Overlay preview"></iframe>
-            </div>
-          </div>
-        </div>
-      </div>
+  <main class="page-col" id="pageCol">
 
-      <div class="monitor-actions">
-        <button id="pushBtn" class="push-btn" type="button" title="Send the preview to the stream (Ctrl+Enter)"><span>Push Live</span><kbd>Ctrl+Enter</kbd></button>
-        <button id="revertBtn" class="revert-btn" type="button" disabled title="Throw away the changes in the preview and match what is on stream">Discard changes</button>
-        <div class="push-status" id="pushStatus"></div>
-        <label class="checkbox small">
-          <input type="checkbox" id="stingerInput" checked>
-          Play transition
-          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays the curtain transition on stream whenever you push, hiding the switch.">i</span>
-        </label>
-        <div class="history-row">
-          <button id="undoBtn" class="btn-secondary" type="button" disabled title="Undo the last edit (Ctrl+Z)">Undo</button>
-          <button id="redoBtn" class="btn-secondary" type="button" disabled title="Redo (Ctrl+Y)">Redo</button>
+    <!-- ============================ MATCH ============================ -->
+    <!-- Setting up a match, one step at a time: the game, the teams, the
+         details, then building the scenes in OBS. -->
+    <div class="page" data-page="match" hidden>
+
+      <div class="match-top">
+        <ol class="stepper" id="stepper">
+          <li><button type="button" data-step="game"><b>1</b><span>Game</span></button></li>
+          <li><button type="button" data-step="teams"><b>2</b><span>Teams</span></button></li>
+          <li><button type="button" data-step="details"><b>3</b><span>Details</span></button></li>
+          <li><button type="button" data-step="build"><b>4</b><span>Scenes</span></button></li>
+        </ol>
+        <div class="saved-match">
+          <select id="matchSelect" aria-label="Saved matches"><option value="">No saved matches</option></select>
+          <button id="matchLoadBtn" class="btn-secondary" type="button">Load</button>
+          <button id="matchDeleteBtn" class="btn-secondary btn-quiet-danger" type="button" title="Delete this saved match">Delete</button>
         </div>
       </div>
 
-      <div class="monitor monitor-live" id="liveMonitor">
-        <div class="monitor-label">
-          <span class="tally tally-live" aria-hidden="true"></span>
-          <b>Live on stream</b>
-          <span class="monitor-what" id="liveWhat"></span>
-        </div>
-        <div class="monitor-wrap" id="liveWrap">
-          <div class="monitor-box box-live" id="liveBox">
-            <div class="monitor-scaler" id="liveScaler">
-              <iframe id="liveFrame" title="Live on stream"></iframe>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <main class="page-col" id="pageCol">
-
-      <!-- ============================ LIVE ============================ -->
-      <div class="page" data-page="live">
-
-        <section class="card">
-          <div class="card-head">
-            <h2>Overlays</h2>
-            <span class="card-hint">Click one to put it in Preview</span>
-          </div>
-          <div class="ov-strip" id="overlayBtns"></div>
-          <!-- The select is the source of truth for the chosen overlay; the
-               cards above are drawn from it. -->
-          <select id="overlaySelect" hidden>
-            <optgroup label="Overlays">
-              <option value="widener:starting-soon">Starting Soon</option>
-              <option value="widener:post-match">Post-Match</option>
-              <option value="widener:roster">Rosters</option>
-              <option value="widener:brb">Be Right Back</option>
-              <option value="widener:scoreboard">Scoreboard</option>
-            </optgroup>
-            <optgroup label="{{league}}" id="neccOptGroup"></optgroup>
-          </select>
-          <label class="checkbox small strip-option">
-            <input type="checkbox" id="switchPushInput">
-            Push live as soon as I pick an overlay
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Skips the preview step for overlay switches only. Text and other edits still wait for Push Live.">i</span>
+      <!-- Step 1: Game -->
+      <section class="card step-card" data-step="game">
+        <div class="card-head"><h2>Which game is this match?</h2></div>
+        <p class="card-text">It sets the scoreboard and the highlight video. You can change it later.</p>
+        <div class="game-grid" id="gameGrid"></div>
+        <div class="field-row" style="margin-top:14px">
+          <label class="grow">
+            <span class="lbl">Game name on the overlays</span>
+            <input type="text" id="teamInput" placeholder="Rocket League">
           </label>
+        </div>
+        <div class="status-line" id="gameMontageStatus"></div>
+        <div class="step-foot">
+          <span></span>
+          <button class="btn-accent" type="button" data-next="teams">Next: Teams</button>
+        </div>
+      </section>
+
+      <!-- Step 2: Teams -->
+      <section class="card step-card" data-step="teams" hidden>
+        <div class="card-head"><h2>Who is playing?</h2></div>
+        <div class="matchup" id="matchup">
+          <button class="slot" type="button" data-slot="A"></button>
+          <span class="vs">VS</span>
+          <button class="slot" type="button" data-slot="B"></button>
+        </div>
+
+        <div class="segmented team-src" id="teamSrc" role="tablist">
+          <button class="seg-btn" type="button" data-src="import">Import a match link</button>
+          <button class="seg-btn" type="button" data-src="library" id="libSrcBtn">Saved teams</button>
+          <button class="seg-btn" type="button" data-src="manual">Type them in</button>
+        </div>
+
+        <div class="team-pane" data-src="import">
+          <div class="field">
+            <label for="neccUrlInput"><span class="lbl">{{league}} match link (LeagueOS)
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste the match page link and click Import. It fills in both teams and their players, the start time, the series length and the {{league}} graphics.">i</span>
+            </span></label>
+            <div class="input-row">
+              <input type="text" id="neccUrlInput" placeholder="{{importHint}}">
+              <button id="neccFetchBtn" class="btn-accent" type="button">Import</button>
+            </div>
+            <div class="status-line" id="neccStatus"></div>
+          </div>
+        </div>
+
+        <div class="team-pane" data-src="library" hidden>
+          <div class="pick-for">
+            <span class="lbl">Click a team to make it</span>
+            <div class="segmented" id="pickFor">
+              <button class="seg-btn" type="button" data-for="A">Team A</button>
+              <button class="seg-btn" type="button" data-for="B">Team B</button>
+            </div>
+            <input type="search" id="libSearch" class="lib-search" placeholder="Search teams">
+          </div>
+          <div class="school-grid" id="schoolGrid"></div>
+        </div>
+
+        <div class="team-pane" data-src="manual" hidden>
+          <p class="card-text">Names, tags, colours, logos and players. Drag a player's handle to change the order.</p>
+          <div class="roster-slot" data-roster-slot="match"></div>
+        </div>
+
+        <div class="step-foot">
+          <button class="btn-secondary" type="button" data-next="game">Back</button>
+          <button class="btn-accent" type="button" data-next="details">Next: Details</button>
+        </div>
+      </section>
+
+      <!-- Step 3: Details -->
+      <section class="card step-card" data-step="details" hidden>
+        <div class="card-head"><h2>Match details</h2></div>
+
+        <div class="sub-head first">Start time <span class="muted-note">the Starting Soon countdown</span></div>
+        <div class="field-row countdown-mode">
+          <label class="radio"><input type="radio" name="countdownMode" id="modeAt" value="at"> At a time</label>
+          <label class="radio"><input type="radio" name="countdownMode" id="modeDuration" value="duration" checked> In a number of minutes</label>
+        </div>
+        <div class="field-row">
+          <label class="grow" id="atField"><span class="lbl">Date and time</span><input type="datetime-local" id="atInput"></label>
+          <label class="grow" id="durationField"><span class="lbl">Minutes from now (minutes:seconds)</span><input type="text" id="durationInput" inputmode="numeric" placeholder="10:00"></label>
+          <button id="restartCountdownBtn" class="btn-secondary" type="button">Start the countdown now</button>
+        </div>
+
+        <div class="sub-head">Series</div>
+        <div class="field-row">
+          <label style="flex:0 0 110px"><span class="lbl">Best of</span>
+            <select id="sbBestOfInput"><option>1</option><option selected>3</option><option>5</option><option>7</option><option>9</option></select>
+          </label>
+          <label class="grow"><span class="lbl">Round or week</span><input type="text" id="sbRoundInput" placeholder="e.g. Week 3, Playoffs"></label>
+          <label class="grow"><span class="lbl">Starting Soon subtitle</span><input type="text" id="ssSubtitleInput" placeholder="Team A vs Team B"></label>
+        </div>
+        <div class="field">
+          <label for="nextInput"><span class="lbl">Next match (bottom corner of Starting Soon, Post-Match and Rosters)</span></label>
+          <input type="text" id="nextInput" placeholder="Next: Fri 7pm">
+        </div>
+
+        <div class="sub-head">{{league}} graphics
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Each one picked gets its own scene in OBS, showing that graphic from the imported match. Build the scenes again after changing this.">i</span>
+        </div>
+        <div class="necc-type-list" id="neccTypeList"></div>
+
+        <div class="sub-head">Background video and music</div>
+        <div class="field">
+          <label for="clipInput"><span class="lbl">Video on Starting Soon and Post-Match
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave empty to play the game's highlight video. A video picked here replaces it.">i</span>
+          </span></label>
+          <input type="text" id="clipInput" placeholder="https://...">
+        </div>
+        <div class="field-row">
+          <label class="checkbox"><input type="checkbox" id="montageInput" checked> Show the video panel</label>
+          <label class="checkbox"><input type="checkbox" id="musicEnable2"> Background music between games</label>
+        </div>
+
+        <div class="step-foot">
+          <button class="btn-secondary" type="button" data-next="teams">Back</button>
+          <button class="btn-accent" type="button" data-next="build">Next: Scenes</button>
+        </div>
+      </section>
+
+      <!-- Step 4: Build -->
+      <section class="card step-card" data-step="build" hidden>
+        <div class="card-head"><h2>Build the scenes in OBS</h2></div>
+        <p class="card-text">The app makes (or updates) the <b id="collectionName">{{short}} Stream</b> scene collection in OBS:
+          one scene per overlay, each already showing this match. Safe to run again: nothing is duplicated, and scenes you added yourself are left alone.</p>
+        <ul class="checklist" id="buildChecklist"></ul>
+        <div class="push-row">
+          <button id="buildBtn" class="btn-accent big-btn" type="button">Build or update scenes</button>
+        </div>
+        <div class="status-line" id="buildStatus"></div>
+        <div class="build-result" id="buildResult" hidden></div>
+        <div class="field-row" style="margin-top:14px">
+          <label class="grow"><span class="lbl">Save this match to load it again later</span>
+            <div class="input-row">
+              <input type="text" id="matchNameInput" placeholder="{{match}}">
+              <button id="matchSaveBtn" class="btn-secondary" type="button">Save</button>
+            </div>
+          </label>
+        </div>
+        <div class="step-foot">
+          <button class="btn-secondary" type="button" data-next="details">Back</button>
+          <button class="btn-accent" type="button" id="goLiveBtn">Go to the Live page</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================ LIVE ============================ -->
+    <!-- During the match: what OBS has on air, the score, the scene text and
+         the rosters. OBS decides what is on stream; edits here show on every
+         scene as soon as a field is finished (Enter, or clicking away). -->
+    <div class="page page-live" data-page="live">
+      <div class="live-col">
+        <section class="card onair-card" id="onairCard">
+          <div class="onair-head">
+            <span class="tally-live" aria-hidden="true"></span>
+            <span class="onair-lbl">On air</span>
+            <b id="onairName">Nothing yet</b>
+          </div>
+          <div class="onair-shot" id="onairShotBox" hidden><img id="onairShot" alt="What OBS has on air"></div>
+          <div class="onair-sub" id="onairSub"></div>
         </section>
 
-        <section class="card" id="scorePanel" style="display:none">
+        <section class="card" id="scorePanel">
           <div class="card-head">
-            <h2>Scoreboard</h2>
-            <span class="card-tag live-tag" id="sbLiveTag" hidden>On stream now</span>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="An in-game overlay with a see-through background. In OBS, put it above the game capture. Team names, logos, colours and player order come from Prep, Teams.">i</span>
+            <h2>Score</h2>
+            <span class="card-hint" id="scoreHint"></span>
           </div>
           <div class="rl-status" id="rlStatus" hidden>
             <div class="rl-status-line"><span class="dot" id="rlDot"></span><span id="rlText">Rocket League: not connected</span></div>
@@ -125,17 +230,6 @@
             <div class="rl-status-btns">
               <button class="btn-secondary" type="button" id="rlEnableBtn" hidden>Connect to Rocket League</button>
               <button class="btn-secondary" type="button" id="rlSwapHintBtn" hidden>Swap sides</button>
-            </div>
-            <div class="rl-screens">
-              <span class="lbl">On the board
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="After each game the board switches to that game's stats by itself, and to the series overview once the series is won. It goes back to the live board when the next game loads. These buttons switch by hand, live on stream.">i</span>
-              </span>
-              <div class="rl-screen-btns">
-                <button class="btn-secondary" type="button" data-rls="live">Live game</button>
-                <button class="btn-secondary" type="button" data-rls="game">Game stats</button>
-                <select id="rlGamePick" aria-label="Which game's stats"></select>
-                <button class="btn-secondary" type="button" data-rls="series">Series overview</button>
-              </div>
             </div>
           </div>
           <div class="sb-grid">
@@ -145,64 +239,36 @@
           <div class="push-row sb-actions">
             <button class="btn-secondary" type="button" data-sb="refill" id="sbRefillBtn">Refill stocks</button>
             <button class="btn-secondary" type="button" data-sb="swap">Swap sides</button>
-            <button class="btn-secondary btn-quiet-danger" type="button" data-sb="reset">Reset match</button>
+            <button class="btn-secondary btn-quiet-danger" type="button" data-sb="reset">Reset score</button>
           </div>
-          <label class="checkbox small">
-            <input type="checkbox" id="sbInstantInput" checked>
-            Scores go live instantly
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Score and stock changes reach the stream right away, with no Push Live and no transition. Turn off to preview score changes first, like any other edit.">i</span>
-          </label>
-          <details class="help">
-            <summary>How does scoring work?</summary>
-            <div class="help-body">
-              <p>Click <b>Won</b> on a team when they take a game, map or set. For Smash crew
-              battles, turn on the stock counter: each team shares a pool of stocks, players
-              go in the order listed under Prep, Teams, and the first player with stocks left is
-              shown as on stage.</p>
-              <ol>
-                <li>Click <b>Lost a stock</b> each time a player loses a stock. <b>Undo</b> reverses a misclick.</li>
-                <li>When a team runs out, click <b>Won</b> on the winning team. It adds a point and refills both teams' stocks.</li>
-                <li>The keys shown on the buttons work too, while this card is on screen and you are not typing.</li>
-              </ol>
-              <p style="margin-top:9px">Rocket League reads the game itself: goals, clock, boost and stats
-              come from the game, and each finished game adds a win to its team
-              automatically. Blue is the left side: if team A is playing orange, click <b>Swap sides</b>.
-              Use the <b>+</b> and <b>&minus;</b> buttons to correct a series score.</p>
+
+          <div class="rl-stats" id="rlStatsBox" hidden>
+            <div class="sub-head first">Rocket League Stats scene
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="After each game the app cuts OBS to the Stats scene with that game's stats, then to the series overview once the series is won. It cuts back to the Scoreboard when the next game loads. These buttons put the stats up by hand, to fill time.">i</span>
             </div>
-          </details>
+            <div class="rl-screen-btns">
+              <select id="rlGamePick" aria-label="Which game's stats"></select>
+              <button class="btn-secondary" type="button" data-rls="game">Show game stats</button>
+              <button class="btn-secondary" type="button" data-rls="series">Show series overview</button>
+              <button class="btn-secondary" type="button" id="rlBackBtn">Back to the game</button>
+            </div>
+            <label class="checkbox small"><input type="checkbox" id="sbRlStatsInput" checked> Cut to the stats after each game</label>
+          </div>
+
           <details class="help sb-settings">
             <summary>Scoreboard settings</summary>
             <div class="help-body">
               <div class="field-row">
-                <label class="grow">
-                  <span class="lbl">Round label</span>
-                  <input type="text" id="sbRoundInput" placeholder="e.g. Crew Battle, Week 3">
-                </label>
-                <label style="flex:0 0 96px">
-                  <span class="lbl">Best of</span>
-                  <select id="sbBestOfInput"><option>1</option><option selected>3</option><option>5</option><option>7</option><option>9</option></select>
-                </label>
-              </div>
-              <div class="field-row">
-                <label class="grow">
-                  <span class="lbl">Style
-                    <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Rocket League reads goals, the clock, boost and player stats from the game while it runs. Picking Rocket League as the game sets this.">i</span>
-                  </span>
+                <label class="grow"><span class="lbl">Style</span>
                   <select id="sbStyleInput">
                     <option value="standard">Standard (scores by hand)</option>
                     <option value="rl">Rocket League (live game data)</option>
                   </select>
                 </label>
-              </div>
-              <div class="field-row">
-                <label class="grow">
-                  <span class="lbl">Series counts in</span>
+                <label class="grow"><span class="lbl">Series counts in</span>
                   <select id="sbUnitInput"><option>Game</option><option>Map</option><option>Set</option><option>Round</option></select>
                 </label>
-                <label class="grow" id="sbPositionField">
-                  <span class="lbl">Position
-                    <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Top center is the full bar. The corners use a smaller box, for games whose own HUD sits at the top. Check it over real gameplay and move it if it covers anything.">i</span>
-                  </span>
+                <label class="grow" id="sbPositionField"><span class="lbl">Position</span>
                   <select id="sbPositionInput">
                     <option value="top">Top center (full bar)</option>
                     <option value="top-left">Top left</option>
@@ -213,468 +279,221 @@
                 </label>
               </div>
               <div id="sbRlFields">
-                <label class="checkbox">
-                  <input type="checkbox" id="sbRlAutoInput" checked>
-                  Count series wins automatically
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="When a game ends in Rocket League, the winning colour's team gets a win. Turn off for scrims or show matches you don't want counted.">i</span>
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="sbRlStatsInput" checked>
-                  Show stats automatically after each game
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="sbRlPlayersInput" checked>
-                  Player boost bars in the top corners
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="sbRlBoostInput" checked>
-                  Boost meter (bottom right)
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Shows the boost, name and stats of the player the spectator camera is following. Hide the game's own HUD in spectator mode so the two don't overlap.">i</span>
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="sbRlColorsInput" checked>
-                  Blue and orange team colours
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Matches the board to the cars on screen. Turn off to use each team's own colour from Prep, Teams.">i</span>
-                </label>
+                <label class="checkbox"><input type="checkbox" id="sbRlAutoInput" checked> Count series wins automatically
+                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="When a game ends in Rocket League, the winning colour's team gets a win. Turn off for scrims or show matches you don't want counted.">i</span></label>
+                <label class="checkbox"><input type="checkbox" id="sbRlPlayersInput" checked> Player boost bars in the top corners</label>
+                <label class="checkbox"><input type="checkbox" id="sbRlBoostInput" checked> Boost meter (bottom right)</label>
+                <label class="checkbox"><input type="checkbox" id="sbRlColorsInput" checked> Blue and orange team colours
+                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Matches the board to the cars on screen. Turn off to use each team's own colour.">i</span></label>
               </div>
-              <label class="checkbox" id="sbShowStocksField">
-                <input type="checkbox" id="sbShowStocksInput">
-                Stock counter (Smash crew battles)
-              </label>
+              <label class="checkbox" id="sbShowStocksField"><input type="checkbox" id="sbShowStocksInput"> Stock counter (Smash crew battles)</label>
               <div class="field-row" id="sbStockFields" style="margin-top:12px">
-                <label class="grow">
-                  <span class="lbl">Players per team
-                    <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Crews are usually 4. The first players listed under Prep, Teams are the crew, in that order.">i</span>
-                  </span>
-                  <input type="number" id="sbCrewInput" min="1" max="8" step="1" value="4">
-                </label>
-                <label class="grow">
-                  <span class="lbl">Stocks each</span>
-                  <input type="number" id="sbStocksInput" min="1" max="5" step="1" value="3">
-                </label>
+                <label class="grow"><span class="lbl">Players per team</span><input type="number" id="sbCrewInput" min="1" max="8" step="1" value="4"></label>
+                <label class="grow"><span class="lbl">Stocks each</span><input type="number" id="sbStocksInput" min="1" max="5" step="1" value="3"></label>
               </div>
             </div>
           </details>
         </section>
-
-        <!-- The selected overlay's own fields. Each group lists the overlays
-             it belongs to in data-modes; the rest are hidden. -->
-        <section class="card inspector" id="inspector">
-          <div class="card-head">
-            <h2 id="inspTitle">Starting Soon</h2>
-            <span class="card-hint">Fields for the overlay in Preview</span>
-          </div>
-
-          <div class="insp-group" data-modes="starting-soon post-match brb">
-            <div class="field">
-              <label for="titleInput"><span class="lbl">Title</span></label>
-              <input type="text" id="titleInput" placeholder="Stream Starting Soon">
-            </div>
-            <div class="field">
-              <label for="subtitleInput"><span class="lbl">Subtitle</span></label>
-              <input type="text" id="subtitleInput" placeholder="Optional, such as the matchup">
-            </div>
-          </div>
-
-          <div class="insp-group" data-modes="starting-soon post-match">
-            <div class="field">
-              <label for="statusInput"><span class="lbl">Badge text
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="The small pulsing label above the title.">i</span>
-              </span></label>
-              <input type="text" id="statusInput" placeholder="Starting Soon">
-            </div>
-          </div>
-
-          <div class="insp-group" data-modes="starting-soon post-match" id="countdownPanel">
-            <div class="sub-head">Countdown</div>
-            <div class="field-row countdown-mode">
-              <label class="radio">
-                <input type="radio" name="countdownMode" id="modeDuration" value="duration" checked>
-                Count down from now
-              </label>
-              <label class="radio">
-                <input type="radio" name="countdownMode" id="modeAt" value="at">
-                Count down to a time
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="grow" id="durationField">
-                <span class="lbl">Length (minutes:seconds)</span>
-                <input type="text" id="durationInput" inputmode="numeric" placeholder="10:00">
-              </label>
-              <label class="grow" id="atField" style="display:none">
-                <span class="lbl">Date and time</span>
-                <input type="datetime-local" id="atInput">
-              </label>
-              <div class="restart-wrap" id="restartRow">
-                <button id="restartCountdownBtn" class="btn-secondary" type="button">Restart countdown</button>
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Starts the countdown again from the full length. Other edits do not restart it. On stream it restarts when you push.">i</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="insp-group" data-modes="starting-soon post-match">
-            <div class="sub-head">Background video</div>
-            <div class="field">
-              <label for="clipInput"><span class="lbl">Video
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave empty to play the selected game's highlight video. A video picked here replaces it.">i</span>
-              </span></label>
-              <input type="text" id="clipInput" placeholder="https://...">
-            </div>
-            <div class="field-row">
-              <label class="checkbox">
-                <input type="checkbox" id="montageInput" checked>
-                Show the video panel
-              </label>
-              <label class="grow" id="layoutField" data-modes="post-match">
-                <span class="lbl">Layout</span>
-                <select id="layoutInput">
-                  <option value="right">Video right, text left</option>
-                  <option value="left">Video left, text right</option>
-                </select>
-              </label>
-            </div>
-          </div>
-
-          <div class="insp-group" data-modes="roster">
-            <div class="roster-summary" id="rosterSummary"></div>
-            <button class="btn-secondary" type="button" data-goto="prep-teams">Edit teams in Prep</button>
-          </div>
-
-          <div class="insp-group" data-modes="starting-soon post-match roster">
-            <div class="sub-head">Frame</div>
-            <div class="field">
-              <label for="logoInput"><span class="lbl">Logo (top left)
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave empty for the {{short}} logo.">i</span>
-              </span></label>
-              <input type="text" id="logoInput" placeholder="https://...">
-            </div>
-            <div class="field">
-              <label for="nextInput"><span class="lbl">Next match (bottom right)</span></label>
-              <input type="text" id="nextInput" placeholder="Next: Fri 7pm">
-            </div>
-          </div>
-
-          <div class="insp-group" data-modes="necc">
-            <label class="checkbox" id="neccBgField">
-              <input type="checkbox" id="neccBgInput" checked>
-              {{short}} background behind the graphic
-              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="See-through {{league}} graphics, like the bracket, show the {{short}} background instead of plain black.">i</span>
-            </label>
-            <p class="card-text">{{league}} graphics come from the match imported in Prep, Match.</p>
-          </div>
-
-        </section>
       </div>
 
-      <!-- ============================ PREP ============================ -->
-      <div class="page" data-page="prep" hidden>
-
-        <section class="card collapsible" data-section="prep-game">
-          <div class="card-head"><h2>Game</h2></div>
-          <div class="card-body">
-            <div class="field-row">
-              <label class="grow">
-                <span class="lbl">Game
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Fills in the game name and loads that game's scoreboard settings and highlight video.">i</span>
-                </span>
-                <select id="gameSelect"></select>
-              </label>
-              <label class="grow">
-                <span class="lbl">Game name on the overlays</span>
-                <input type="text" id="teamInput" placeholder="Call of Duty">
-              </label>
-            </div>
-            <div class="status-line" id="gameMontageStatus"></div>
+      <div class="live-col">
+        <section class="card" id="scenesCard">
+          <div class="card-head">
+            <h2>Scenes</h2>
+            <span class="card-hint">Text shows on stream when you press Enter or click away</span>
           </div>
+          <div class="scene-list" id="sceneList"></div>
+          <label class="checkbox small" id="neccBgField" style="margin-top:10px">
+            <input type="checkbox" id="neccBgInput" checked>
+            {{short}} background behind {{league}} graphics
+          </label>
         </section>
 
-        <section class="card collapsible" data-section="prep-match">
-          <div class="card-head">
-            <h2>Match</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Import a match from {{league}}, or save this setup (teams, text, countdown, scoreboard settings) and load it again later. Loading does not change the overlay on stream or the live score.">i</span>
-          </div>
+        <section class="card collapsible" data-section="live-teams" id="teamsCard">
+          <div class="card-head"><h2>Rosters</h2><span class="card-hint">Fix a name or swap a player mid-match</span></div>
           <div class="card-body">
-            <div class="field">
-              <label for="neccUrlInput"><span class="lbl">Import from {{league}} (LeagueOS)
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste the {{league}} match page link, or an overlay link, and click Import. It fills in both teams, the countdown and the {{league}} graphics, and saves both teams to the team library.">i</span>
-              </span></label>
-              <div class="input-row">
-                <input type="text" id="neccUrlInput" placeholder="{{importHint}}">
-                <button id="neccFetchBtn" class="btn-accent" type="button">Import</button>
-              </div>
-              <div class="status-line" id="neccStatus"></div>
-            </div>
-            <div class="field">
-              <label for="matchSelect"><span class="lbl">Saved matches</span></label>
-              <div class="input-row">
-                <select id="matchSelect"><option value="">No saved matches</option></select>
-                <button id="matchLoadBtn" class="btn-secondary" type="button">Load</button>
-                <span class="row-gap"></span>
-                <button id="matchDeleteBtn" class="btn-secondary btn-quiet-danger" type="button">Delete</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="matchNameInput"><span class="lbl">Save this setup as</span></label>
-              <div class="input-row">
-                <input type="text" id="matchNameInput" placeholder="{{match}}">
-                <button id="matchSaveBtn" class="btn-secondary" type="button">Save</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="prep-teams">
-          <div class="card-head">
-            <h2>Teams</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Shown on the Rosters overlay and the scoreboard. Drag the handle to reorder players (the order is the Smash crew order).">i</span>
-          </div>
-          <div class="card-body">
-            <div class="roster-editor">
-              <div class="roster-edit-team" id="rosterEditA"></div>
-              <div class="roster-edit-team" id="rosterEditB"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="prep-library">
-          <div class="card-head">
-            <h2>Team library</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Teams saved from Teams or from a {{league}} import. Use one as team A or B, or edit it here.">i</span>
-          </div>
-          <div class="card-body" data-nodraft>
-            <input type="search" id="libSearch" class="lib-search" placeholder="Search saved teams">
-            <div class="team-cards" id="libTeamList"></div>
+            <div class="roster-slot" data-roster-slot="live"></div>
           </div>
         </section>
       </div>
+    </div>
 
-      <!-- ========================== SETTINGS ========================== -->
-      <div class="page" data-page="settings" hidden>
+    <!-- ========================== SETTINGS ========================== -->
+    <div class="page" data-page="settings" hidden>
 
-        <section class="card" data-nodraft>
-          <div class="card-head"><h2>Setup guide</h2></div>
-          <p class="card-text">Walks through connecting OBS and downloading the game videos. Safe to run again.</p>
-          <button id="wizardOpenBtn" class="btn-secondary" type="button">Run the setup guide</button>
-        </section>
+      <section class="card">
+        <div class="card-head"><h2>Setup guide</h2></div>
+        <p class="card-text">Connects OBS, builds the scenes and sets up the {{short}} stinger. Safe to run again.</p>
+        <button id="wizardOpenBtn" class="btn-secondary" type="button">Run the setup guide</button>
+      </section>
 
-        <section class="card collapsible" data-section="set-obs" data-nodraft>
-          <div class="card-head"><h2>OBS</h2></div>
-          <div class="card-body">
-            <div class="field">
-              <label for="obsUrl"><span class="lbl">Browser source address
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste this into an OBS Browser Source at 1920 x 1080. It never changes, not even when you switch games. Not needed if the app manages your OBS scenes.">i</span>
-              </span></label>
-              <div class="input-row">
-                <input type="text" id="obsUrl" class="url-field" readonly>
-                <button id="copyUrlBtn" class="btn-secondary" type="button">Copy</button>
-              </div>
+      <section class="card collapsible" data-section="set-obs">
+        <div class="card-head"><h2>OBS</h2></div>
+        <div class="card-body">
+          <details class="help">
+            <summary>How do I connect?</summary>
+            <div class="help-body">
+              <ol>
+                <li>In OBS, open <b>Tools</b> then <b>WebSocket Server Settings</b>.</li>
+                <li>Tick <b>Enable WebSocket server</b>, click <b>Show Connect Info</b> and copy the password.</li>
+                <li>Paste it below and click <b>Connect</b>. The app connects again by itself from then on.</li>
+              </ol>
             </div>
+          </details>
+          <div class="field-row">
+            <label class="grow"><span class="lbl">Password</span><input type="password" id="obsPassInput" placeholder="OBS WebSocket password"></label>
+            <label style="flex:0 0 150px"><span class="lbl">Address</span><input type="text" id="obsHostInput" placeholder="127.0.0.1" value="127.0.0.1"></label>
+            <label style="flex:0 0 90px"><span class="lbl">Port</span><input type="number" id="obsPortInput" placeholder="4455" value="4455"></label>
+          </div>
+          <div class="push-row" style="margin-bottom:10px">
+            <button id="obsConnectBtn" class="btn-accent" type="button">Connect</button>
+            <button id="obsDisconnectBtn" class="btn-secondary" type="button" disabled>Disconnect</button>
+          </div>
+          <div class="status-line" id="obsStatus">Not connected</div>
 
-            <div class="sub-head">Let the app switch OBS scenes <span class="tag-opt">Recommended</span></div>
-            <details class="help">
-              <summary>What does this do?</summary>
-              <div class="help-body">
-                <p>The app connects to the WebSocket server built into OBS 28 and newer and
-                builds one scene per overlay. After that, every Push Live switches OBS to the
-                matching scene with OBS's own transition, and background music plays between
-                games. Switching scenes by hand in OBS moves the red Live marker to match.</p>
-                <p>Once connected, the app reconnects on its own if OBS is closed or restarted.</p>
-                <ol>
-                  <li>In OBS, open <b>Tools</b> then <b>WebSocket Server Settings</b>.</li>
-                  <li>Enable the server and copy the password.</li>
-                  <li>Fill in the password below and click <b>Connect</b>.</li>
-                  <li>Click <b>Build or update scenes in OBS</b>.</li>
-                </ol>
-              </div>
-            </details>
-            <div class="field-row">
-              <label class="grow">
-                <span class="lbl">Password
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="From OBS: Tools, then WebSocket Server Settings, then Show Connect Info. Stored only on this PC.">i</span>
-                </span>
-                <input type="password" id="obsPassInput" placeholder="OBS WebSocket password">
-              </label>
-              <label style="flex:0 0 150px">
-                <span class="lbl">Address</span>
-                <input type="text" id="obsHostInput" placeholder="127.0.0.1" value="127.0.0.1">
-              </label>
-              <label style="flex:0 0 90px">
-                <span class="lbl">Port</span>
-                <input type="number" id="obsPortInput" placeholder="4455" value="4455">
-              </label>
-            </div>
-            <div class="push-row" style="margin-bottom:10px">
-              <button id="obsConnectBtn" class="btn-secondary" type="button">Connect</button>
-              <button id="obsDisconnectBtn" class="btn-secondary" type="button" disabled>Disconnect</button>
-            </div>
-            <div class="status-line" id="obsStatus">Not connected</div>
+          <div class="sub-head">Scenes</div>
+          <label class="checkbox"><input type="checkbox" id="gameCaptureInput" checked> Add a game capture to the Scoreboard scene
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="A Game Capture set to capture any fullscreen application, under the scoreboard. Turn off if you capture the game your own way.">i</span></label>
+          <label class="checkbox"><input type="checkbox" id="studioModeInput" checked> Turn on Studio Mode in OBS when building
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Studio Mode shows the next scene beside the one on air, so you can check it before clicking Transition.">i</span></label>
+          <div class="push-row" style="margin-top:12px">
+            <button id="obsBuildBtn" class="btn-secondary" type="button">Build or update scenes</button>
+          </div>
+          <div class="status-line" id="obsBuildStatus"></div>
 
-            <div id="obsSyncControls" class="sync-controls" style="display:none">
-              <label class="checkbox">
-                <input type="checkbox" id="obsSyncEnable">
-                Let the app switch OBS scenes on Push Live
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Push Live switches OBS scenes and lets OBS play the transition. The app's own curtain transition turns off so the two cannot double up.">i</span>
-              </label>
-              <div class="field" style="margin-top:12px">
-                <label for="obsTransitionSelect"><span class="lbl">OBS transition
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Pick the stinger you set up in OBS. OBS default keeps whatever transition OBS already has selected.">i</span>
-                </span></label>
-                <select id="obsTransitionSelect"><option value="">OBS default</option></select>
-              </div>
-              <div class="push-row">
-                <button id="obsBuildBtn" class="btn-secondary" type="button">Build or update scenes in OBS</button>
-              </div>
-              <div class="status-line" id="obsBuildStatus" style="margin-top:8px"></div>
-            </div>
+          <div class="sub-head">Show this panel inside OBS <span class="tag-opt">Optional</span></div>
+          <p class="card-text">In OBS, open <b>Docks</b>, then <b>Custom Browser Docks…</b>, give it a name and paste this address.</p>
+          <div class="input-row">
+            <input type="text" id="dockUrl" class="url-field" readonly aria-label="Custom Browser Dock address">
+            <button id="copyDockBtn" class="btn-secondary" type="button">Copy</button>
+          </div>
+        </div>
+      </section>
 
-            <div class="sub-head">Run this panel inside OBS <span class="tag-opt">Optional</span></div>
-            <details class="help">
-              <summary>How do I set this up?</summary>
-              <div class="help-body">
-                <p>OBS can show this control panel as a dock, right beside your scenes.</p>
-                <ol>
-                  <li>In OBS, open <b>Docks</b> then <b>Custom Browser Docks…</b></li>
-                  <li>Give it a name, such as <b>{{short}} Control</b>.</li>
-                  <li>Paste the address below, then click <b>Apply</b>.</li>
-                </ol>
-              </div>
-            </details>
+      <section class="card collapsible" data-section="set-stinger" id="stingerCard">
+        <div class="card-head"><h2>Stinger transition</h2></div>
+        <div class="card-body">
+          <div class="stinger-guide" data-stinger-guide></div>
+        </div>
+      </section>
+
+      <section class="card collapsible" data-section="set-music">
+        <div class="card-head">
+          <h2>Background music</h2>
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays on every scene without gameplay: Starting Soon, Be Right Back, Post-Match, Rosters, {{league}} graphics, Rocket League stats and the menus between games. It fades out when gameplay is on air.">i</span>
+        </div>
+        <div class="card-body">
+          <p class="card-text" id="musicTrackHelp">The included track downloads from the team Google Drive (36 MB) the first time it is needed. Or pick any audio file on this PC.
+            OBS plays it through one source, <b>{{prefix}}: Music</b>, in every scene, so it carries on through scene changes.</p>
+          <label class="checkbox"><input type="checkbox" id="musicEnable" checked> Play music when there's no gameplay on air</label>
+          <div class="field" style="margin-top:12px">
+            <label for="musicFileText"><span class="lbl">Music file</span></label>
             <div class="input-row">
-              <input type="text" id="dockUrl" class="url-field" readonly aria-label="Custom Browser Dock address">
-              <button id="copyDockBtn" class="btn-secondary" type="button">Copy</button>
+              <input type="text" id="musicFileText" readonly>
+              <button class="btn-secondary" type="button" id="musicBrowseBtn">Browse…</button>
+              <input type="file" id="musicFile" accept="audio/*,.m4a,.mp3,.wav,.ogg,.flac,.aac" hidden>
+            </div>
+            <div class="push-row" style="margin-top:8px">
+              <button class="btn-secondary" type="button" id="musicDefaultBtn">Use the included track</button>
+              <button class="btn-secondary" type="button" id="musicDownloadBtn" hidden>Download the included track</button>
             </div>
           </div>
-        </section>
-
-        <section class="card collapsible" data-section="set-music" data-nodraft>
-          <div class="card-head">
-            <h2>Background music</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays on every screen without gameplay: Starting Soon, Be Right Back, Post-Match, Rosters, {{league}} graphics, and the Rocket League stats screens and menus between games. It fades out when gameplay is on screen.">i</span>
-          </div>
-          <div class="card-body">
-            <details class="help">
-              <summary>How does the music play?</summary>
-              <div class="help-body">
-                <p id="musicTrackHelp">The included track downloads from the team Google Drive (36 MB) the first time it is
-                needed, like the game videos. Or pick any audio file on this PC.</p>
-                <p>OBS plays it, through one media source called <b>{{prefix}}: Music</b> that <b>Build or update
-                scenes</b> adds to every {{prefix}} scene, so it carries on through scene changes instead of
-                starting over. The app fades it up and down, so the app must be switching your OBS
-                scenes (above) for music to play.</p>
-              </div>
-            </details>
-            <label class="checkbox">
-              <input type="checkbox" id="musicEnable" checked>
-              Play music when there's no gameplay on screen
-            </label>
-            <div class="field" style="margin-top:12px">
-              <label for="musicFileText"><span class="lbl">Music file</span></label>
-              <div class="input-row">
-                <input type="text" id="musicFileText" readonly>
-                <button class="btn-secondary" type="button" id="musicBrowseBtn">Browse…</button>
-                <input type="file" id="musicFile" accept="audio/*,.m4a,.mp3,.wav,.ogg,.flac,.aac" hidden>
-              </div>
-              <div class="push-row" style="margin-top:8px">
-                <button class="btn-secondary" type="button" id="musicDefaultBtn">Use the included track</button>
-                <button class="btn-secondary" type="button" id="musicDownloadBtn" hidden>Download the included track</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="musicVolume"><span class="lbl">Volume <b id="musicVolumeText"></b></span>
-                <input type="range" id="musicVolume" min="0" max="100" step="1" value="55">
-              </label>
-            </div>
-            <div class="status-line" id="musicStatus"></div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="set-videos" id="videosCard" data-nodraft>
-          <div class="card-head">
-            <h2>Game highlight videos</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Each game's highlight video downloads from the team Google Drive the first time the game is picked, then plays from this PC. Download them all before a stream so none starts mid-broadcast.">i</span>
-          </div>
-          <div class="card-body">
-            <div class="lib-list" id="montageList"></div>
-            <div class="push-row" style="margin-top:10px; align-items:center">
-              <button id="montageAllBtn" class="btn-secondary" type="button">Download all</button>
-              <span class="status-line" id="montageTotal"></span>
-            </div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="set-necc" data-nodraft>
-          <div class="card-head">
-            <h2>{{league}} graphics</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Which {{league}} graphics get a card on the Live page. They need a match imported first.">i</span>
-          </div>
-          <div class="card-body">
-            <div class="necc-type-list" id="neccTypeList"></div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="set-socials">
-          <div class="card-head">
-            <h2>Socials</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave a field empty to hide that handle on the overlays. Like other edits, changes reach the stream on Push Live.">i</span>
-          </div>
-          <div class="card-body">
-            <div class="field-row">
-              <label class="grow"><span class="lbl">Twitch</span><input type="text" id="twitchInput" placeholder="{{social}}"></label>
-              <label class="grow"><span class="lbl">Twitter/X</span><input type="text" id="twitterInput" placeholder="{{social}}"></label>
-            </div>
-            <div class="field-row">
-              <label class="grow"><span class="lbl">Instagram</span><input type="text" id="instagramInput" placeholder="{{social}}"></label>
-              <label class="grow"><span class="lbl">YouTube</span><input type="text" id="youtubeInput" placeholder="{{social}}"></label>
-            </div>
-          </div>
-        </section>
-
-        <section class="card collapsible" data-section="set-display" data-nodraft>
-          <div class="card-head">
-            <h2>Display</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="These apply to this window only, so an OBS dock can use its own text size.">i</span>
-          </div>
-          <div class="card-body">
-            <div class="field">
-              <span class="lbl">Text size <span class="muted-note">Ctrl+plus and Ctrl+minus also work</span></span>
-              <div class="segmented" id="textSizeSeg" role="radiogroup" aria-label="Text size">
-                <button class="seg-btn" type="button" data-size="small">Small</button>
-                <button class="seg-btn" type="button" data-size="normal">Normal</button>
-                <button class="seg-btn" type="button" data-size="large">Large</button>
-                <button class="seg-btn" type="button" data-size="xlarge">Extra large</button>
-              </div>
-            </div>
-            <label class="checkbox">
-              <input type="checkbox" id="liveMonitorInput" checked>
-              Show the live monitor next to the preview
-              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="The live monitor runs a second copy of the overlay. Turn it off on a slower PC.">i</span>
+          <div class="field">
+            <label for="musicVolume"><span class="lbl">Volume <b id="musicVolumeText"></b></span>
+              <input type="range" id="musicVolume" min="0" max="100" step="1" value="55">
             </label>
           </div>
-        </section>
+          <div class="status-line" id="musicStatus"></div>
+        </div>
+      </section>
 
-        <section class="card collapsible" data-section="set-remote" data-nodraft>
-          <div class="card-head">
-            <h2>Stream Deck and remote control</h2>
-            <span class="tag-opt">Optional</span>
+      <section class="card collapsible" data-section="set-videos" id="videosCard">
+        <div class="card-head">
+          <h2>Game highlight videos</h2>
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Each game's highlight video downloads from the team Google Drive the first time the game is picked, then plays from this PC. Download them all before a stream so none starts mid-broadcast.">i</span>
+        </div>
+        <div class="card-body">
+          <div class="lib-list" id="montageList"></div>
+          <div class="push-row" style="margin-top:10px; align-items:center">
+            <button id="montageAllBtn" class="btn-secondary" type="button">Download all</button>
+            <span class="status-line" id="montageTotal"></span>
           </div>
-          <div class="card-body">
-            <p class="card-text">A Stream Deck (with a web request plugin), Bitfocus Companion, a macro pad or a script on
-            this PC can run the show. Set a button to send a <b>POST</b> request to one of these addresses.
-            Requests from web pages are refused, so only programs on this PC can use them.</p>
-            <div class="remote-list" id="remoteList"></div>
-          </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="card collapsible" data-section="set-keys" data-nodraft>
-          <div class="card-head"><h2>Keyboard shortcuts</h2></div>
-          <div class="card-body">
-            <p class="card-text">Press <kbd>?</kbd> anywhere in the panel to see every shortcut. Each button also shows its own key.</p>
-            <button id="shortcutsOpenBtn" class="btn-secondary" type="button">Show shortcuts</button>
+      <section class="card collapsible" data-section="set-overlays">
+        <div class="card-head"><h2>Overlay frame and socials</h2></div>
+        <div class="card-body">
+          <div class="field">
+            <label for="logoInput"><span class="lbl">Logo (top left of Starting Soon, Post-Match and Rosters)</span></label>
+            <input type="text" id="logoInput" placeholder="https://...">
           </div>
-        </section>
-      </div>
-    </main>
+          <div class="field-row">
+            <label class="grow"><span class="lbl">Twitch</span><input type="text" id="twitchInput" placeholder="{{social}}"></label>
+            <label class="grow"><span class="lbl">Twitter/X</span><input type="text" id="twitterInput" placeholder="{{social}}"></label>
+          </div>
+          <div class="field-row">
+            <label class="grow"><span class="lbl">Instagram</span><input type="text" id="instagramInput" placeholder="{{social}}"></label>
+            <label class="grow"><span class="lbl">YouTube</span><input type="text" id="youtubeInput" placeholder="{{social}}"></label>
+          </div>
+          <p class="card-text">Leave a handle empty to hide it.</p>
+        </div>
+      </section>
+
+      <section class="card collapsible" data-section="set-library">
+        <div class="card-head">
+          <h2>Team library</h2>
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Every school and team the app knows: the league's schools, imported teams and teams you saved. Edit one to keep its players for next time.">i</span>
+        </div>
+        <div class="card-body">
+          <input type="search" id="libManageSearch" class="lib-search" placeholder="Search teams">
+          <div class="team-cards" id="libTeamList"></div>
+        </div>
+      </section>
+
+      <section class="card collapsible" data-section="set-display">
+        <div class="card-head"><h2>Display</h2>
+          <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="These apply to this window only, so an OBS dock can use its own.">i</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <span class="lbl">Text size <span class="muted-note">Ctrl+plus and Ctrl+minus also work</span></span>
+            <div class="segmented" id="textSizeSeg" role="radiogroup" aria-label="Text size">
+              <button class="seg-btn" type="button" data-size="small">Small</button>
+              <button class="seg-btn" type="button" data-size="normal">Normal</button>
+              <button class="seg-btn" type="button" data-size="large">Large</button>
+              <button class="seg-btn" type="button" data-size="xlarge">Extra large</button>
+            </div>
+          </div>
+          <label class="checkbox"><input type="checkbox" id="shotInput" checked> Show a picture of what's on air on the Live page
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="A small screenshot from OBS every few seconds. Turn off on a slower PC.">i</span></label>
+        </div>
+      </section>
+
+      <section class="card collapsible" data-section="set-remote">
+        <div class="card-head"><h2>Stream Deck and remote control</h2><span class="tag-opt">Optional</span></div>
+        <div class="card-body">
+          <p class="card-text">A Stream Deck (with a web request plugin), Bitfocus Companion, a macro pad or a script on
+          this PC can keep score and cut to scenes. Set a button to send a <b>POST</b> request to one of these addresses.
+          Requests from web pages are refused, so only programs on this PC can use them.</p>
+          <div class="remote-list" id="remoteList"></div>
+        </div>
+      </section>
+
+      <section class="card collapsible" data-section="set-keys">
+        <div class="card-head"><h2>Keyboard shortcuts</h2></div>
+        <div class="card-body">
+          <p class="card-text">Press <kbd>?</kbd> anywhere in the panel to see every shortcut.</p>
+          <button id="shortcutsOpenBtn" class="btn-secondary" type="button">Show shortcuts</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- The roster editor: one copy, moved to the page that is showing it. -->
+  <div class="roster-editor" id="rosterEditor">
+    <div class="roster-edit-team" id="rosterEditA"></div>
+    <div class="roster-edit-team" id="rosterEditB"></div>
   </div>
 
   <!-- ===================== POP-UPS ===================== -->
@@ -686,16 +505,14 @@
         <button class="icon-btn" type="button" data-close aria-label="Close">&times;</button>
       </div>
       <table class="keys">
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Push Live</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> to <kbd>9</kbd></td><td>Pick an overlay by its place in the strip</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo an edit (outside text boxes)</td></tr>
         <tr><td><kbd>1</kbd> / <kbd>2</kbd></td><td>Team A / Team B lost a stock</td></tr>
         <tr><td><kbd>Shift</kbd>+<kbd>1</kbd> / <kbd>2</kbd></td><td>Undo a stock for Team A / Team B</td></tr>
         <tr><td><kbd>3</kbd> / <kbd>4</kbd></td><td>Team A / Team B won a game, map or set</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>In a text box: show it on stream</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>&minus;</kbd> / <kbd>0</kbd></td><td>Bigger, smaller or normal text</td></tr>
         <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
       </table>
-      <p class="keys-note">The scoring keys work while the Scoreboard card is on screen and you are not typing in a box. In an OBS dock, click the dock first so it has keyboard focus.</p>
+      <p class="keys-note">The scoring keys work on the Live page while you are not typing in a box. In an OBS dock, click the dock first so it has keyboard focus.</p>
     </div>
   </div>
 
@@ -705,10 +522,10 @@
       <h3 id="teamSheetTitle">Edit team</h3>
       <button class="icon-btn" type="button" id="teamSheetClose" aria-label="Close">&times;</button>
     </div>
-    <div class="sheet-body" data-nodraft>
+    <div class="sheet-body">
       <div class="field-row">
         <label class="grow"><span class="lbl">Team name</span><input type="text" id="tsName"></label>
-        <label style="flex:0 0 96px"><span class="lbl">Tag</span><input type="text" id="tsTag" class="upper"></label>
+        <label style="flex:0 0 120px"><span class="lbl">Short name</span><input type="text" id="tsTag"></label>
         <label style="flex:0 0 56px"><span class="lbl">Colour</span><input type="color" id="tsColor" class="color-input"></label>
       </div>
       <div class="field">
@@ -725,39 +542,26 @@
     </div>
   </aside>
 
+  <!-- First-run setup guide: OBS is required, so it walks through connecting,
+       building the scenes and adding the stinger. -->
   <div class="modal-backdrop" id="wizard" hidden>
-    <div class="modal wizard" role="dialog" aria-modal="true" aria-labelledby="wizTitle" data-nodraft>
+    <div class="modal wizard" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
       <div class="wiz-steps" id="wizSteps" aria-hidden="true"></div>
 
       <div class="wiz-step" data-step="welcome">
-        <h3 id="wizTitle">Set up the stream app</h3>
-        <p id="wizIntro">This takes about two minutes: connect OBS, then download the game videos. You can change anything later in Settings.</p>
+        <h3 id="wizTitle">Set up {{appName}}</h3>
+        <p>The app runs the stream through OBS: it builds a scene for every overlay, and you switch between them in OBS
+          (or let the app do it, like cutting to the stats after a Rocket League game). Here it connects to OBS, builds the
+          scenes and sets up the {{short}} stinger transition. About five minutes.</p>
+        <p class="card-text">You need OBS 30 or newer, open on this PC.</p>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="skip">Skip for now</button>
           <button class="btn-accent" type="button" data-wiz="next">Start</button>
         </div>
       </div>
 
-      <div class="wiz-step" data-step="choice" hidden>
-        <h3>How should OBS show the overlays?</h3>
-        <label class="choice-card">
-          <input type="radio" name="wizObsMode" value="sync" checked>
-          <span><b>Let the app manage OBS scenes</b> <span class="tag-opt">Recommended</span>
-          <small>The app builds one OBS scene per overlay, switches scenes when you push, and plays background music between games. Needs OBS 28 or newer.</small></span>
-        </label>
-        <label class="choice-card">
-          <input type="radio" name="wizObsMode" value="single">
-          <span><b>One browser source</b>
-          <small>You add one Browser Source to OBS yourself. Simplest, but no automatic scene switching or music.</small></span>
-        </label>
-        <div class="wiz-foot">
-          <button class="btn-secondary" type="button" data-wiz="back">Back</button>
-          <button class="btn-accent" type="button" data-wiz="next">Next</button>
-        </div>
-      </div>
-
       <div class="wiz-step" data-step="connect" hidden>
-        <h3>Connect to OBS</h3>
+        <h3>1. Connect to OBS</h3>
         <ol class="wiz-list">
           <li>In OBS, open <b>Tools</b>, then <b>WebSocket Server Settings</b>.</li>
           <li>Tick <b>Enable WebSocket server</b>.</li>
@@ -765,31 +569,38 @@
         </ol>
         <div class="field">
           <label for="wizPass"><span class="lbl">Password</span></label>
-          <input type="password" id="wizPass" placeholder="OBS WebSocket password">
-        </div>
-        <div class="push-row">
-          <button class="btn-accent" type="button" id="wizConnectBtn">Connect</button>
-          <button class="btn-secondary" type="button" id="wizBuildBtn" disabled>Build scenes in OBS</button>
+          <div class="input-row">
+            <input type="password" id="wizPass" placeholder="OBS WebSocket password">
+            <button class="btn-accent" type="button" id="wizConnectBtn">Connect</button>
+          </div>
         </div>
         <div class="status-line" id="wizConnectStatus"></div>
+        <div class="wiz-foot">
+          <button class="btn-secondary" type="button" data-wiz="back">Back</button>
+          <button class="btn-accent" type="button" data-wiz="next" id="wizConnectNext" disabled>Next</button>
+        </div>
+      </div>
+
+      <div class="wiz-step" data-step="scenes" hidden>
+        <h3>2. Build the scenes</h3>
+        <p>The app makes a scene collection called <b id="wizCollection">{{short}} Stream</b> with one scene per overlay.
+          Your other scene collections are not touched.</p>
+        <label class="checkbox"><input type="checkbox" id="wizGameCapture" checked> Add a game capture to the Scoreboard scene</label>
+        <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizStudioMode" checked> Turn on Studio Mode (check a scene before it goes on air)</label>
+        <div class="push-row" style="margin-top:14px">
+          <button class="btn-accent" type="button" id="wizBuildBtn">Build the scenes</button>
+        </div>
+        <div class="status-line" id="wizBuildStatus"></div>
+        <div class="build-result" id="wizBuildResult" hidden></div>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="back">Back</button>
           <button class="btn-accent" type="button" data-wiz="next">Next</button>
         </div>
       </div>
 
-      <div class="wiz-step" data-step="url" hidden>
-        <h3>Add the overlay to OBS</h3>
-        <ol class="wiz-list">
-          <li>In OBS, click <b>+</b> under Sources and choose <b>Browser</b>.</li>
-          <li>Paste this address as the URL.</li>
-          <li>Set the width to <b>1920</b> and the height to <b>1080</b>, then click OK.</li>
-        </ol>
-        <div class="input-row">
-          <input type="text" id="wizUrl" class="url-field" readonly aria-label="Overlay address">
-          <button class="btn-secondary" type="button" id="wizCopyUrl">Copy</button>
-        </div>
-        <p class="card-text">Use the same source in every scene that needs the overlay. The address never changes.</p>
+      <div class="wiz-step" data-step="stinger" hidden>
+        <h3>3. Add the {{short}} stinger</h3>
+        <div class="stinger-guide" data-stinger-guide></div>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="back">Back</button>
           <button class="btn-accent" type="button" data-wiz="next">Next</button>
@@ -797,8 +608,8 @@
       </div>
 
       <div class="wiz-step" data-step="videos" hidden>
-        <h3>Download the game videos?</h3>
-        <p>Starting Soon, Post-Match and Be Right Back play a highlight video for the selected game.
+        <h3>4. Download the game videos?</h3>
+        <p>Starting Soon and Post-Match play a highlight video for the selected game.
         <span id="wizVideoSize"></span> Downloading them now keeps a download from starting mid-stream.</p>
         <div class="push-row">
           <button class="btn-accent" type="button" id="wizDownloadBtn">Download all</button>
@@ -812,11 +623,12 @@
 
       <div class="wiz-step" data-step="done" hidden>
         <h3>You're set</h3>
-        <p>Try it: on the <b>Live</b> page, click <b>Starting Soon</b>, then <b>Push Live</b>. OBS should show it within a second.</p>
+        <p>Next, set up a match on the <b>Match</b> page: the game, the teams, the start time. Then run the show from OBS,
+          and keep score and fix names on the <b>Live</b> page.</p>
         <p class="card-text">Everything here is also under Settings.</p>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="back">Back</button>
-          <button class="btn-accent" type="button" data-wiz="finish">Go to the Live page</button>
+          <button class="btn-accent" type="button" data-wiz="finish">Set up a match</button>
         </div>
       </div>
     </div>

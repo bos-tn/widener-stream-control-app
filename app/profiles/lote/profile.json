@@ -55,7 +55,9 @@
     "watermark": "mark-white.png"
   },
   "stinger": {
-    "type": "css"
+    "file": "stinger.webm",
+    "transitionPoint": 590,
+    "trackMatte": false
   },
   "music": null,
   "defaults": {

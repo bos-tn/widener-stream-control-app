@@ -18,9 +18,8 @@ if (PROFILE.build.packageName && app.getName() !== PROFILE.build.packageName) {
 }
 
 function createWindow() {
-  // Wide enough for the preview and live monitors side by side (v0.12.0).
   const win = new BrowserWindow({
-    width: 1280,
+    width: 1200,
     height: 860,
     title: APP_TITLE,
     icon: ICON_PATH,

@@ -2,198 +2,167 @@
 
 # Widener Esports Stream Control
 
-A Windows app for running esports stream overlays. It replaces the old folder of
-per-game overlay HTML files with one overlay that you edit from a control panel.
+A Windows app for running esports streams in OBS. It builds the OBS scenes for
+every overlay (Starting Soon, Rosters, Scoreboard and the rest), fills them with
+the match you set up, and keeps them up to date while you keep score.
 
-Since v1.0.0 the same app is built once per league, each with that league's
-colours, logos, scene background, transition, games and OBS scene names:
+The same app is built once per league, each with that league's colours, logos,
+scene background, stinger transition, games and OBS scene names:
 
-| App | For | Overlay address | OBS scenes |
+| App | For | Control panel | OBS scene collection |
 | --- | --- | --- | --- |
-| Widener Esports Stream Control | Widener Esports streams (NECC) | `http://localhost:4310/overlay` | `WU: …` |
-| LotE Stream Control | League of the East broadcasts | `http://localhost:4320/overlay` | `LotE: …` |
+| Widener Esports Stream Control | Widener Esports streams (NECC) | `http://localhost:4310/control` | Widener Stream, scenes `WU: …` |
+| LotE Stream Control | League of the East broadcasts | `http://localhost:4320/control` | LotE Stream, scenes `LotE: …` |
 
 Download the installers from the [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest).
 The two apps install side by side, keep separate settings, and can both be open
 at once. Each checks for its own new versions and offers to install them.
-Installing over an old version keeps your settings.
+Installing over an old version keeps your settings, teams and saved matches.
 
 The app runs entirely on the streaming PC and can only be reached from that PC.
 It needs internet access only for the LeagueOS import, league graphics, and
 update checks.
 
-The rest of this guide uses the Widener app's addresses. For League of the East,
-use port 4320 in place of 4310 and `LotE` in place of `WU`. LotE has no game
-highlight videos or included music track yet, so those parts don't appear in it.
+The rest of this guide uses the Widener app's names. For League of the East,
+read `LotE` for `WU` and port 4320 for 4310. LotE has no game highlight videos
+or included music track yet, so those parts don't appear in it. It comes with
+the league's member schools (names, short names, colours and logos) already in
+its team library.
 
-## What it does
+## How it works (v2.0.0)
 
-The app has one overlay page that OBS loads from `http://localhost:4310/overlay`.
-The control panel decides what that page shows. The available overlays are:
+**OBS decides what is on stream.** The app builds a scene collection in OBS
+with one scene per overlay, each holding a browser source that always shows the
+current match:
 
-- Starting Soon and Post-Match, with a title, subtitle, countdown, and the selected game's montage (or your own clip)
-- Rosters, a two-team lineup
-- Be Right Back
-- Scoreboard, an in-game scoreboard for any game (series score, with a stock counter for Smash).
-  For Rocket League it reads the game itself: goals, clock, boost, and player stats
-- NECC graphics (bracket, match preview, and others) pulled from LeagueOS
+- **Starting Soon** and **Post-Match**: title, subtitle, countdown, and the game's highlight video (or your own)
+- **Rosters**: the two teams' lineups
+- **Be Right Back**
+- **Scoreboard**: the in-game scoreboard, over a game capture the app adds for you. For Rocket League it reads the game itself
+- **Rocket League Stats** (leagues that play Rocket League): each game's stats and the series overview
+- One scene per **league graphic** you pick (bracket, match preview and others, pulled from LeagueOS)
 
-Edits made in the control panel show up in the preview first. The stream does
-not change until you click Push Live. Discard changes throws away your edits and
-resets the preview to whatever is on stream. The Push Live button turns gold
-when the preview has changes that have not been pushed.
+You switch scenes in OBS, the way you would with any scene collection. Studio
+Mode (turned on by the setup) lets you look at the next scene before clicking
+Transition. The league's stinger plays on every switch. The app switches scenes
+itself only where it helps: it cuts to the Rocket League Stats scene after each
+game, and back to the Scoreboard when the next game loads.
 
-The control panel works like OBS Studio Mode: the **Preview** monitor (green
-border) shows your draft, the **Live on stream** monitor (red border) shows what
-viewers see, and Push Live sits between them. Below the monitors are three
-pages:
+The control panel is for setting up the match and keeping it right while you
+are live: the score, the rosters, and each scene's text. Everything you change
+shows on every scene at once. A text box goes out when you press **Enter** or
+click away from it, so half-typed words never reach the stream; the box
+flashes green when it has.
 
-- **Prep**: the game, the match (NECC import and saved matches), the two teams,
-  and the team library.
-- **Live**: the overlay strip, the scoreboard, and the fields of the overlay in
-  the preview. Only that overlay's fields are shown.
-- **Settings**: OBS, background music, game videos, NECC graphics, socials,
-  display, Stream Deck addresses, and the setup guide.
+There is no Push Live, preview, or one-link browser source any more (they were
+in v1). OBS Studio Mode is the preview.
 
-## Setting up OBS
+## First-time setup
 
-The first time the app starts on a new PC, a setup guide walks through this. It
-can be run again from Settings.
+The first time v2 runs, a setup guide walks through this. Run it again any time
+from Settings, Setup guide. You need OBS 30 or newer.
 
-The recommended way is to let the app manage OBS scenes (see "Letting the app
-switch OBS scenes" below). The simplest way is one browser source:
+1. **Connect to OBS.** In OBS, open Tools, WebSocket Server Settings. Tick
+   Enable WebSocket server, click Show Connect Info, and paste the password into
+   the app. From then on the app connects by itself whenever it starts, and
+   reconnects if OBS restarts.
+2. **Build the scenes.** The app creates the **Widener Stream** scene collection
+   (your other scene collections are not touched) and switches OBS to it. It adds
+   a Game Capture under the scoreboard, set to capture any fullscreen
+   application; in OBS you can point it at one window instead. If OBS can't make
+   a Game Capture, the app says so and explains how to add a Window Capture
+   yourself. Building again later updates the scenes instead of duplicating
+   them, and leaves scenes you added yourself alone.
+3. **Add the stinger.** OBS doesn't let apps create transitions, so add it once:
+   with the Widener Stream collection open, find the Scene Transitions dock,
+   click **+**, pick **Stinger**, name it exactly **Widener Stinger** (LotE:
+   **LotE Stinger**), click OK, and click OK again on its settings. Then click
+   **Set up the stinger** in the app. It copies the stinger video to the app's
+   data folder (OBS can't read it from inside the app), points the transition at
+   it with the right cut point and track matte, and makes it OBS's transition.
+   The guide also lists those settings, so you can check them in OBS.
+4. **Download the game videos** (Widener), so none starts downloading mid-stream.
 
-1. Install and open the app.
-2. On the Settings page, copy the browser source address.
-3. In OBS, add a Browser Source to each scene that needs the overlay. Paste the
-   address and set the size to 1920 x 1080.
+The OBS password is stored only on the streaming PC. While OBS isn't connected,
+a yellow bar across the top of the panel says so.
 
-The address is the same for every game and every overlay, so this only needs to
-be done once.
+## Setting up a match
 
-Do not use the preview's URL (the one ending in `?preview=1`) in OBS. That page
-shows unpushed edits. If a red "Preview, not live" badge appears on stream, the
-wrong URL is in OBS.
+The **Match** page walks through four steps. The numbers at the top jump
+between them, and turn green as each is done.
 
-## Running a stream
+1. **Game.** Click the game. It sets the scoreboard style, series length and
+   highlight video. "Another game" scores by hand with any game name.
+2. **Teams.** Three ways, mixed as you like:
+   - **Import a match link**: paste the LeagueOS match page link and click
+     Import. It fills in both teams and their players, the start time, the series
+     length and the league graphic links, and saves both teams to the library.
+   - **Saved teams** (LotE: **LotE schools**): click a team to make it Team A,
+     then one for Team B. Use the Team A / Team B switch, or click a slot at the
+     top, to choose which one a click fills.
+   - **Type them in**: names, short names, colours, logos and players. Drag a
+     player's handle to reorder.
 
-1. On **Prep**, pick the game. This fills in the game name and loads that
-   game's scoreboard settings and highlight video.
-2. Fill in the teams: paste a NECC match link under Match and click Import,
-   pick a saved team in the team library (Team A or Team B), or type them in
-   under Teams. A filled-in team folds to one line; click Edit to change it.
-   Drag the handle on the left of a player to reorder them.
-3. On **Live**, click an overlay in the strip. The card with the green PREVIEW
-   tag is in the preview; the one tagged LIVE is on stream. Picking an overlay
-   fills in a default title and countdown for it. Tick "Push live as soon as I
-   pick an overlay" if you want overlay switches to skip the preview.
-4. Edit the overlay's fields below the strip: title, subtitle, badge text,
-   countdown (minutes:seconds, such as 10:00), background video, logo, and next
-   match. The title, subtitle, and badge are saved separately for each overlay.
-   Editing other fields does not restart a running countdown; use Restart
-   countdown for that.
-5. Click Push Live (Ctrl+Enter). If "Play transition" is checked, the Widener
-   curtain wipe plays on stream and the change happens behind it.
+   The Starting Soon subtitle fills itself in as "Team A vs Team B" (on a
+   school's own stream, "vs Opponent") unless you wrote something else there.
+3. **Details.** The start time (at a time, or in a number of minutes), the
+   series length and round, the Starting Soon subtitle, the next match, which
+   league graphics get a scene, the background video, and music on or off.
+4. **Scenes.** A checklist (OBS connected, game, teams, start time, stinger),
+   then **Build or update scenes**. Build again after changing which league
+   graphics get a scene. Save the match here to load it again later; saved
+   matches load from the list at the top of the page.
 
-Undo and Redo, under Push Live, step back and forward through your recent edits.
-Press **?** for the list of keyboard shortcuts, and hover over any ⓘ for a short
-explanation of a setting.
+## During the match
 
-Settings, Display changes the panel's text size (Ctrl+plus and Ctrl+minus also
-work) and can turn off the live monitor on a slower PC. These apply to the one
-window, so an OBS dock can use its own size.
+The **Live** page:
 
-## Game montages
+- **On air**: the scene OBS has on program, with a small picture of it (turn the
+  picture off under Settings, Display on a slower PC).
+- **Score**: a big Won button per team, plus and minus to correct, Swap sides, and
+  Reset score (click twice). Smash crew battles add Lost a stock and Undo per team.
+  Score changes are on stream at once.
+- **Scenes**: every scene the app built, with the one on air marked in red. Open a
+  scene to edit its own title, subtitle and badge; Post-Match also has its
+  countdown length and layout. **Put on air** cuts OBS to that scene with the
+  stinger.
+- **Rosters**: fix a name, add a sub, or reorder players mid-match.
 
-Every game except Call of Duty has a highlight montage on the team Google
-Drive (the panel calls them highlight videos). Starting Soon, Post-Match and Be
-Right Back play the selected game's montage in the video panel, and picking a
-different game swaps it. A background video picked on the Live page replaces
-the montage.
+Post-Match counts down from its own length (2:00 by default), starting when it
+goes on air, so it never touches the Starting Soon countdown.
 
-The montages are too big to ship with the installer (6.5 GB in all), so each
-PC downloads them from Drive into the app's own data folder the first time a
-game is picked. The status line under the Game picker shows the progress. To
-avoid a download starting mid-stream, use the setup guide or Settings, Game
-highlight videos, **Download all** before your first stream on a new PC. A
-download that is cut off picks up where it left off.
+## Rocket League
 
-The Drive files must stay shared as "Anyone with the link". If they are made
-private, downloads fail with a message saying so. Montages already on a PC keep
-working.
+Picking Rocket League switches the scoreboard to its Rocket League style, which
+reads live data from the game through Rocket League's official Stats API (the
+same feed BARL uses since the EAC update; BakkesMod is not needed):
 
-## Saved matches and the team library
-
-On Prep, under Match, "Save this setup as" stores the teams, rosters, text,
-countdown, scoreboard settings, and NECC links for a match. Load brings them
-back later. Loading does not change which overlay is up or the live score.
-Delete removes a saved match at once, with an Undo button for a few seconds.
-
-Each team has a Save to library button, and every NECC import saves both teams
-automatically. Saved teams appear as cards in the Team library on Prep, with
-buttons to use one as Team A or Team B, edit it, or delete it (also undoable),
-and a search box. They are also in the "Load a saved team" list above each
-team. Team logos from NECC are downloaded once and stored on the PC.
-
-## Scoreboard
-
-Click the Scoreboard overlay. Its card also stays on the Live page while the
-scoreboard is on stream, so you can keep score while preparing the next
-overlay.
-
-The scoreboard has a transparent background, so in OBS the browser source must
-be placed above the game capture. It comes in two layouts: a full bar across
-the top center, or a smaller box in one of the four corners for games whose own
-HUD uses the top of the screen. Picking a game sets a starting position,
-best-of, and wording (Game, Map, or Set); check these over real gameplay and
-change them under Scoreboard settings if needed. Team colors come from the
-color picker next to each team name on Prep, and color each team's column.
-
-- Click the big "Won game" (or map, or set) button on the winning team to add a
-  point. The minus and plus buttons correct the score.
-- Swap sides moves each team to the other side.
-- Reset match sets everything back to zero. It needs a second click to confirm.
-
-For Smash crew battles, turn on the stock counter (the Smash preset does this).
-The default is 4 players per team with 3 stocks each. Players are used in roster
-order, and the first player with stocks left is shown as on stage. Click "Lost
-a stock" when a player loses one; Undo reverses a misclick. "Won set" refills
-both teams' stocks.
-
-Score changes go to the stream immediately, without Push Live or the curtain
-wipe. Uncheck "Scores go live instantly" to preview them first instead. Each
-scoring button shows its keyboard key.
-
-### Rocket League
-
-Picking Rocket League as the game switches the scoreboard to its Rocket League
-style, which reads live data from the game through Rocket League's official
-Stats API (the same feed BARL uses since the EAC update; BakkesMod is not
-needed). It shows:
-
-- a compact centre board: round and game number, team logos, this game's goals, and
-  the match clock (gold in overtime, REPLAY during goal replays)
+- a compact centre board: round and game number, team logos, this game's goals,
+  and the match clock (gold in overtime, REPLAY during goal replays)
 - the series score as pips under each team, counted automatically when a game ends
-  (best of 7 by default; a NECC import sets it from the match)
+  (best of 7 by default; a LeagueOS import sets it from the match)
 - each player's boost in the top corners
 - a goal banner with the scorer and assist
-- a boost meter in the bottom right for the player the camera is following, with their stats
-- a full-screen stats screen after each game (every player's score, goals, assists,
-  shots, saves and demos, with the game's MVP), and a series overview once the
-  series is won (each game's score and map, and series totals with a series MVP)
+- a boost meter for the player the camera is following, with their stats
 
-The board switches by itself: to the game's stats 3 seconds after a game ends
-(under the Widener curtain stinger),
-to the series overview 15 seconds after the deciding game, and back to the live
-board when the next game loads (not once the series is won). The **On the board**
-buttons in the Scoreboard card switch by hand, including to an earlier game's
-stats. Reset match starts a new series record.
+The stats have their own scene, **WU: Rocket League Stats**: every player's
+score, goals, assists, shots, saves and demos for a game with its MVP, or the
+series overview (each game's score and map, series totals and a series MVP).
+Three seconds after a game ends, the app cuts OBS to it with that game's stats;
+once the series is won it moves on to the series overview 15 seconds later. When
+the next game loads mid-series, the app cuts back to the Scoreboard (only if it
+was the app that cut to the stats). Untick "Cut to the stats after each game"
+to do it all by hand.
+
+The Score card's **Rocket League Stats scene** buttons put up any game's stats or
+the series overview, to fill time between games; **Back to the game** cuts to
+the Scoreboard. Before game 1, the Stats scene shows the two rosters under "Up
+next". Reset score starts a new series record.
 
 One-time setup on the streaming PC:
 
-1. With the Scoreboard overlay selected, the Scoreboard card shows the game
-   connection. If it says Rocket League is not set up to share match data, click
-   **Connect to Rocket League**. This turns on the game's Stats API by setting
+1. The Score card shows the game connection. If it says Rocket League is not set
+   up to share match data, click **Connect to Rocket League**. This sets
    `PacketSendRate=30` in
    `Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini`.
 2. Fully close and restart Rocket League. It only reads that file at launch.
@@ -203,104 +172,93 @@ One-time setup on the streaming PC:
 Blue is always the left side. If team A is playing orange, click Swap sides;
 the panel offers this itself when the roster gamertags match the players on
 blue. Auto-counting stops once a team has clinched the series, and can be
-turned off under Scoreboard settings for scrims. The plus and minus buttons
-still correct the series score. The preview shows sample data when the game
-isn't in a match, so the layout can be checked any time; the stream never does.
+turned off under Scoreboard settings for scrims.
+
+## Game highlight videos
+
+Every Widener game except Call of Duty has a highlight video on the team Google
+Drive. Starting Soon and Post-Match play the selected game's video, and picking
+a different game swaps it. A background video picked in Match, Details replaces
+it.
+
+The videos are too big to ship with the installer (6.5 GB in all), so each PC
+downloads them from Drive into the app's own data folder the first time a game
+is picked. To avoid a download starting mid-stream, use the setup guide or
+Settings, Game highlight videos, **Download all** before your first stream on a
+new PC. A download that is cut off picks up where it left off. The Drive files
+must stay shared as "Anyone with the link".
+
+## Team library and saved matches
+
+Every LeagueOS import saves both teams to the library, and each team has a Save
+to library button. The LotE app starts with all of the league's member schools
+in it. Settings, Team library lists them all, with Edit (name, short name,
+colour, logo, players) and Delete (undoable for a few seconds). A deleted league
+school stays deleted. When an imported team belongs to a league school, the
+league's own logo is used instead of the LeagueOS one.
+
+A saved match keeps the teams, text, start time, scoreboard settings and league
+graphic links, never the score.
+
+## Background music
+
+Music plays whenever no gameplay is on air: Starting Soon, Be Right Back,
+Post-Match, Rosters, league graphics, Rocket League Stats, and the Rocket League
+menus between games. It fades out when gameplay is on air. Widener's included
+track downloads from the team Google Drive (36 MB) the first time it's needed;
+Settings, Background music can pick any audio file instead, change the volume,
+or turn it off. OBS plays it through one media source, **WU: Music**, in every
+scene, so it carries on through scene changes.
 
 ## Keyboard shortcuts
 
 | Keys | Action |
 | --- | --- |
-| Ctrl+Enter | Push Live |
-| Ctrl+1 to Ctrl+9 | Pick an overlay by its place in the strip |
-| Ctrl+Z / Ctrl+Y | Undo / redo an edit (outside text boxes) |
+| Enter (in a text box) | Put that text on stream |
 | 1 / 2 | Team A / Team B lost a stock |
 | Shift+1 / Shift+2 | Undo a stock for Team A / Team B |
 | 3 / 4 | Team A / Team B won a game, map, or set |
 | Ctrl+plus / Ctrl+minus / Ctrl+0 | Bigger, smaller, or normal panel text |
 | ? | Show the shortcut list |
 
-The scoreboard keys work while the Scoreboard card is on screen and you are not
-typing in a box. In an OBS dock, click the dock first so it has keyboard focus.
+The scoring keys work on the Live page while you are not typing in a box. In an
+OBS dock, click the dock first so it has keyboard focus.
 
 ## Stream Deck and remote control
 
 A Stream Deck (with a plugin that sends web requests), Bitfocus Companion, a
-macro pad, or a script on the streaming PC can run the show. Each button sends a
-POST request to an address such as `http://localhost:4310/api/remote/push`.
-Settings, Stream Deck and remote control lists every address with a Copy button:
-Push Live, Discard changes, each overlay, each enabled NECC graphic, and the
-scoring actions (won a game, plus or minus a point, lost or undo a stock, swap
-sides).
+macro pad, or a script on the streaming PC can keep score and cut scenes. Each
+button sends a POST request to an address such as
+`http://localhost:4310/api/remote/score/a/win`. Settings, Stream Deck and remote
+control lists every address with a Copy button: cut to each scene, show the
+last game's stats or the series overview, and the scoring actions. Only programs
+on the PC can use these: requests sent from a web page are refused. v1 buttons
+that picked an overlay (`/api/remote/overlay/<name>`) now cut to its scene;
+v1's Push Live and Discard buttons no longer exist.
 
-Picking an overlay this way puts it in the preview (or straight on stream with
-"Push live as soon as I pick an overlay"), and every open panel follows. Score
-changes always go live at once. Only programs on the PC can use these: requests
-sent from a web page are refused.
+## The control panel in OBS
 
-## Background music
-
-Music plays whenever there is no gameplay on screen: Starting Soon, Be Right
-Back, Post-Match, Rosters, NECC, and the Rocket League stats screens and menus
-between games. It fades out when gameplay is on screen. The included track
-isn't in the installer: like the game montages, it downloads from the team
-Google Drive (36 MB) the first time it's needed. Settings, Background music can
-pick any audio file on the PC instead, change the volume, or turn music off.
-
-OBS plays the music, so it needs OBS connected (see below). Build or update
-scenes adds one media source, **WU: Music**, to every WU scene. Because it is
-the same source in every scene, it carries on through scene changes instead of
-starting over, and it loops.
-
-## Letting the app switch OBS scenes, and the OBS dock
-
-Control panel as an OBS dock (optional): in OBS, go to Docks, then Custom
-Browser Docks. Add a dock using the address under Settings, OBS, "Run this
-panel inside OBS" (`http://localhost:4310/control`). The panel then appears
-inside the OBS window, with the monitors stacked on top. The app window and the
-dock can be open at the same time; they share the same score, library, draft,
-and options.
-
-Letting the app switch OBS scenes (recommended; also called scene-sync): the
-app switches OBS scenes on each Push Live, using OBS's own transition. The setup
-guide does these steps for you.
-
-1. In OBS 28 or newer, go to Tools, then WebSocket Server Settings. Enable the
-   server and copy the password.
-2. Under Settings, OBS, enter the password (and the address and port, if OBS is
-   not on this PC's defaults), then click Connect.
-3. Click "Build or update scenes in OBS". This creates one scene per overlay
-   (Starting Soon, Post-Match, Rosters, Be Right Back, Scoreboard, NECC).
-   Running it again updates the existing scenes instead of making duplicates.
-4. Check "Let the app switch OBS scenes on Push Live" and pick a transition.
-
-After one successful Connect, the app connects to OBS by itself whenever it
-starts, and reconnects if OBS is closed or restarted. An OBS status light
-appears in the top bar. Switching scenes by hand in OBS moves the LIVE marker
-on the overlay strip to match. While the app is switching scenes, its own
-curtain transition is turned off so the two transitions do not play at once.
-For the
-Scoreboard scene, add your game capture below the browser source yourself.
-
-The OBS password is stored only on the streaming PC. If OBS cannot be reached,
-Push Live still works normally.
+In OBS, go to Docks, Custom Browser Docks, and add the address under Settings,
+OBS (`http://localhost:4310/control`). Add `?page=live` to the address
+(`http://localhost:4310/control?page=live`) for a dock that opens on the Live
+page. The app window and the dock can be open at the same time; they share the
+same match, score, library and options.
 
 ## Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| OBS shows an old version of the overlay | Right-click the browser source and click Refresh, or remove and re-add it. |
-| The stream changes before Push Live is clicked | The OBS source is using the `?preview=1` URL, or "Push live as soon as I pick an overlay" is ticked. |
+| The yellow bar says OBS is not connected | Open OBS, and check Tools, WebSocket Server Settings is enabled. Click Connect to OBS in the bar. |
+| A scene says "Not in OBS yet" | Build the scenes again (Match, Scenes, or Settings, OBS). Check OBS has the Widener Stream scene collection open. |
+| Set up the stinger says there is no such transition | The name must match exactly (Widener Stinger, LotE Stinger), and it must be added with the app's scene collection open: each collection has its own transitions. |
+| OBS shows an old version of a scene | Right-click its browser source and click Refresh. |
+| The Scoreboard scene shows no game | Point the WU-game-capture source at the game's window in OBS, or put Rocket League in fullscreen. |
+| Text I typed isn't on stream | Press Enter or click away from the box. It flashes green once it's sent. |
 | "Port 4310 is already in use" | Another copy of the app is still running. Close it first. |
-| No curtain wipe on push | Check the "Play transition" box under Push Live. It is turned off automatically while the app switches OBS scenes. It also needs hardware acceleration enabled in OBS. |
-| OBS light says "OBS offline" or "reconnecting" | OBS is closed, or its WebSocket server is off. The app keeps trying on its own once OBS is back. |
-| NECC Import fails | LeagueOS may have changed their site. Enter the teams by hand or load a saved match. |
-| A NECC card says "Needs a match import" | Import the match on Prep first. Clicking the card takes you there. |
-| The panel is slow on the streaming PC | Turn off the live monitor under Settings, Display. |
-| A NECC graphic shows only a spinner | LeagueOS is slow or unreachable. The preview says so after about 12 seconds. |
-| Scoreboard is not visible over the game | The browser source is below the game capture in the OBS source list. Move it above. |
-| Rocket League stays on "Waiting for Rocket League" | Click Connect to Rocket League in the Scoreboard card, then fully restart the game. The board fills in once a match is loaded. |
-| Rocket League boost shows a dash | The game only sends boost while spectating (or for your own team). Spectate the match from the streaming PC. |
+| League graphic Import fails | LeagueOS may have changed their site. Pick or type the teams instead, or load a saved match. |
+| A league graphic scene is empty | Import the match: its link comes from the import. Without one the scene shows the background only. |
+| Rocket League stays on "Waiting for Rocket League" | Click Connect to Rocket League in the Score card, then fully restart the game. |
+| Rocket League boost shows a dash | The game only sends boost while spectating. Spectate the match from the streaming PC. |
 | Another computer can't open the control panel | That is intended: the app only accepts connections from the streaming PC. |
 
 ## For developers
@@ -317,6 +275,7 @@ npm run server:lote   # run only the server (LotE, port 4320)
 npm run dist          # build every league's installer
 npm run dist:lote     # build one league's installer
 npm run icons         # rebuild app icons from profiles/<id>/icon-source.png
+npm run stinger -- lote   # render a league's drawn stinger video (needs ffmpeg)
 ```
 
 ### League profiles
@@ -326,23 +285,23 @@ installer is built with exactly one profile inside:
 
 | File | What it holds |
 | --- | --- |
-| `profile.json` | Name, short name, app name, port, OBS scene prefix, league name and import hint, home team, colours (overlay and control panel), asset file names, stinger, music track, defaults, and the installer's app id, package name (its data folder), file name and update channel |
+| `profile.json` | Name, short name, app name, port, OBS scene prefix, league name and import hint, home team, colours (overlay and control panel), asset file names, stinger (video file, cut point in ms, track matte or not), music track, defaults, and the installer's app id, package name (its data folder), file name and update channel |
 | `games.json` | The game list and each game's scoreboard preset and highlight video |
-| `assets/` | Logo, control panel logo, mascot (Be Right Back), watermark, stinger video |
+| `teams.json` | Optional: the league's member schools (id, name, short name, colours, logo), preloaded into the team library |
+| `assets/` | Logo, control panel logo, mascot (Be Right Back), watermark, stinger video, `teams/` logos |
 | `theme.css` | Optional overlay styles loaded after the base ones, such as LotE's Mark Shine background |
 | `icon-source.png`, `icons/` | The app icon source and the generated icons |
 
-The server serves the active profile as `/brand.js` (`window.BRAND`),
-`/brand.css` (colours as CSS variables), `/brand-theme.css` and `/brand/*`
-(assets). The overlay and the control panel read only those, so neither has a
-league's name, colours or art written into it. Which profile runs comes from
-`--profile=<id>`, the `STREAM_PROFILE` variable, or `streamProfile` in
-`package.json`, which `build/dist.js` writes into each installer.
+The stinger is an OBS Stinger transition. Widener's video carries a track matte
+beside the picture; LotE's is a VP9 WebM with real transparency, drawn by
+`build/make-stinger.js` from the league colours and mark (`npm run stinger --
+<id>`). A league with its own stinger video just drops it in `assets/` and
+measures the cut point.
 
 To add a league: copy `profiles/lote` to `profiles/<id>`, change `profile.json`
 (a new `port`, `obs.prefix`, `build.appId`, `build.packageName`,
-`build.artifactName` and `build.channel`), replace the art and `games.json`, run `npm run icons -- <id>`,
-and `npm run dist -- <id>`.
+`build.artifactName` and `build.channel`), replace the art, `games.json` and
+`teams.json`, run `npm run icons -- <id>`, and `npm run dist -- <id>`.
 
 ### Building and releasing
 
@@ -355,45 +314,50 @@ to `build.files` in `app/package.json` or the packaged app will crash on launch.
 
 To release, create one GitHub release tagged `v<version>` and attach, for every
 league, the installer `.exe`, its `.blockmap`, and its update file: `latest.yml`
-for Widener, `lote.yml` for League of the East. Each installed app reads only
-its own update file from the latest release, so a release missing one is not
-offered to that league's app.
+for Widener, `lote.yml` for League of the East.
 
-The server holds two copies of the overlay state: `draft`, which the control
-panel edits and the preview shows, and `live`, which OBS shows. Push Live copies
-`draft` to `live`. The scoreboard's score and stock counters are the one
-exception and are written to both at once.
+### How the pieces fit
 
-Panel options that every window must agree on (transition on push, push on
-pick, instant scores, NECC buttons and links, setup guide done) are kept in
-`settings.json` under `panel` and served at `/api/prefs`. The Stream Deck
-routes are `POST /api/remote/*` in `server.js`; `GET /api/remote` lists them.
+There is one match state on the server (`state.json` in the app's data folder),
+shown on every scene. Each OBS scene's browser source loads
+`/overlay?view=<view>` (league graphics add `&necc=<type>`), which pins the page
+to that view. The server follows OBS's program scene (`CurrentProgramSceneChanged`)
+to know what is on air: for music, the Post-Match countdown, the Rocket League
+stats cuts and the panel's On air marker. Panels send edits as partial updates
+(`{type:'update'}`); score counters go separately (`{type:'score'}`), so a
+second panel can never send a stale score.
+
+Panel options every window must agree on (league graphic scenes, game capture,
+Studio Mode, setup guide done) are kept in `settings.json` under `panel` and
+served at `/api/prefs`. The OBS routes are `/api/obs/*`; the Stream Deck routes
+are `POST /api/remote/*`, and `GET /api/remote` lists them.
 
 Repo layout:
 
 ```
 app/
   main.js            Electron entry point and update checks
-  server.js          local server, overlay state, library, WebSocket messages
+  server.js          local server, match state, library, WebSocket messages
   profile.js         league profiles: loading, /brand.js and /brand.css
   necc.js            LeagueOS import
-  obs.js             optional OBS scene-sync
+  obs.js             OBS: scene collection, scenes, stinger, music, program scene
   rlstats.js         Rocket League Stats API client (live game data)
   build/dist.js      builds one installer per league profile
   build/make-icon.js app icons from each profile's icon source
+  build/make-stinger.js  a league's drawn stinger video (transparent WebM)
   dev/mock-rlstats.js  fake Rocket League feed for testing without the game
   profiles/
     widener/         Widener Esports: profile.json, games.json, assets, icons
-    lote/            League of the East: the same, plus theme.css
+    lote/            League of the East: the same, plus teams.json and theme.css
   templates/
-    overlay.html     the overlay page (all overlays, every league)
+    overlay.html     the overlay page (all views, every league)
   public/control/    control panel
   public/overlay-assets/  fonts shared by every league
 archive/             old per-game overlay files, kept for reference
 PROJECT_NOTES.md     detailed design notes and history
 ```
 
-The NECC import uses LeagueOS's internal API, which is not official or
+The LeagueOS import uses LeagueOS's internal API, which is not official or
 documented. If it breaks, everything can still be entered by hand.
 
 This is an internal Widener University Esports project and is not licensed for

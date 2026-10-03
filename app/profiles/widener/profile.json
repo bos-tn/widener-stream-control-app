@@ -55,9 +55,9 @@
     "watermark": "logo.png"
   },
   "stinger": {
-    "type": "video",
     "file": "stinger.webm",
-    "swapTime": 1.4
+    "transitionPoint": 1400,
+    "trackMatte": true
   },
   "music": {
     "file": "rl-music-long.m4a",

@@ -1,0 +1,22 @@
+[
+  {"id": "lote-albright",       "name": "Albright College",                "tag": "Albright",       "color": "#C82027", "colorAlt": "#060708", "logo": "teams/albright.png",       "source": "league"},
+  {"id": "lote-alvernia",       "name": "Alvernia University",             "tag": "Alvernia",       "color": "#9E053B", "colorAlt": "#D1D3D4", "logo": "teams/alvernia.png",       "source": "league"},
+  {"id": "lote-arcadia",        "name": "Arcadia University",              "tag": "Arcadia",        "color": "#B20837", "colorAlt": "#616164", "logo": "teams/arcadia.png",        "source": "league"},
+  {"id": "lote-delaware",       "name": "University of Delaware",          "tag": "Delaware",       "color": "#00539F", "colorAlt": "#FBD20A", "logo": "teams/delaware.png",       "source": "design system"},
+  {"id": "lote-desales",        "name": "DeSales University",              "tag": "DeSales",        "color": "#002856", "colorAlt": "#C10230", "logo": "teams/desales.png",        "source": "design system"},
+  {"id": "lote-eastern",        "name": "Eastern University",              "tag": "Eastern",        "color": "#8B1C40", "colorAlt": "#9FA4A3", "logo": "teams/eastern.png",        "source": "design system"},
+  {"id": "lote-fdu",            "name": "Fairleigh Dickinson University",  "tag": "FDU",            "color": "#002F6C", "colorAlt": "#0364A5", "logo": "teams/fdu.png",            "source": "design system"},
+  {"id": "lote-hood",           "name": "Hood College",                    "tag": "Hood",           "color": "#015596", "colorAlt": "#A29B96", "logo": "teams/hood.png",           "source": "league"},
+  {"id": "lote-kings",          "name": "King's College",                  "tag": "King's",         "color": "#CC0033", "colorAlt": "#FFCE06", "logo": "teams/kings.png",          "source": "design system"},
+  {"id": "lote-lvc",            "name": "Lebanon Valley College",          "tag": "LVC",            "color": "#072C51", "colorAlt": "#FFFFFF", "logo": "teams/lvc.png",            "source": "league"},
+  {"id": "lote-marywood",       "name": "Marywood University",             "tag": "Marywood",       "color": "#1A5632", "colorAlt": "#F6A808", "logo": "teams/marywood.png",       "source": "league"},
+  {"id": "lote-messiah",        "name": "Messiah University",              "tag": "Messiah",        "color": "#004B85", "colorAlt": "#BCC4CA", "logo": "teams/messiah.png",        "source": "league"},
+  {"id": "lote-misericordia",   "name": "Misericordia University",         "tag": "Misericordia",   "color": "#FFE01B", "colorAlt": "#036CB5", "logo": "teams/misericordia.png",   "source": "design system"},
+  {"id": "lote-mount-aloysius", "name": "Mount Aloysius College",          "tag": "Mount Aloysius", "color": "#203988", "colorAlt": "#9FACD0", "logo": "teams/mount-aloysius.png", "source": "league, colours measured from the logo"},
+  {"id": "lote-rowan",          "name": "Rowan University",                "tag": "Rowan",          "color": "#6C3F17", "colorAlt": "#FACC13", "logo": "teams/rowan.png",          "source": "league, colours measured from the logo"},
+  {"id": "lote-saint-francis",  "name": "Saint Francis University",        "tag": "SFU",            "color": "#C8272B", "colorAlt": "#FFFFFF", "logo": "teams/saint-francis.png",  "source": "league, colours measured from the logo"},
+  {"id": "lote-stevens",        "name": "Stevens Institute of Technology", "tag": "Stevens",        "color": "#B30838", "colorAlt": "#9D9FA2", "logo": "teams/stevens.png",        "source": "design system"},
+  {"id": "lote-stevenson",      "name": "Stevenson University",            "tag": "Stevenson",      "color": "#005847", "colorAlt": "#C6C8C9", "logo": "teams/stevenson.png",      "source": "design system"},
+  {"id": "lote-widener",        "name": "Widener University",              "tag": "Widener",        "color": "#0054B8", "colorAlt": "#F0B310", "logo": "teams/widener.png",        "source": "league"},
+  {"id": "lote-york",           "name": "York College of Pennsylvania",    "tag": "York",           "color": "#009844", "colorAlt": "#70B943", "logo": "teams/york.png",           "source": "design system"}
+]

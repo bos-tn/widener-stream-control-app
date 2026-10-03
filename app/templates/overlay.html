@@ -285,16 +285,19 @@
      a compact box for one of the four corners, for games whose own HUD owns
      the top of the screen. Authored on a fixed 1920x1080 stage, scaled to fit
      like the BRB view. */
-  body[data-mode="scoreboard"]{ background:transparent; }
+  body[data-mode="scoreboard"], body[data-mode="stats"]{ background:transparent; }
   body[data-mode="scoreboard"] .stripes,
   body[data-mode="scoreboard"] .bg-gradient,
-  body[data-mode="scoreboard"] .brand-bg{ display:none !important; }
+  body[data-mode="scoreboard"] .brand-bg,
+  body[data-mode="stats"] .stripes,
+  body[data-mode="stats"] .bg-gradient,
+  body[data-mode="stats"] .brand-bg{ display:none !important; }
   .sb-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
   .sb-view.active{ display:block; }
   .sb-stage{ position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; }
-  /* The preview pane has no game underneath it, so an empty transparent page
-     would read as "broken". This stand-in only renders with ?preview=1; OBS
-     never sees it. */
+  /* A page opened outside OBS has no game underneath it, so an empty
+     transparent page would read as "broken". This stand-in only renders with
+     ?backdrop=1; OBS never sees it. */
   .sb-preview-bg{ display:none; position:absolute; inset:0;
     background:
       radial-gradient(900px 500px at 50% 60%, rgba(0,84,184,.22), transparent 70%),
@@ -681,40 +684,11 @@
   .necc-frame.active{ display:block; }
   .necc-frame iframe{ width:100%; height:100%; border:0; display:block; background:transparent; }
 
-  /* Curtain stinger transition: drawn over everything (including the NECC
-     iframe) while a Push Live transition plays. The canvas is transparent
-     wherever the stinger's matte/luma-key says so; content underneath is
-     swapped while the curtain fully covers the screen. */
-  #stinger-canvas{
-    display:none; position:fixed; inset:0; width:100vw; height:100vh;
-    z-index:950; pointer-events:none;
-  }
-  #stinger-canvas.active{ display:block; }
-
-  /* Only ever rendered when this page was loaded with ?preview=1 (the control
-     panel's own preview iframe). If this is ever visible in OBS, the Browser
-     Source URL is wrong - it should be the plain /overlay URL with no query
-     string, not this preview one, which mirrors the draft instantly on every
-     keystroke instead of waiting for Push Live. */
-  .preview-flag{
-    display:none; position:fixed; top:14px; left:14px; z-index:999;
-    background:#c0392b; color:#fff; font-family:'Kanit', system-ui, sans-serif;
-    font-weight:800; letter-spacing:.08em; text-transform:uppercase;
-    font-size:13px; padding:6px 12px; border-radius:6px;
-    box-shadow:0 4px 14px rgba(0,0,0,.5);
-  }
-  body[data-preview="1"] .preview-flag{ display:block; }
-
-  /* Drawn transition for a league with no stinger video (v1.0.0): two angled
-     panels in the league colours sweep across with the mark, and the content
-     swaps while they cover the screen. */
-  .css-stinger{ display:none; position:fixed; inset:0; z-index:950; pointer-events:none; overflow:hidden; }
-  .css-stinger.active{ display:block; }
-  .cs-panel{ position:absolute; top:0; bottom:0; left:-20%; width:140%; transform:translateX(-120%) skewX(-12deg); }
-  .cs-panel.p1{ background:var(--brand-primary); }
-  .cs-panel.p2{ background:var(--brand-panel-dark, #050b1a); display:grid; place-items:center; }
-  .cs-mark{ width:340px; height:340px; background:#fff; transform:skewX(12deg);
-    -webkit-mask:var(--brand-watermark) center / contain no-repeat; mask:var(--brand-watermark) center / contain no-repeat; }
+  /* The Rocket League Stats scene (v2.0.0): the stats screens on their own,
+     without the in-game board. It is a full scene of its own, so it is opaque
+     and never needs a game capture underneath. */
+  .sb-view.stats-scene .sb, .sb-view.stats-scene .sbc{ display:none !important; }
+  .sb-view.stats-scene .rl-only{ display:block; }
 </style>
 <link rel="stylesheet" href="/brand.css">
 <link rel="stylesheet" href="/brand-theme.css">
@@ -723,10 +697,6 @@
   <div class="stripes"></div>
   <div class="bg-gradient"></div>
   <div class="brand-bg" aria-hidden="true"><i class="bb-1"></i><i class="bb-2"></i><i class="bb-3"></i><i class="bb-4"></i></div>
-  <div class="preview-flag">Preview, not live</div>
-
-  <canvas id="stinger-canvas" width="1920" height="1080"></canvas>
-  <div class="css-stinger" id="css-stinger" aria-hidden="true"><div class="cs-panel p1"></div><div class="cs-panel p2"><div class="cs-mark"></div></div></div>
 
   <div class="necc-frame" id="necc-frame">
     <iframe id="necc-iframe" title="League graphic" src="about:blank"></iframe>
@@ -916,11 +886,11 @@
   const $ = sel => document.querySelector(sel);
 
   // The league's brand (/brand.js, from the app's profile): name, logo,
-  // mascot, team colours and transition. Served from this app, not the
+  // mascot and team colours. Served from this app, not the
   // internet - the overlay must not depend on an external host while
   // streaming. The fallback only matters if /brand.js failed to load.
   const BRAND = window.BRAND || { name: '', tagline: '', logo: '', mascot: '', league: { name: 'League' },
-    teamColors: { A: '#0054B8', B: '#F0B310' }, stinger: { type: 'none' } };
+    teamColors: { A: '#0054B8', B: '#F0B310' } };
   const defaultLogo = BRAND.logo;
   $('#brand-line1').textContent = BRAND.name;
   $('#brand-tagline').textContent = BRAND.tagline;
@@ -1004,11 +974,11 @@
     return m && m.have ? '/montages/' + encodeURIComponent(m.file) : '';
   }
 
-  // While a montage downloads, the preview and live monitor say so. On
-  // stream the placeholder keeps its usual wording.
+  // While a montage downloads, a page opened outside OBS (?backdrop=1) says
+  // so. On stream the placeholder keeps its usual wording.
   function placeholderNote(state){
     const m = !state.clip && montageStatus[state.game];
-    if(!m || m.have || !(isPreview || isMonitor)) return placeholderSubDefault;
+    if(!m || m.have || document.body.dataset.backdrop !== '1') return placeholderSubDefault;
     if(m.downloading) return "Downloading this game's montage: " + Math.floor(100 * m.received / m.bytes) + '%';
     if(m.queued) return "This game's montage is waiting to download";
     if(m.error) return 'Montage download failed: ' + m.error;
@@ -1291,15 +1261,15 @@
 
   // --- Rocket League live data (v0.11.0) ------------------------------------
   // The server forwards Rocket League's Stats API as {type:'rl'} snapshots
-  // (see rlstats.js). They are not part of live/draft state: the preview and
-  // the stream both show the same game. Team 0 (blue) is the left side.
+  // (see rlstats.js). They are not part of the match state: every page
+  // shows the same game. Team 0 (blue) is the left side.
   const RL_BLUE = '#2D7DFF';
   const RL_ORANGE = '#F07A16';
   let rlCols = [RL_BLUE, RL_ORANGE];
   let rlSnap = null;
   // Recorded games and which screen is up, from the server (rlSeries).
   let rlSeriesData = { games: [] };
-  let rlScreenState = { screen: 'live', game: -1 };
+  let rlScreenState = { screen: 'game', game: -1 };
 
   function rlOther(key){ return key === 'A' ? 'B' : 'A'; }
   function rlBlueKey(sm){ return sm.swap ? 'B' : 'A'; }
@@ -1407,7 +1377,7 @@
 
   function rlData(){
     if(rlSnap && rlSnap.inMatch) return rlSnap;
-    return isPreview ? RL_SAMPLE : null;
+    return document.body.dataset.backdrop === '1' ? RL_SAMPLE : null;
   }
 
   // One team's player rows. Rows are rebuilt only when the players change;
@@ -1665,7 +1635,7 @@
       L: { team: rlTeam(keys[0]), col: cols[0], score: won[0], won: won[0], win: winner === 0 },
       R: { team: rlTeam(keys[1]), col: cols[1], score: won[1], won: won[1], win: winner === 1 },
       need, top: [sm.round, 'Series overview', 'Best of ' + clampInt(sm.bestOf, 1, 9, 7)],
-      small: 'Series', big: decided ? 'Final' : 'Game ' + (won[0] + won[1]),
+      small: 'Series', big: decided ? 'Final' : games.length ? 'Game ' + (won[0] + won[1]) : 'Up next',
     });
 
     // One card per game: score from the left team's point of view.
@@ -1693,25 +1663,36 @@
       RL_STATS.forEach(([k]) => { row[k] = (row[k] || 0) + (Number(p[k]) || 0); });
       totals[key].set(p.name, row);
     }));
-    const L = [...totals[keys[0]].values()], R = [...totals[keys[1]].values()];
+    let L = [...totals[keys[0]].values()], R = [...totals[keys[1]].values()];
+    if(!games.length){
+      const roster = (key) => (((key === 'A' ? lastState.teamA : lastState.teamB) || {}).players || [])
+        .map((p) => ({ name: p.gamertag || p.name || '' })).filter((p) => p.name).slice(0, 4);
+      L = roster(keys[0]); R = roster(keys[1]);
+    }
     const lead = winner >= 0 ? winner : (won[0] >= won[1] ? 0 : 1);
     const mvp = games.length ? pickMvp(lead === 0 ? L : R) : null;
     scr.querySelector('.rls-subtitle').style.top = (games.length ? 476 : 340) + 'px';
     renderRlsGrid(scr.querySelector('.rls-grid'), { players: L, col: cols[0] }, { players: R, col: cols[1] }, mvp, games.length ? 512 : 380);
   }
 
-  // Show whichever screen the server says is up (only on the Rocket League
-  // board). Rebuilt on every change: these are static between games.
+  // The stats screens show only on the Rocket League Stats scene (v2.0.0;
+  // before, they covered the scoreboard): the game the server picked (-1 is
+  // the latest), or the series overview. With no game recorded yet, the
+  // overview stands in, so a cut to the scene before game 1 still shows the
+  // match. Rebuilt on every change: these are static between games.
   let rlShown = '';
   function renderRlScreens(cut){
-    const sm = (lastState && lastState.scoreboard) || {};
-    let screen = sm.style === 'rl' ? rlScreenState.screen : 'live';
-    if(screen === 'game' && !renderRlGameScreen(rlScreenState.game)) screen = 'live';
+    if(!lastState) return;
+    let screen = (lockedView || lastState.mode) === 'stats' ? rlScreenState.screen : 'live';
+    if(screen === 'game'){
+      const idx = rlScreenState.game >= 0 ? rlScreenState.game : rlSeriesData.games.length - 1;
+      if(!renderRlGameScreen(idx)) screen = 'series';
+    }
     if(screen === 'series') renderRlSeriesScreen();
-    const key = screen + ':' + rlScreenState.game;
-    // Under the stinger the screen just appears; its own wipe would play out
-    // after the curtain lifts. Set only when the screen changes: clearing it
-    // on a later redraw would restart the wipe.
+    const key = screen + ':' + rlScreenState.game + ':' + rlSeriesData.games.length;
+    // The first screen just appears; a change while the scene is up wipes in.
+    // Set only when the screen changes: clearing it on a later redraw would
+    // restart the wipe.
     if(key !== rlShown) ['#rls-game', '#rls-series'].forEach((id) => $(id).classList.toggle('cut', !!cut));
     $('#rls-game').classList.toggle('on', screen === 'game');
     $('#rls-series').classList.toggle('on', screen === 'series');
@@ -1759,9 +1740,9 @@
     if(!state) return;
     // Which view's words this page should show. Each overlay owns its own
     // headline/subtitle/status (state.views), so a page locked to one view -
-    // an OBS scene-sync source - renders that view's text even when the last
-    // edit was made on a different overlay. This is what lets switching scenes
-    // in OBS change the wording with no Push Live. Falls back to the shared
+    // each OBS scene's source - renders that view's text even when the last
+    // edit was made on a different overlay, so every scene always has its own
+    // words ready. Falls back to the shared
     // top-level fields for older state files that predate state.views.
     const textMode = lockedView || state.mode;
     const vt = (state.views && state.views[textMode]) || null;
@@ -1776,7 +1757,9 @@
     if(vSubtitle !== undefined) $('#subtitle').textContent = vSubtitle || '';
     if(state.next !== undefined) $('#next').textContent = state.next || '';
     if(vStatus !== undefined) $('#status-text').textContent = vStatus || '';
-    if(state.end) countdownEnd = new Date(state.end);
+    // Post-Match counts down to its own end (v2.0.0), set as it goes on air.
+    const endIso = textMode === 'post-match' && state.postEnd ? state.postEnd : state.end;
+    if(endIso) countdownEnd = new Date(endIso);
     if(state.socials) renderSocials(state.socials);
     // Be Right Back reads the same fields as everything else, so editing the
     // title/subtitle/socials updates it live exactly like any other view.
@@ -1789,7 +1772,8 @@
     placeholderSub.textContent = placeholderNote(state);
     if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
     if(state.layout) applyLayout(state.layout.toLowerCase());
-    // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc' | 'brb'.
+    // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc' | 'brb'
+    // | 'scoreboard' | 'stats'.
     // 'necc' is a full-bleed passthrough iframe to a LeagueOS-hosted overlay
     // (bracket, match preview, etc) - nothing of ours draws on top of it.
     // 'roster' is a full third branded view (not a flag layered on the
@@ -1798,18 +1782,19 @@
     // 'brb' is a full-screen Be Right Back card drawn on its own scaled
     // 1920x1080 stage over the standard frame.
     //
-    // When this page is locked to a view (?view=…, scene-sync mode), the mode
-    // is pinned to lockedView and any pushed mode change is ignored - OBS owns
-    // *which* view is on program via scene switches, we only own the content
-    // inside it. Every other field below still applies live either way.
+    // Every OBS scene's source is locked to its view (?view=…): OBS owns
+    // *which* view is on program, this page only owns the content inside it.
+    // An unlocked page follows the scene on air (state.mode).
     const effectiveMode = lockedView || state.mode;
     if(effectiveMode){
       document.body.dataset.mode = effectiveMode;
       const isNecc = effectiveMode === 'necc';
       const isRoster = effectiveMode === 'roster';
       const isBrb = effectiveMode === 'brb';
-      const isBoard = effectiveMode === 'scoreboard';
+      const isStats = effectiveMode === 'stats';
+      const isBoard = effectiveMode === 'scoreboard' || isStats;
       widenerFrame.style.display = (isNecc || isBrb || isBoard) ? 'none' : '';
+      sbView.classList.toggle('stats-scene', isStats);
       neccFrame.classList.toggle('active', isNecc);
       brbView.classList.toggle('active', isBrb);
       if(isBoard && !sbView.classList.contains('active')){
@@ -1833,7 +1818,11 @@
         // neccBg === false -> flat black behind the NECC page; anything else
         // (true or absent, for old saved states) -> the brand backdrop.
         neccFrame.classList.toggle('branded', state.neccBg !== false);
-        if(state.neccUrl && neccIframe.src !== state.neccUrl) loadNecc(state.neccUrl);
+        // A league graphic scene shows its own graphic from the last import;
+        // a page that isn't locked to one follows the scene on air.
+        const url = lockedNeccType ? ((state.neccUrls || {})[lockedNeccType] || '') : state.neccUrl;
+        if(url && neccIframe.src !== url) loadNecc(url);
+        if(!url && neccIframe.getAttribute('src') !== 'about:blank'){ neccIframe.src = 'about:blank'; neccLoading.classList.remove('active'); }
       } else {
         placeholderTitle.textContent = effectiveMode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';
         content.style.display = isRoster ? 'none' : '';
@@ -1850,6 +1839,7 @@
     // Always kept current (even while hidden) so switching to the scoreboard,
     // or an OBS scene cut to it, never shows stale stocks.
     renderScoreboard(state);
+    renderRlScreens(false);
   }
 
   // Load a NECC page with a spinner over it until it arrives. A cross-origin
@@ -1873,310 +1863,49 @@
     neccLoading.classList.remove('active');
   });
 
-  // Which channel this page mirrors: live (OBS) or draft (the control
-  // panel's preview pane, loaded with ?preview=1).
+  // ?backdrop=1 (or v1's ?preview=1 / ?monitor=1) draws a stand-in behind
+  // the transparent views, for a page opened outside OBS.
   const params = new URLSearchParams(location.search);
-  const isPreview = params.get('preview') === '1';
-  // ?monitor=1 is the control panel's live monitor: it mirrors what is on
-  // stream (the live channel) but, like the preview, draws a stand-in behind
-  // transparent views so there is something to look at.
-  const isMonitor = params.get('monitor') === '1';
-  const channel = isPreview ? 'draft' : 'live';
-  if(isPreview) document.body.dataset.preview = '1';
-  if(isPreview || isMonitor) document.body.dataset.backdrop = '1';
+  if(['backdrop', 'preview', 'monitor'].some((k) => params.get(k) === '1')) document.body.dataset.backdrop = '1';
 
-  // Optional per-type lock (?view=starting-soon|post-match|roster|necc). This
-  // is what lets OBS's scene-sync mode hold a *fixed* source per overlay type:
-  // each OBS Browser Source loads /overlay?view=<type>, which pins mode to that
-  // type and ignores any pushed mode change, while still applying every other
-  // pushed field (title, countdown, roster names, neccUrl, ...) live. With no
-  // view param, behavior is exactly as before: a single source whose mode is
-  // whatever was last pushed. Kept fully backward-compatible.
-  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard'];
-  // v0.8.0 scene-sync sources point at ?view=smash; keep them working.
+  // The view lock (?view=<view>): each scene the app builds in OBS has one
+  // browser source loading /overlay?view=<its view>, which pins the page to
+  // that view while every other field (titles, countdown, rosters, scores)
+  // still updates live.
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard', 'stats'];
+  // v0.8.0 scene sources point at ?view=smash; keep them working.
   const rawView = params.get('view') === 'smash' ? 'scoreboard' : params.get('view');
   const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
-  // Optional NECC type hint for a view=necc source (informational: the actual
-  // neccUrl still comes from pushed state, so the app can point one NECC scene
-  // at whatever overlay the operator selected). Recorded on the body for
-  // debugging / future use.
+  // A league graphic scene (view=necc&necc=<type>) shows that graphic.
   const lockedNeccType = lockedView === 'necc' ? (params.get('necc') || '') : '';
   if(lockedView){
     document.body.dataset.view = lockedView;
     if(lockedNeccType) document.body.dataset.neccType = lockedNeccType;
   }
 
-  // --- Curtain stinger transition -----------------------------------------
-  //
-  // The stinger video is the same side-by-side track-matte file used in OBS:
-  // left half = the curtain animation (no alpha channel), right half = a
-  // luminance matte. A WebGL shader composites it live: alpha = matte luma x
-  // a luma-key on the fill (near-black fill pixels are transparent, matching
-  // how the file is authored - its tail fades to black over a white matte,
-  // which is the curtain "opening" to reveal the new content underneath).
-  //
-  // Timing (measured from the actual file): the fill has zero near-black
-  // pixels only between 1.083s and 1.667s - the full-bleed W graphic that
-  // completely covers the screen. New state is applied at 1.4s, dead center
-  // of that window, so the swap is never visible.
-  // The stinger comes from the league profile: a video and the moment it
-  // fully covers the screen (measured per video), a drawn transition (css),
-  // or none.
-  const STINGER = BRAND.stinger || { type: 'none' };
-  const STINGER_URL = STINGER.type === 'video' ? STINGER.url : '';
-  const STINGER_SWAP_TIME = STINGER.swapTime || 1.4;
-  const STINGER_MAX_MS = 4000; // hard safety: new state is never delayed past this
-
-  const stingerCanvas = $('#stinger-canvas');
-  let stingerVideo = null;
-  let stingerGL = null;      // { gl, tex } once initialized; false if WebGL unavailable
-  let stingerActive = false;
-  let stingerPending = null; // state waiting to be applied at the swap point
-
-  function initStingerGL(){
-    if(stingerGL !== null) return stingerGL;
-    try {
-      const gl = stingerCanvas.getContext('webgl', { alpha: true, premultipliedAlpha: true });
-      if(!gl) throw new Error('no webgl');
-      const vs = gl.createShader(gl.VERTEX_SHADER);
-      gl.shaderSource(vs, 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2(p.x*0.5+0.5, 0.5-p.y*0.5); gl_Position = vec4(p,0.,1.); }');
-      gl.compileShader(vs);
-      const fs = gl.createShader(gl.FRAGMENT_SHADER);
-      gl.shaderSource(fs, `
-        precision mediump float; varying vec2 uv; uniform sampler2D tex;
-        void main(){
-          vec3 fill  = texture2D(tex, vec2(uv.x*0.5, uv.y)).rgb;
-          vec3 matte = texture2D(tex, vec2(0.5+uv.x*0.5, uv.y)).rgb;
-          float m = dot(matte, vec3(0.2126, 0.7152, 0.0722));
-          float k = smoothstep(0.02, 0.07, max(fill.r, max(fill.g, fill.b)));
-          float a = m * k;
-          gl_FragColor = vec4(fill * a, a);
-        }`);
-      gl.compileShader(fs);
-      const prog = gl.createProgram();
-      gl.attachShader(prog, vs); gl.attachShader(prog, fs);
-      gl.linkProgram(prog);
-      if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-      gl.useProgram(prog);
-      const buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-      const loc = gl.getAttribLocation(prog, 'p');
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      stingerGL = { gl, tex };
-    } catch (e) {
-      stingerGL = false; // WebGL unavailable (e.g. OBS with hardware accel off) - transitions become instant
-    }
-    return stingerGL;
-  }
-
-  function getStingerVideo(){
-    if(stingerVideo) return stingerVideo;
-    if(!STINGER_URL) return null; // this league has no stinger video
-    stingerVideo = document.createElement('video');
-    stingerVideo.muted = true;
-    stingerVideo.playsInline = true;
-    stingerVideo.preload = 'auto';
-    // The video must live in the DOM: Chromium classifies a detached, muted,
-    // video-only element as "background media" and rejects play() to save
-    // power (this is what silently killed the stinger on push). It stays
-    // invisible - the WebGL canvas is what actually draws it.
-    stingerVideo.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1;';
-    stingerVideo.src = STINGER_URL;
-    document.body.appendChild(stingerVideo);
-    return stingerVideo;
-  }
-  // Preload immediately so the first push doesn't stall on a network fetch.
-  getStingerVideo();
-
-  // Play the curtain stinger, running `apply` while the screen is covered.
-  // Every failure path (no WebGL, video missing, decode error, autoplay
-  // rejection) falls back to applying immediately - a change must never be
-  // lost or delayed past STINGER_MAX_MS. Used by Push Live and by the Rocket
-  // League board cutting from the game to a stats screen.
-  function stingerTransition(data){ playStinger(() => applyState(data)); }
-  // Anything arriving mid-stinger runs after what is already waiting, so the
-  // newest change still wins and nothing queued earlier is dropped.
-  function queueStinger(apply){
-    const prev = stingerPending;
-    stingerPending = prev ? () => { prev(); apply(); } : apply;
-  }
-  function playStinger(apply){
-    if(stingerActive){ queueStinger(apply); return; }
-    if(STINGER.type === 'css'){ playCssStinger(apply); return; }
-    if(STINGER.type !== 'video'){ apply(); return; }
-    const glc = initStingerGL();
-    const video = getStingerVideo();
-    if(!glc || !video){ apply(); return; }
-
-    stingerPending = apply;
-    stingerActive = true;
-    let raf = 0;
-    const finish = () => {
-      if(!stingerActive) return;
-      stingerActive = false;
-      cancelAnimationFrame(raf);
-      clearTimeout(safety);
-      applyPending(); // no-op if already applied at the swap point
-      stingerCanvas.classList.remove('active');
-      video.pause();
-    };
-    const applyPending = () => {
-      if(stingerPending){ const f = stingerPending; stingerPending = null; f(); }
-    };
-    const safety = setTimeout(finish, STINGER_MAX_MS);
-
-    const { gl, tex } = glc;
-    const draw = () => {
-      if(!stingerActive) return;
-      if(video.readyState >= 2){
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      }
-      if(video.currentTime >= STINGER_SWAP_TIME) applyPending();
-      if(video.ended){ finish(); return; }
-      raf = requestAnimationFrame(draw);
-    };
-
-    video.onended = finish;
-    video.onerror = finish;
-
-    // A rejected play() (e.g. Chromium's power saver pausing "background"
-    // video-only media while a seek is still settling) gets retried a couple
-    // of times before falling back; the STINGER_MAX_MS safety above still
-    // bounds the worst case.
-    let playAttempts = 0;
-    const tryPlay = () => {
-      if(!stingerActive) return;
-      const p = video.play();
-      if(p && p.catch) p.catch(() => {
-        if(!stingerActive) return;
-        if(++playAttempts < 3) setTimeout(tryPlay, 80);
-        else finish();
-      });
-    };
-
-    const startPlayback = () => {
-      if(!stingerActive) return;
-      // Clear before first frame so a previous run's last frame never flashes.
-      gl.clearColor(0,0,0,0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      stingerCanvas.classList.add('active');
-      raf = requestAnimationFrame(draw);
-      tryPlay();
-    };
-
-    // After a previous run the video sits at its end (video.ended === true,
-    // which the draw loop treats as "finish"), so rewind and wait for the
-    // seek to actually complete before starting - calling play() mid-seek is
-    // exactly the state Chromium's power saver aborts.
-    if(video.currentTime > 0.01 && video.readyState > 0){
-      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); startPlayback(); };
-      video.addEventListener('seeked', onSeeked);
-      video.currentTime = 0;
-    } else {
-      startPlayback();
-    }
-  }
-
-  // The drawn transition (v1.0.0), for a league profile with no stinger
-  // video: the two panels sweep in from the left (the second carries the
-  // mark), the content swaps once they cover the screen, then they sweep out
-  // to the right in reverse order. Same queue and safety timeout as the
-  // video stinger, and plain CSS transforms, so it works with OBS's hardware
-  // acceleration off too.
-  const cssStinger = $('#css-stinger');
-  const CS_IN = 'translateX(-120%) skewX(-12deg)', CS_ON = 'translateX(0) skewX(-12deg)', CS_OUT = 'translateX(120%) skewX(-12deg)';
-  const CS_EASE = 'cubic-bezier(.7,0,.25,1)', CS_MS = 420, CS_STAGGER = 80, CS_HOLD_MS = 180;
-  function playCssStinger(apply){
-    const panels = Array.from(cssStinger.querySelectorAll('.cs-panel'));
-    if(!panels.length || !panels[0].animate){ apply(); return; }
-    stingerPending = apply;
-    stingerActive = true;
-    const applyPending = () => {
-      if(stingerPending){ const f = stingerPending; stingerPending = null; f(); }
-    };
-    let done = false;
-    const finish = () => {
-      if(done) return;
-      done = true;
-      clearTimeout(safety);
-      stingerActive = false;
-      applyPending();
-      cssStinger.classList.remove('active');
-      panels.forEach((p) => { p.getAnimations().forEach((a) => a.cancel()); });
-    };
-    const safety = setTimeout(finish, STINGER_MAX_MS);
-    cssStinger.classList.add('active');
-    const sweep = (from, to, order) => Promise.all(order.map((p, i) => p.animate(
-      [{ transform: from }, { transform: to }],
-      { duration: CS_MS, delay: i * CS_STAGGER, easing: CS_EASE, fill: 'forwards' }).finished));
-    sweep(CS_IN, CS_ON, panels)
-      .then(() => { applyPending(); return new Promise((r) => setTimeout(r, CS_HOLD_MS)); })
-      .then(() => sweep(CS_ON, CS_OUT, panels.slice().reverse()))
-      .then(finish, finish);
-  }
-
-  // Live updates pushed from the control app's local server. There is exactly
-  // one overlay URL for every game and both moments (starting-soon /
-  // post-match) - it never needs to change in OBS. The one exception is the
-  // control panel's own preview pane, which loads this same page with
-  // ?preview=1 so it renders the in-progress draft instead of what's
-  // actually live on stream.
+  // Live updates from the app's local server. Every page gets the same one
+  // state; a locked page picks out its own view.
   (function connect(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', channel })));
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', role: 'overlay' })));
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'montages') {
           montageStatus = msg.montages || {};
-          if (lastState && !stingerActive) {
+          if (lastState) {
             applyClip(clipFor(lastState));
             placeholderSub.textContent = placeholderNote(lastState);
           }
         }
         if (msg.type === 'rl') { rlSnap = msg.rl; renderRl(); }
         if (msg.type === 'rlSeries') {
-          const next = msg.screen || { screen: 'live', game: -1 };
-          const apply = (cut) => () => {
-            rlSeriesData = msg.series || { games: [] };
-            rlScreenState = next;
-            renderRlScreens(cut);
-          };
-          // Leaving the live game for a stats screen is covered by the
-          // league stinger, with the screen swapped in while it's covered.
-          const boardUp = sbView.classList.contains('active') && sbView.classList.contains('rl');
-          if (boardUp && rlScreenState.screen === 'live' && next.screen !== 'live') playStinger(apply(true));
-          else if (stingerActive) queueStinger(apply(false));
-          else apply(false)();
+          rlSeriesData = msg.series || { games: [] };
+          rlScreenState = msg.screen || { screen: 'game', game: -1 };
+          renderRlScreens(false);
         }
         if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'goal') showRlGoal(msg.event);
-        if (msg.type === 'state' && msg.channel === channel) {
-          // Pushes flagged with the stinger transition play the curtain wipe
-          // and swap content while covered; everything else applies instantly.
-          // The preview pane plays it too (its content already matches the
-          // draft - the wipe is confirmation for the operator that the
-          // transition went out with the push).
-          //
-          // A view-locked page (scene-sync mode) never plays the in-overlay
-          // stinger: OBS owns between-view transitions there, so playing the
-          // curtain wipe here too would double it up. Content still swaps
-          // instantly within the view.
-          if (msg.transition === 'stinger' && !lockedView) stingerTransition(msg.data);
-          // A scoreboard tick landing mid-stinger must not reveal the new
-          // view early: queue it as the newest pending state instead.
-          else if (stingerActive) queueStinger(() => applyState(msg.data));
-          else applyState(msg.data);
-        }
+        if (msg.type === 'state') applyState(msg.data);
       } catch (e) {}
     });
     ws.addEventListener('close', () => setTimeout(connect, 2000));

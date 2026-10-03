@@ -1,6 +1,6 @@
 // League profiles (v1.0.0). One codebase serves several leagues: everything
-// that belongs to one league (name, colours, logos, stinger, games, OBS scene
-// names, port, installer identity) lives in profiles/<id>/profile.json and its
+// that belongs to one league (name, colours, logos, stinger, games, member
+// schools, OBS scene names, port, installer identity) lives in profiles/<id>/profile.json and its
 // assets folder, and each installer is built with exactly one profile inside.
 //
 // Which profile runs: `--profile=<id>` on the command line (dev), the
@@ -36,9 +36,19 @@ function loadProfile(id) {
   ['logo', 'panelLogo', 'mascot', 'watermark'].forEach((k) => {
     if (assets[k] && !fs.existsSync(path.join(assetsDir, assets[k]))) throw new Error(`Profile "${id}": assets/${assets[k]} (${k}) is missing`);
   });
-  const stinger = raw.stinger && raw.stinger.type === 'video' && raw.stinger.file
-    ? { type: 'video', file: raw.stinger.file, swapTime: Number(raw.stinger.swapTime) || 1 }
-    : { type: raw.stinger && raw.stinger.type === 'none' ? 'none' : 'css' };
+  // The league's OBS Stinger transition (v2.0.0): a video in assets/, the
+  // moment (ms) OBS cuts to the new scene under it, and whether the file
+  // carries a track matte beside the picture (Widener's) or real alpha.
+  const st = raw.stinger || {};
+  const stinger = st.file && fs.existsSync(path.join(assetsDir, st.file))
+    ? { file: st.file, transitionPoint: Math.max(0, Number(st.transitionPoint) || 0), trackMatte: st.trackMatte === true }
+    : null;
+  // The league's member schools (v2.0.0, optional): name, short name,
+  // colours and logo, preloaded into the team library.
+  const teamsFile = path.join(dir, 'teams.json');
+  const teams = fs.existsSync(teamsFile)
+    ? JSON.parse(fs.readFileSync(teamsFile, 'utf8')).filter((t) => t && t.id && t.name)
+    : [];
   const p = {
     id,
     name: raw.name || id,
@@ -54,6 +64,7 @@ function loadProfile(id) {
     colors: raw.colors || {},
     assets,
     stinger,
+    teams,
     music: raw.music && raw.music.driveId ? raw.music : null,
     defaults: raw.defaults || {},
     theme: raw.theme && fs.existsSync(path.join(dir, raw.theme)) ? path.join(dir, raw.theme) : '',
@@ -86,9 +97,8 @@ function clientBrand(p) {
     panelLogo: url(p.assets.panelLogo),
     mascot: url(p.assets.mascot) || url(p.assets.logo),
     watermark: url(p.assets.watermark) || url(p.assets.logo),
-    stinger: p.stinger.type === 'video'
-      ? { type: 'video', url: url(p.stinger.file), swapTime: p.stinger.swapTime }
-      : { type: p.stinger.type },
+    stinger: p.stinger ? { name: `${p.shortName} Stinger`, transitionPoint: p.stinger.transitionPoint, trackMatte: p.stinger.trackMatte } : null,
+    leagueTeams: p.teams.length,
     hasMusicTrack: !!p.music,
   };
 }

@@ -26,7 +26,7 @@ function emptyTeam() {
 }
 
 // Per-overlay text. Each view owns its own headline/subtitle/status pill, so a
-// page locked to one view (?view=…, i.e. an OBS scene-sync source) shows that
+// page locked to one view (?view=…, each OBS scene's source) shows that
 // view's words no matter which view was last edited. Without this, every
 // locked scene rendered the single shared title, so switching scenes in OBS
 // showed the previous view's text until someone pushed again.
@@ -124,6 +124,10 @@ const DEFAULT_STATE = {
   next: '',
   countdownMode: 'duration',
   durationSec: 600,
+  // Post-Match has its own countdown (v2.0.0), started when its scene goes
+  // on air, so it never disturbs the Starting Soon one.
+  postMatchSec: 120,
+  postEnd: '',
   layout: 'right',
   clip: '',
   logo: '',
@@ -132,6 +136,9 @@ const DEFAULT_STATE = {
   neccType: '',
   // Branded backdrop behind transparent league overlays (vs flat black)
   neccBg: true,
+  // League graphic links from the last import, by type (stageBracket,
+  // matchPreview, ...). Each league graphic has its own OBS scene (v2.0.0).
+  neccUrls: {},
   socials: {
     twitch: DEFAULT_SOCIAL,
     twitter: DEFAULT_SOCIAL,
@@ -235,36 +242,32 @@ function createServer(port, opts = {}) {
     ? [opts.host || process.env.WIDENER_HOST]
     : ['127.0.0.1', '::1'];
 
+  // One state since v2.0.0 (OBS first). OBS decides what is on air, so there
+  // is no draft and no Push Live any more: every scene's browser source shows
+  // this state as soon as it changes, and the operator previews a scene the
+  // OBS way, in Studio Mode, before taking it to program. The file keeps v1's
+  // { live, draft } shape, both the same, so an older version can still read
+  // it after a downgrade.
   function savePersisted() {
-    writeJsonSafe(stateFile, { live, draft });
+    writeJsonSafe(stateFile, { live: state, draft: state });
   }
-
-  // "live" is what every OBS Browser Source sees. "draft" is what the control
-  // panel's own preview pane sees. Editing only ever touches draft; clicking
-  // Push Live is the one moment draft is copied into live (and broadcast to
-  // any connected OBS overlays). This is what lets you preview a change
-  // before it goes out on stream. Guards against a state.json left over from
-  // an older, incompatible schema (e.g. the original single-channel format)
-  // by falling back to fresh defaults rather than trusting a shape we don't
-  // recognize.
   const persisted = readJsonSafe(stateFile) || {};
-  let live = normalizeLoaded(persisted.live) || initialState();
-  let draft = normalizeLoaded(persisted.draft) || JSON.parse(JSON.stringify(live));
+  // From a v1 file, what was on stream (live) is the state to keep.
+  let state = normalizeLoaded(persisted.live) || normalizeLoaded(persisted.draft) || initialState();
 
   function countdownSeconds(s) {
     const n = Number(s.durationSec);
     return isNaN(n) ? 0 : n;
   }
 
-  function updateChannel(channel, partial) {
-    const target = channel === 'live' ? live : draft;
+  function updateState(partial) {
+    const target = state;
     const next = { ...partial };
     delete next.restartCountdown;
     // The countdown only restarts when it is actually changed: a new length,
     // a switch into "count down from now", or an explicit restart (the panel's
-    // button, or switching overlay). It used to restart on every edit, because
-    // every edit carries durationSec, so fixing a typo and pushing reset the
-    // countdown on stream.
+    // button, or Post-Match going on air). Every edit carries durationSec, so
+    // restarting on any change would reset it while fixing a typo.
     const mode = next.countdownMode || target.countdownMode;
     if (mode === 'duration') {
       const durationChanged = next.durationSec != null && next.durationSec !== ''
@@ -274,86 +277,82 @@ function createServer(port, opts = {}) {
         next.end = new Date(Date.now() + countdownSeconds({ ...target, ...next }) * 1000).toISOString();
       }
     }
-    const merged = {
+    state = {
       ...target,
       ...next,
       socials: { ...target.socials, ...(partial.socials || {}) },
       teamA: partial.teamA ? { ...emptyTeam(), ...partial.teamA } : target.teamA,
       teamB: partial.teamB ? { ...emptyTeam(), ...partial.teamB } : target.teamB,
-      // Merged per view key: the panel only ever sends the view it just
-      // edited, so the other views' text must survive the update.
-      views: partial.views ? { ...target.views, ...partial.views } : target.views,
+      // Merged per view key: the panel only sends the scene text it changed.
+      views: partial.views ? mergeViews(target.views, partial.views) : target.views,
+      neccUrls: partial.neccUrls ? { ...partial.neccUrls } : target.neccUrls,
       scoreboard: partial.scoreboard ? { ...target.scoreboard, ...partial.scoreboard } : target.scoreboard,
     };
-    if (channel === 'live') live = merged; else draft = merged;
     savePersisted();
-    return merged;
+    return state;
+  }
+  function mergeViews(have, patch) {
+    const out = { ...have };
+    Object.keys(patch).forEach((k) => { out[k] = { ...(have[k] || {}), ...patch[k] }; });
+    return out;
   }
 
-  // Scoreboard counters (stocks, series score, swap) go straight to BOTH
-  // channels. This is the one deliberate exception to draft-then-push: a stock
-  // or a map is won in real time, and making the operator press Push Live (and
-  // sit through the curtain stinger) for each one would make live scorekeeping
-  // unusable. Only the counters are touched, so which overlay is on stream
-  // still changes only on Push Live. Writing both keeps draft == live for
-  // these fields, so it never shows up as an unpushed change.
+  // Scoreboard counters (stocks, series score, swap). Kept apart from the
+  // panel's form updates, so a second open panel (an OBS dock) can never send
+  // a stale score back over the real one.
   const COUNTERS = ['scoreA', 'scoreB', 'lostA', 'lostB', 'swap'];
   function applyScore(sb) {
     if (!sb || typeof sb !== 'object') return;
     const picked = {};
     COUNTERS.forEach((k) => { if (sb[k] !== undefined) picked[k] = sb[k]; });
-    live = { ...live, scoreboard: { ...live.scoreboard, ...picked } };
-    draft = { ...draft, scoreboard: { ...draft.scoreboard, ...picked } };
+    state = { ...state, scoreboard: { ...state.scoreboard, ...picked } };
     savePersisted();
-  }
-
-  // Push Live: draft becomes live, verbatim, so preview and stream match
-  // exactly. Deep copy so later draft edits can never alias into live.
-  // A countdown that was restarted in the preview starts counting on stream
-  // from the moment of the push, not from when it was restarted in the
-  // preview (otherwise waiting before pushing would shorten it).
-  function pushLive() {
-    if (draft.countdownMode === 'duration' && draft.end !== live.end) {
-      draft = { ...draft, end: new Date(Date.now() + countdownSeconds(draft) * 1000).toISOString() };
-    }
-    live = JSON.parse(JSON.stringify(draft));
-    savePersisted();
-    return live;
-  }
-
-  // Revert: throw away the in-progress draft and snap the preview back to
-  // whatever is currently live on stream.
-  function revertDraft() {
-    draft = JSON.parse(JSON.stringify(live));
-    savePersisted();
-    return draft;
-  }
-
-  // Key-order-independent stringify so live/draft comparison never produces a
-  // false "dirty" just because two equal objects were assembled differently.
-  function stableStringify(v) {
-    if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
-    if (v && typeof v === 'object') {
-      return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
-    }
-    return JSON.stringify(v);
-  }
-
-  // Does the preview differ from what's live? Powers the control panel's
-  // "unpushed changes" indicator. The countdown end time is compared too: it
-  // now only changes when the countdown is deliberately restarted, and a
-  // restart that hasn't been pushed is a real difference.
-  function isDirty() {
-    return stableStringify(live) !== stableStringify(draft);
   }
 
   // --- Team + match library (v0.9.0) --------------------------------------
   // Saved teams (name, tag, colours, logo, players) and saved match setups,
   // kept server-side so the app window and an OBS dock share one library.
   let library = readJsonSafe(libraryFile) || {};
-  library = { teams: Array.isArray(library.teams) ? library.teams : [], matches: Array.isArray(library.matches) ? library.matches : [] };
+  library = {
+    teams: Array.isArray(library.teams) ? library.teams : [],
+    matches: Array.isArray(library.matches) ? library.matches : [],
+    seeded: Array.isArray(library.seeded) ? library.seeded : [],
+  };
   function saveLibrary() { writeJsonSafe(libraryFile, library); }
   function newId() { return crypto.randomBytes(6).toString('hex'); }
+
+  // A league's member schools (profiles/<id>/teams.json, v2.0.0) are in the
+  // library from the first start: name, short name, colours and the league's
+  // logo, no players. `seeded` remembers which ones were added, so a school
+  // the operator deletes stays deleted, and a school the league adds later
+  // still arrives with an update.
+  const LEAGUE_TEAMS = PROFILE.teams.map((t) => ({
+    id: t.id, name: t.name, tag: t.tag || '', color: t.color || '', colorAlt: t.colorAlt || '',
+    logoUrl: t.logo ? '/brand/' + t.logo.split('/').map(encodeURIComponent).join('/') : '',
+  }));
+  {
+    const seeded = new Set(library.seeded);
+    const fresh = LEAGUE_TEAMS.filter((t) => !seeded.has(t.id));
+    if (fresh.length) {
+      fresh.forEach((t) => {
+        const have = library.teams.some((x) => x.id === t.id || x.name.trim().toLowerCase() === t.name.toLowerCase());
+        if (!have) library.teams.push({ ...t, players: [], league: true, updatedAt: new Date().toISOString() });
+        seeded.add(t.id);
+      });
+      library.teams.sort((a, b) => a.name.localeCompare(b.name));
+      library.seeded = [...seeded];
+      saveLibrary();
+    }
+  }
+  // The member school an imported team belongs to, by its name: "Widener
+  // University", "Widener University Gold" and "Widener Esports" are all
+  // Widener. Its league logo then replaces the LeagueOS one.
+  function leagueTeamFor(name) {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return null;
+    const starts = (word) => { const w = word.toLowerCase(); return n === w || (n.startsWith(w) && /^[^a-z0-9]/.test(n.slice(w.length))); };
+    return LEAGUE_TEAMS.find((t) => starts(t.name)) || LEAGUE_TEAMS.find((t) => t.tag && starts(t.tag)) || null;
+  }
   function cleanTeam(t) {
     const team = { ...emptyTeam(), ...(t || {}) };
     return {
@@ -362,6 +361,7 @@ function createServer(port, opts = {}) {
       color: String(team.color || ''), colorAlt: String(team.colorAlt || ''),
       logoUrl: String(team.logoUrl || ''),
       players: (Array.isArray(team.players) ? team.players : []).map((p) => ({ name: String(p.name || ''), gamertag: String(p.gamertag || '') })),
+      league: team.league === true,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -372,7 +372,7 @@ function createServer(port, opts = {}) {
     if (!team.name.trim()) return null;
     let idx = library.teams.findIndex((x) => x.id === t.id);
     if (idx < 0) idx = library.teams.findIndex((x) => x.name.trim().toLowerCase() === team.name.trim().toLowerCase());
-    if (idx >= 0) { team.id = library.teams[idx].id; library.teams[idx] = team; }
+    if (idx >= 0) { team.id = library.teams[idx].id; team.league = team.league || library.teams[idx].league === true; library.teams[idx] = team; }
     else library.teams.push(team);
     library.teams.sort((a, b) => a.name.localeCompare(b.name));
     return team;
@@ -403,23 +403,33 @@ function createServer(port, opts = {}) {
     }
   }
 
-  // Optional OBS integration (see obs.js). Points OBS browser sources at this
-  // same server. Everything it does is opt-in and fails soft - if OBS is never
-  // connected, none of this runs and the app behaves exactly as before.
+  // OBS (see obs.js). Since v2.0.0 it is required: the app builds the scenes
+  // and OBS decides what is on air. The app follows the program scene:
+  // state.mode becomes the view on air (so a plain /overlay still follows
+  // it), Post-Match starts its own countdown as it goes on air, a league graphic
+  // scene points the state at its link, and the music follows.
+  // What OBS has on program: { key, view, necc, scene }. key is '' for a
+  // scene the app didn't build (a camera or replay scene of the operator's).
+  let onAir = { key: '', view: '', necc: '', scene: '' };
   const obs = createObs({
     getOverlayBase: () => `http://localhost:${port}`,
     prefix: PROFILE.obs.prefix,
-    leagueScene: PROFILE.obs.leagueScene,
-    // Someone switched scenes by hand in OBS (or the push did it). With
-    // scene-sync on, OBS decides what is actually on program, so the app's
-    // idea of "live" follows it: the panel's LIVE marker and live monitor then
-    // show the truth instead of whatever was last pushed.
-    onProgramView: (view) => {
-      if (!obs.isSceneSync() || !view || live.mode === view) return;
-      live = { ...live, mode: view };
-      savePersisted();
-      broadcast('live', live);
-      broadcastDirty();
+    collection: PROFILE.obs.collection || `${PROFILE.shortName} Stream`,
+    stingerName: `${PROFILE.shortName} Stinger`,
+    onProgram: (p) => {
+      if (p.key !== 'stats') autoStatsUp = false;
+      onAir = { key: p.key, view: p.view, necc: p.necc, scene: p.scene };
+      if (p.view && state.mode !== p.view) {
+        const patch = { mode: p.view };
+        if (p.view === 'post-match') patch.postEnd = new Date(Date.now() + (Number(state.postMatchSec) || 120) * 1000).toISOString();
+        updateState(patch);
+        broadcastState();
+      }
+      if (p.view === 'necc' && p.necc && state.neccType !== p.necc) {
+        updateState({ neccType: p.necc, neccUrl: (state.neccUrls || {})[p.necc] || '' });
+        broadcastState();
+      }
+      sendToPanels({ type: 'onair', onAir });
       updateMusic();
     },
   });
@@ -428,45 +438,66 @@ function createServer(port, opts = {}) {
   // Played by OBS through one shared media source (see obs.js). The app's job
   // is the file, the level, and *when*: only while no gameplay is on screen.
   // Settings are machine-level, so they live in settings.json, not in the
-  // live/draft overlay state.
+  // overlay state.
   let appSettings = readJsonSafe(settingsFile) || {};
 
-  // --- Panel preferences (v0.12.0) ------------------------------------------
-  // Options that used to live in each window's own browser storage: the
-  // transition on Push Live, push on pick, instant scores, which NECC buttons
-  // show, the last import's NECC links, and whether the setup guide has run.
-  // Kept here so the app window and an OBS dock always agree.
+  // --- Panel preferences --------------------------------------------------
+  // Choices every open panel must agree on (the app window and an OBS dock):
+  // which league graphics get an OBS scene, whether the Scoreboard scene gets
+  // a game capture, whether setup turns on OBS Studio Mode, and whether the
+  // setup guide has run.
+  const NECC_TYPES = [
+    { key: 'stageBracket', label: 'Bracket' },
+    { key: 'seasonHeader', label: 'Season Header' },
+    { key: 'matchPreview', label: 'Match Preview' },
+    { key: 'matchActivity', label: 'Match Activity' },
+    { key: 'matchProgress', label: 'Match Progress' },
+    { key: 'matchRosters', label: 'Match Rosters' },
+  ];
   const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
-  const PREF_FLAGS = ['stingerOnPush', 'switchPush', 'scoresInstant', 'setupDone'];
+  const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'studioMode'];
   function panelPrefs() {
     const p = appSettings.panel || {};
     return {
-      stingerOnPush: p.stingerOnPush !== false,
-      switchPush: p.switchPush === true,
-      scoresInstant: p.scoresInstant !== false,
-      neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => typeof t === 'string') : DEFAULT_NECC_TYPES.slice(),
-      neccOverlayUrls: p.neccOverlayUrls && typeof p.neccOverlayUrls === 'object' ? p.neccOverlayUrls : {},
+      neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t)) : DEFAULT_NECC_TYPES.slice(),
       setupDone: p.setupDone === true,
+      // The v2 setup guide (OBS scenes and the stinger) has run on this PC.
+      guideV2: p.guideV2 === true,
+      gameCapture: p.gameCapture !== false,
+      studioMode: p.studioMode !== false,
     };
   }
   function savePanelPrefs(patch) {
     const next = panelPrefs();
     PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
-    if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => typeof t === 'string').slice(0, 20);
-    if (patch.neccOverlayUrls && typeof patch.neccOverlayUrls === 'object') {
-      // Only LeagueOS overlay links are ever stored here (https pages the
-      // overlay embeds), never anything else a request might carry.
-      next.neccOverlayUrls = {};
-      Object.keys(patch.neccOverlayUrls).forEach((k) => {
-        const u = patch.neccOverlayUrls[k];
-        if (typeof u === 'string' && /^https:\/\//i.test(u)) next.neccOverlayUrls[k] = u;
-      });
-    }
+    if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     appSettings = { ...appSettings, panel: next };
     writeJsonSafe(settingsFile, appSettings);
+    obs.setLayout(buildOptions());
     sendToPanels({ type: 'prefs', prefs: next });
     return next;
   }
+  // What a scene build makes: the base scenes, Rocket League Stats when the
+  // league plays Rocket League, and one scene per picked league graphic.
+  function buildOptions() {
+    const prefs = panelPrefs();
+    return {
+      neccTypes: NECC_TYPES.filter((t) => prefs.neccTypes.includes(t.key)),
+      includeStats: GAMES.some((g) => g.scoreboard && g.scoreboard.style === 'rl'),
+      gameCapture: prefs.gameCapture,
+      studioMode: prefs.studioMode,
+    };
+  }
+  // v1 kept the last import's league graphic links in the panel preferences;
+  // they belong to the match, so they now live in the state.
+  {
+    const legacy = (appSettings.panel || {}).neccOverlayUrls;
+    if (legacy && typeof legacy === 'object' && !Object.keys(state.neccUrls || {}).length) {
+      state = { ...state, neccUrls: { ...legacy } };
+    }
+  }
+  // The scenes the app manages, as the last build made them.
+  obs.setLayout(buildOptions());
 
   function musicConfig() {
     const m = appSettings.music || {};
@@ -495,14 +526,13 @@ function createServer(port, opts = {}) {
       obsConnected: obs.status().connected,
     };
   }
-  // Gameplay is on screen when the Scoreboard view is live, except on the
-  // Rocket League board when a stats screen is up or the game is between
-  // matches. If the game feed isn't connected, assume gameplay (never risk
-  // music over a match).
+  // Gameplay is on screen when the Scoreboard scene is on air, except on the
+  // Rocket League board while the game is between matches. If the game feed
+  // isn't connected, assume gameplay (never risk music over a match). The
+  // Rocket League Stats scene and every other scene count as no gameplay.
   function gameplayOnScreen() {
-    if (live.mode !== 'scoreboard') return false;
-    if (live.scoreboard.style !== 'rl') return true;
-    if (rlScreen.screen !== 'live') return false;
+    if (state.mode !== 'scoreboard') return false;
+    if (state.scoreboard.style !== 'rl') return true;
     const snap = rl.snapshot();
     return snap.status !== 'connected' || snap.inMatch;
   }
@@ -542,7 +572,7 @@ function createServer(port, opts = {}) {
     onChange: () => sendToAll({ type: 'montages', montages: montages.status() }),
   });
   // Start the download the moment a game with a missing montage is picked
-  // (or pushed), so it is usually ready by the time the overlay is live.
+  // (or set up), so it is usually ready by the time its scene is on air.
   function wantMontage(game) { if (game) montages.ensure(game, true); }
 
   // Rocket League live data (see rlstats.js). Every page gets the snapshots:
@@ -567,45 +597,54 @@ function createServer(port, opts = {}) {
   });
   let lastRlMusicKey = '';
   function updateRlActive() {
-    rl.setActive(live.scoreboard.style === 'rl' || draft.scoreboard.style === 'rl');
+    rl.setActive(state.scoreboard.style === 'rl');
   }
 
-  // --- Rocket League series record and screens (v0.11.0) -----------------
+  // --- Rocket League series record and the Stats scene ---------------------
   // Every finished game is recorded (score, map, each player's final stats)
-  // in rl-series.json, for the post-game stats screen and the series
-  // overview. `rlScreen` is what the scoreboard view shows: the live board,
-  // one game's stats, or the series overview. Like the game feed it is not
-  // part of live/draft: it follows the game in real time, and the preview
-  // and the stream always agree. Cleared by the panel's Reset match.
+  // in rl-series.json. Since v2.0.0 the stats have their own OBS scene,
+  // Rocket League Stats. `rlScreen` is what it shows: one game's stats, or
+  // the series overview. After a game the app cuts OBS to that scene by
+  // itself (the scoreboard's "Show stats automatically" setting), and back to
+  // the Scoreboard when the next game loads mid-series. The cast can cut to
+  // the Stats scene any time to fill time. Reset match clears the record.
   const rlSeriesFile = path.join(dataDir, 'rl-series.json');
   let rlSeries = readJsonSafe(rlSeriesFile) || {};
   if (!Array.isArray(rlSeries.games)) rlSeries = { games: [] };
-  let rlScreen = { screen: 'live', game: -1 };
+  let rlScreen = { screen: 'game', game: -1 };
   let rlScreenTimers = [];
   function rlSeriesMessage() { return { type: 'rlSeries', series: rlSeries, screen: rlScreen }; }
   function broadcastRlSeries() { sendToAll(rlSeriesMessage()); }
   function clearRlTimers() { rlScreenTimers.forEach(clearTimeout); rlScreenTimers = []; }
+  // screen: 'game' (game = an index, or -1 for the latest) or 'series'.
   function setRlScreen(screen, game) {
     clearRlTimers();
     const last = rlSeries.games.length - 1;
-    if (screen === 'game') game = Number.isInteger(game) && game >= 0 && game <= last ? game : last;
-    if ((screen === 'game' && game < 0) || !['live', 'game', 'series'].includes(screen)) screen = 'live';
+    if (screen !== 'series') {
+      screen = 'game';
+      game = Number.isInteger(game) && game >= 0 && game <= last ? game : -1;
+    }
     rlScreen = { screen, game: screen === 'game' ? game : -1 };
     broadcastRlSeries();
-    updateMusic();
+  }
+  // What the panel's buttons and the remote routes do: pick what the Stats
+  // scene shows and, with show, put it on air.
+  function showRlStats(screen, game, show) {
+    setRlScreen(screen, game);
+    if (show) return obs.switchTo('stats');
+    return Promise.resolve({ switched: false });
   }
 
   // BARL-style series tracking: a finished game adds a win to the team that
   // was on the winning colour. Blue is the left side in game, so it is team A
-  // unless the sides are swapped. Uses the live board's settings, since that
-  // is what is on stream, and goes through applyScore like a panel click.
-  // Then, RLCS-style, the board cuts to that game's stats, and to the series
-  // overview once the series is won.
+  // unless the sides are swapped. Then the Stats scene goes on air with that
+  // game, and the series overview follows once the series is won.
   const STATS_DELAY_MS = 3000;
   const OVERVIEW_AFTER_MS = 15000;
   let lastGameEnd = { guid: '', at: 0 };
+  let autoStatsUp = false;
   function onGameEnded(ev) {
-    const sb = live.scoreboard;
+    const sb = state.scoreboard;
     if (sb.style !== 'rl' || (ev.winner !== 0 && ev.winner !== 1)) return;
     // MatchEnded can arrive more than once for one game, and bot matches
     // have no GUID to tell games apart, so a short window guards both.
@@ -615,15 +654,13 @@ function createServer(port, opts = {}) {
     // Once a team has clinched, extra games (a show match after the series)
     // are neither counted nor recorded. The panel's + button still counts.
     const need = Math.ceil((Number(sb.bestOf) || 3) / 2);
-    const decided = (s) => (s.scoreA || 0) >= need || (s.scoreB || 0) >= need;
+    const decided = (s2) => (s2.scoreA || 0) >= need || (s2.scoreB || 0) >= need;
     if (decided(sb)) return;
     const blue = sb.swap ? 'B' : 'A';
     if (sb.rlAutoSeries !== false) {
       const key = ev.winner === 0 ? blue : (blue === 'A' ? 'B' : 'A');
       applyScore({ ['score' + key]: Math.min(9, (sb['score' + key] || 0) + 1) });
-      broadcast('live', live);
-      broadcast('draft', draft);
-      broadcastDirty();
+      broadcastState();
       ev.series = key;
     }
     rlSeries.games.push({
@@ -639,24 +676,27 @@ function createServer(port, opts = {}) {
       })),
     });
     writeJsonSafe(rlSeriesFile, rlSeries);
-    broadcastRlSeries();
-    if (live.scoreboard.rlAutoStats === false) return;
     const game = rlSeries.games.length - 1;
-    const won = decided(live.scoreboard);
-    clearRlTimers();
+    setRlScreen('game', game);
+    if (state.scoreboard.rlAutoStats === false) return;
+    const won = decided(state.scoreboard);
     rlScreenTimers.push(setTimeout(() => {
-      setRlScreen('game', game);
+      // Only cut away from the Scoreboard: if the cast is already somewhere
+      // else (a replay scene, Be Right Back), leave them there.
+      if (state.mode === 'scoreboard') { autoStatsUp = true; obs.switchTo('stats'); }
       if (won) rlScreenTimers.push(setTimeout(() => setRlScreen('series'), OVERVIEW_AFTER_MS));
     }, STATS_DELAY_MS));
   }
-  // The next game loading puts the live board back, mid-series. Once the
-  // series is won the stats and overview stay up (a show match or the next
-  // lobby loading must not pull them off); the panel switches back by hand.
+  // The next game loading puts the Scoreboard back on air, mid-series, if the
+  // app was the one that cut to the stats. Once the series is won the stats
+  // stay up (a show match must not pull them off).
   function onGameStarting() {
-    const sb = live.scoreboard;
+    const sb = state.scoreboard;
     const need = Math.ceil((Number(sb.bestOf) || 3) / 2);
     if ((sb.scoreA || 0) >= need || (sb.scoreB || 0) >= need) return;
-    if (rlScreen.screen !== 'live' || rlScreenTimers.length) setRlScreen('live');
+    clearRlTimers();
+    if (autoStatsUp && state.mode === 'stats') obs.switchTo('scoreboard');
+    autoStatsUp = false;
   }
 
   const app = express();
@@ -709,7 +749,7 @@ function createServer(port, opts = {}) {
   });
 
   app.get('/api/state', (req, res) => {
-    res.json(req.query.channel === 'draft' ? draft : live);
+    res.json(state);
   });
 
   // Local media passthrough. The control panel's Browse buttons store the
@@ -736,7 +776,20 @@ function createServer(port, opts = {}) {
     if (!url) return res.status(400).json({ error: 'url is required' });
     try {
       const data = await importMatch(url);
-      await Promise.all((data.teams || []).map(async (t) => { t.logoUrl = await cacheLogo(t.logoUrl); }));
+      await Promise.all((data.teams || []).map(async (t) => {
+        // A member school shows the league's own logo, and its colours when
+        // LeagueOS has none.
+        const lt = leagueTeamFor(t.name);
+        if (lt) {
+          if (lt.logoUrl) t.logoUrl = lt.logoUrl;
+          if (!t.color) t.color = lt.color;
+          if (!t.colorAlt) t.colorAlt = lt.colorAlt;
+          if (!t.tag) t.tag = lt.tag;
+          t.league = true;
+        } else {
+          t.logoUrl = await cacheLogo(t.logoUrl);
+        }
+      }));
       // Every imported team goes into the library, so next week's rematch is
       // one click away even without the NECC link.
       let changed = false;
@@ -828,16 +881,13 @@ function createServer(port, opts = {}) {
   app.get('/api/prefs', (req, res) => res.json({ prefs: panelPrefs(), saved: !!appSettings.panel }));
   app.post('/api/prefs', (req, res) => res.json({ prefs: savePanelPrefs(req.body || {}), saved: true }));
 
-  // --- Remote control routes (v0.12.0) ---
+  // --- Remote control routes (v0.12.0, v2.0.0) ---
   // A Stream Deck (through a web-request plugin or Bitfocus Companion), a
-  // macro pad, or a script on this PC can run the show with plain POST
-  // requests: Push Live, discard, pick an overlay, keep score. The server only
-  // listens on this PC, and a request sent by a web page (an Origin other
-  // than this app) is refused, so a website open in a browser on the
-  // streaming PC can't press these buttons. Score changes always go live at
-  // once, like the panel's default.
-  const REMOTE_VIEWS = ['starting-soon', 'post-match', 'roster', 'brb', 'scoreboard'];
-  const VIEW_COUNTDOWN = { 'starting-soon': 600, 'post-match': 120 };
+  // macro pad, or a script on this PC can keep score, cut OBS to one of the
+  // app's scenes and pick what the Rocket League Stats scene shows, with
+  // plain POST requests. The server only listens on this PC, and a request
+  // sent by a web page (an Origin other than this app) is refused, so a
+  // website open in a browser on the streaming PC can't press these buttons.
   function remoteAllowed(req) {
     const origin = req.headers.origin;
     if (!origin) return true;
@@ -855,39 +905,21 @@ function createServer(port, opts = {}) {
     next();
   });
 
-  function remoteTransition() {
-    return panelPrefs().stingerOnPush && !obs.isSceneSync() ? 'stinger' : undefined;
-  }
-
-  // The same steps as picking an overlay in the panel: the overlay goes into
-  // the preview, a view with its own countdown restarts it, and with "push
-  // live as soon as I pick an overlay" on it goes straight to stream. Every
-  // open panel reloads its form from the new draft.
-  function remoteSelectOverlay(view) {
-    let patch;
-    if (REMOTE_VIEWS.includes(view)) {
-      patch = { mode: view, neccUrl: '', neccType: '' };
-      if (VIEW_COUNTDOWN[view]) Object.assign(patch, { countdownMode: 'duration', durationSec: VIEW_COUNTDOWN[view], restartCountdown: true });
-    } else if (/^necc-/.test(view)) {
-      const type = view.slice(5);
-      const url = panelPrefs().neccOverlayUrls[type];
-      if (!url) return { error: 'Import a match first to get that NECC graphic' };
-      patch = { mode: 'necc', neccType: type, neccUrl: url };
-    } else {
-      return { error: `Unknown overlay. Use one of: ${REMOTE_VIEWS.join(', ')}, or necc-<type>` };
+  // League graphic scenes are necc-<type> in a URL (necc:<type> inside).
+  const remoteKey = (k) => String(k || '').replace(/^necc-/, 'necc:');
+  const urlKey = (k) => k.replace(/^necc:/, 'necc-');
+  async function remoteScene(key) {
+    const k = remoteKey(key);
+    if (!obs.status().scenes.some((x) => x.key === k)) {
+      return { error: `Unknown scene. Use one of: ${obs.status().scenes.map((x) => urlKey(x.key)).join(', ')}` };
     }
-    const newDraft = updateChannel('draft', patch);
-    wantMontage(newDraft.game);
-    updateRlActive();
-    broadcast('draft', newDraft, { repopulate: true });
-    broadcastDirty();
-    if (panelPrefs().switchPush) doPush(remoteTransition());
-    return { mode: newDraft.mode, pushed: panelPrefs().switchPush };
+    const r = await obs.switchTo(k);
+    return r.switched ? { scene: r.scene } : { error: r.error || 'OBS did not switch' };
   }
 
   function remoteScore(team, action) {
     const T = team === 'b' ? 'B' : team === 'a' ? 'A' : '';
-    const sb = draft.scoreboard;
+    const sb = state.scoreboard;
     const total = (Number(sb.crewSize) || 4) * (Number(sb.stocksEach) || 3);
     const score = (k) => Number(sb['score' + k]) || 0;
     const lost = (k) => Number(sb['lost' + k]) || 0;
@@ -910,11 +942,9 @@ function createServer(port, opts = {}) {
       return { error: 'Unknown score action. Use win, point, unpoint, stock, unstock or swap' };
     }
     applyScore(out);
-    broadcast('live', live);
-    broadcast('draft', draft);
-    broadcastDirty();
-    const s = live.scoreboard;
-    return { scoreA: s.scoreA, scoreB: s.scoreB, lostA: s.lostA, lostB: s.lostB, swap: s.swap };
+    broadcastState();
+    const s2 = state.scoreboard;
+    return { scoreA: s2.scoreA, scoreB: s2.scoreB, lostA: s2.lostA, lostB: s2.lostB, swap: s2.swap };
   }
 
   function remoteReply(res, out) {
@@ -924,26 +954,26 @@ function createServer(port, opts = {}) {
 
   app.get('/api/remote', (req, res) => {
     const base = `http://localhost:${port}/api/remote`;
+    const scenes = obs.status().scenes.map((x) => x.key);
     res.json({
       note: 'Send each as a POST request from this PC.',
       actions: [
-        `${base}/push`, `${base}/discard`,
-        ...REMOTE_VIEWS.map((v) => `${base}/overlay/${v}`),
-        ...Object.keys(panelPrefs().neccOverlayUrls).map((t) => `${base}/overlay/necc-${t}`),
+        ...scenes.map((k) => `${base}/scene/${urlKey(k)}`),
+        ...(scenes.includes('stats') ? [`${base}/stats/game`, `${base}/stats/series`] : []),
         `${base}/score/a/win`, `${base}/score/b/win`, `${base}/score/a/point`, `${base}/score/a/unpoint`,
         `${base}/score/a/stock`, `${base}/score/a/unstock`, `${base}/score/swap`,
       ],
     });
   });
-  app.post('/api/remote/push', (req, res) => { doPush(remoteTransition()); remoteReply(res, { mode: live.mode }); });
-  app.post('/api/remote/discard', (req, res) => {
-    const newDraft = revertDraft();
-    updateRlActive();
-    broadcast('draft', newDraft, { repopulate: true });
-    broadcastDirty();
-    remoteReply(res, {});
+  app.post('/api/remote/scene/:key', async (req, res) => remoteReply(res, await remoteScene(req.params.key)));
+  // v1 Stream Deck buttons (overlay/<view>) now cut to that view's scene.
+  app.post('/api/remote/overlay/:view', async (req, res) => remoteReply(res, await remoteScene(req.params.view)));
+  // The latest game's stats, or the series overview, on the Stats scene.
+  app.post('/api/remote/stats/:screen', async (req, res) => {
+    const screen = req.params.screen === 'series' ? 'series' : 'game';
+    const r = await showRlStats(screen, -1, true);
+    remoteReply(res, r.switched ? { screen } : { error: r.error || 'OBS did not switch' });
   });
-  app.post('/api/remote/overlay/:view', (req, res) => remoteReply(res, remoteSelectOverlay(String(req.params.view))));
   app.post('/api/remote/score/swap', (req, res) => remoteReply(res, remoteScore('', 'swap')));
   app.post('/api/remote/score/:team/:action', (req, res) => remoteReply(res, remoteScore(String(req.params.team).toLowerCase(), String(req.params.action))));
 
@@ -957,14 +987,14 @@ function createServer(port, opts = {}) {
     catch (err) { res.status(500).json({ error: err.message || 'Could not update the Rocket League config' }); }
   });
 
-  // --- OBS integration routes (all optional, all fail soft) ----------------
-  // The control panel drives OBS through these. Note the password is only ever
+  // --- OBS routes -----------------------------------------------------------
+  // The control panel drives OBS through these. The password is only ever
   // sent from the local panel to here over localhost; it is never persisted
   // server-side and never logged.
-  app.get('/api/obs/status', (req, res) => res.json(obs.status()));
+  app.get('/api/obs/status', (req, res) => res.json({ ...obs.status(), onAirNow: onAir }));
 
   app.get('/api/obs/inspect', async (req, res) => {
-    try { res.json(await obs.inspect()); }
+    try { res.json({ ...(await obs.inspect()), stingerFile: stingerInfo() }); }
     catch (err) { res.json({ ...obs.status(), error: err.message || String(err) }); }
   });
 
@@ -984,18 +1014,65 @@ function createServer(port, opts = {}) {
     res.json(st);
   });
 
-  app.post('/api/obs/settings', (req, res) => res.json(obs.setSettings(req.body || {})));
-
+  // Builds (or updates) the league's scene collection: every scene the
+  // current options call for, the Scoreboard's game capture, the music
+  // source. A stinger the operator already added is re-pointed at the file.
   app.post('/api/obs/build-scenes', async (req, res) => {
-    try { updateMusic(); res.json(await obs.buildScenes()); }
+    try {
+      updateMusic();
+      const out = await obs.buildScenes(buildOptions());
+      let stinger = null;
+      try { stinger = await configureStinger(); } catch (e) { stinger = { found: false, error: e.message }; }
+      res.json({ ...out, stinger });
+    }
     catch (err) { res.status(502).json({ error: err.message || 'Failed to build scenes' }); }
   });
 
-  // Manual scene switch (e.g. a "test switch" button). Push Live already drives
-  // this automatically via obs.onPush when scene-sync is enabled.
+  // The league's stinger. OBS plays it, and OBS can't read a file inside the
+  // app's installed archive, so it is copied to the data folder first.
+  function stingerInfo() {
+    const st = PROFILE.stinger;
+    if (!st) return null;
+    return { path: path.join(dataDir, 'obs', st.file), transitionPoint: st.transitionPoint, trackMatte: st.trackMatte, name: `${PROFILE.shortName} Stinger` };
+  }
+  function copyStinger() {
+    const info = stingerInfo();
+    if (!info) return null;
+    const data = fs.readFileSync(path.join(PROFILE.assetsDir, PROFILE.stinger.file));
+    let same = false;
+    try { same = fs.statSync(info.path).size === data.length; } catch (e) { /* not copied yet */ }
+    if (!same) {
+      fs.mkdirSync(path.dirname(info.path), { recursive: true });
+      fs.writeFileSync(info.path, data);
+    }
+    return info;
+  }
+  async function configureStinger() {
+    const info = copyStinger();
+    if (!info) return { found: false, none: true };
+    const r = await obs.setupStinger({ file: info.path, transitionPoint: info.transitionPoint, trackMatte: info.trackMatte });
+    return { ...r, file: info };
+  }
+  app.get('/api/obs/stinger', async (req, res) => {
+    let info = null;
+    try { info = copyStinger(); } catch (e) { return res.status(500).json({ error: e.message }); }
+    res.json({ file: info, status: await obs.stingerStatus() });
+  });
+  app.post('/api/obs/stinger', async (req, res) => {
+    try { res.json(await configureStinger()); }
+    catch (err) { res.status(502).json({ error: err.message || 'Could not set up the stinger' }); }
+  });
+
+  // A small picture of what OBS has on program, for the panel.
+  app.get('/api/obs/program-shot', async (req, res) => {
+    noStore(res);
+    res.json({ image: await obs.programShot(Number(req.query.width) || 480), onAir });
+  });
+
+  // Put one of the app's scenes on program: { key } (a view, or necc:<type>).
   app.post('/api/obs/switch', async (req, res) => {
-    try { res.json(await obs.switchToView((req.body || {}).view)); }
-    catch (err) { res.status(502).json({ error: err.message || 'Failed to switch scene' }); }
+    const r = await obs.switchTo(String((req.body || {}).key || ''));
+    res.status(r.switched ? 200 : 502).json(r);
   });
 
   // The first address is the one that matters: its errors (e.g. the port is
@@ -1018,137 +1095,89 @@ function createServer(port, opts = {}) {
   const closeFirst = server.close.bind(server);
   server.close = (cb) => { rl.close(); servers.slice(1).forEach((s) => { try { s.close(); } catch (e) {} }); return closeFirst(cb); };
 
-  // `extra` lets a broadcast carry side-channel fields alongside the state -
-  // currently just { transition: 'stinger' } on a Push Live, which tells live
-  // overlays to play the curtain stinger and swap content mid-cover.
-  function broadcast(channel, data, extra) {
-    const payload = JSON.stringify({ type: 'state', channel, data, ...(extra || {}) });
-    wss.clients.forEach((client) => {
-      if (client.readyState === 1 && client.subscribedChannel === channel) client.send(payload);
-    });
-  }
-
+  // Every page subscribes as a 'panel' (the control panel, in the app window
+  // or an OBS dock) or an overlay (every scene's browser source).
   function sendToPanels(obj) {
     const payload = JSON.stringify(obj);
     wss.clients.forEach((client) => {
-      if (client.readyState === 1 && client.subscribedChannel === 'draft') client.send(payload);
+      if (client.readyState === 1 && client.role === 'panel') client.send(payload);
     });
-  }
-
-  // Tell every control panel (draft subscriber) whether the preview currently
-  // differs from live, and which overlay is live (for the LIVE marker on the
-  // overlay buttons), after anything that could have changed either channel.
-  function dirtyMessage() {
-    return { type: 'dirty', dirty: isDirty(), liveMode: live.mode, liveNeccType: live.neccType || '' };
   }
   function sendToAll(obj) {
     const payload = JSON.stringify(obj);
     wss.clients.forEach((client) => {
-      if (client.readyState === 1 && client.subscribedChannel) client.send(payload);
+      if (client.readyState === 1 && client.role) client.send(payload);
     });
   }
-
-  function broadcastDirty() { sendToPanels(dirtyMessage()); }
+  // The one state, to every page: the scenes redraw, the panels refill.
+  function broadcastState() { sendToAll({ type: 'state', data: state }); }
   function broadcastLibrary() { sendToPanels({ type: 'library', library }); }
 
-  // Push Live, from the panel or a remote button. The stinger flag rides
-  // along to both channels: the live overlay plays the wipe while swapping
-  // content, and the panel's preview plays it too as confirmation. With
-  // scene-sync on, OBS then switches to the newly live view's scene and plays
-  // its own transition. That is fire-and-forget: it must never delay or fail
-  // the push that already went out.
-  function doPush(transition) {
-    const newLive = pushLive();
-    wantMontage(newLive.game);
-    updateRlActive();
-    const extra = transition === 'stinger' ? { transition: 'stinger' } : undefined;
-    broadcast('live', newLive, extra);
-    broadcast('draft', draft, extra);
-    broadcastDirty();
-    obs.onPush(newLive).catch(() => {});
-    updateMusic();
-    return newLive;
-  }
+  // What a panel's edit may not change: OBS decides which view is on air,
+  // and the league graphic follows the scene.
+  const PROGRAM_FIELDS = ['mode', 'neccType', 'neccUrl'];
 
   wss.on('connection', (ws) => {
-    ws.subscribedChannel = null;
+    ws.role = null;
 
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
       if (msg.type === 'subscribe') {
-        ws.subscribedChannel = msg.channel === 'draft' ? 'draft' : 'live';
+        // v1 pages subscribed to a channel: 'draft' was a panel.
+        ws.role = msg.role === 'panel' || msg.channel === 'draft' ? 'panel' : 'overlay';
         // Montage status first, so an overlay's first render already knows
         // whether the game's montage can play.
         ws.send(JSON.stringify({ type: 'montages', montages: montages.status() }));
-        ws.send(JSON.stringify({ type: 'state', channel: ws.subscribedChannel, data: ws.subscribedChannel === 'draft' ? draft : live }));
+        ws.send(JSON.stringify({ type: 'state', data: state }));
         ws.send(JSON.stringify({ type: 'rl', rl: rl.snapshot() }));
         ws.send(JSON.stringify(rlSeriesMessage()));
-        if (ws.subscribedChannel === 'draft') {
-          ws.send(JSON.stringify(dirtyMessage()));
+        if (ws.role === 'panel') {
           ws.send(JSON.stringify({ type: 'library', library }));
           ws.send(JSON.stringify({ type: 'music', music: musicStatus() }));
           ws.send(JSON.stringify({ type: 'prefs', prefs: panelPrefs() }));
+          ws.send(JSON.stringify({ type: 'onair', onAir }));
         }
         return;
       }
 
-      // Every edit - including switching which overlay/mode is showing via
-      // the overlay buttons - only ever touches draft. Nothing reaches the
-      // stream until an explicit Push Live.
-      if (msg.type === 'update') {
-        const channel = msg.channel === 'draft' ? 'draft' : 'live';
-        const newState = updateChannel(channel, msg.data || {});
-        wantMontage(newState.game);
+      // An edit from a panel. It is on every scene at once; the panel only
+      // sends text when the operator finishes a field (Enter or leaving it).
+      if (msg.type === 'update' && ws.role === 'panel') {
+        const data = { ...(msg.data || {}) };
+        PROGRAM_FIELDS.forEach((k) => delete data[k]);
+        updateState(data);
+        wantMontage(state.game);
         updateRlActive();
-        broadcast(channel, newState);
-        broadcastDirty();
+        broadcastState();
         return;
       }
 
-      if (msg.type === 'push') {
-        doPush(msg.transition);
-        return;
-      }
-
-      // Instant scoreboard update (see applyScore): live and preview both
-      // change immediately, with no transition.
+      // Scoreboard counters (see applyScore).
       if (msg.type === 'score') {
         applyScore(msg.scoreboard);
-        broadcast('live', live);
-        broadcast('draft', draft);
-        broadcastDirty();
+        broadcastState();
         return;
       }
 
-      // Rocket League screens: the panel's Live / Game stats / Series
-      // buttons, and Reset match clearing the series record.
-      if (msg.type === 'rlScreen') { setRlScreen(msg.screen, Number(msg.game)); return; }
+      // The Rocket League Stats scene: { screen: 'game' | 'series', game,
+      // show } picks what it shows, and show also cuts OBS to it.
+      if (msg.type === 'rlScreen') {
+        showRlStats(msg.screen, Number(msg.game), !!msg.show).catch(() => {});
+        return;
+      }
       if (msg.type === 'rlSeriesReset') {
         rlSeries = { games: [] };
         writeJsonSafe(rlSeriesFile, rlSeries);
-        setRlScreen('live');
-        return;
-      }
-
-      // Discard the draft: snap the preview (and every open control panel's
-      // form, which repopulates from the draft broadcast) back to the live
-      // state. `repopulate` reaches a second panel (an OBS dock) too, so it
-      // can't later send its stale form back over the reverted draft.
-      if (msg.type === 'revert') {
-        const newDraft = revertDraft();
-        updateRlActive();
-        broadcast('draft', newDraft, { repopulate: true });
-        broadcastDirty();
+        setRlScreen('game', -1);
       }
     });
   });
 
   // Resume or start the montages for the games already picked. Only now that
   // the WebSocket server exists to report their progress.
-  wantMontage(live.game);
-  wantMontage(draft.game);
+  wantMontage(state.game);
   updateRlActive();
   updateMusic();
   wantMusicTrack(false);
