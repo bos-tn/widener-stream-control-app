@@ -1,0 +1,42 @@
+/* League of the East overlay theme (v1.0.0). Loaded by the overlay page only,
+   after the base styles and /brand.css.
+
+   Scene background: "09 Mark Shine" from the LotE Background Set. The LotE
+   mark, huge and ghosted, with a band of light crossing it every nine
+   seconds, over a purple glow and the league's purple ground. Ported from
+   bg/09-mark-shine.html as plain CSS, so it costs nothing extra in OBS. The
+   overlay always renders at 1920 x 1080, so the set's pixel positions are
+   used as is. */
+
+.stripes, .bg-gradient{ display:none; }
+
+.brand-bg{ display:block; }
+.brand-bg .bb-1{ /* purple halo */
+  right:-60px; top:-180px; width:1500px; height:1500px;
+  background:radial-gradient(circle, rgba(130,5,167,.5) 0%, rgba(130,5,167,.14) 40%, rgba(130,5,167,0) 68%);
+  animation:lote-halo 16s ease-in-out infinite alternate;
+}
+@keyframes lote-halo{ from{ opacity:.7; transform:scale(.95) } to{ opacity:1; transform:scale(1.05) } }
+.brand-bg .bb-2, .brand-bg .bb-3{ /* the mark, and the shine across it */
+  right:190px; top:-30px; width:1140px; height:1140px;
+  -webkit-mask:var(--brand-watermark) center / contain no-repeat;
+  mask:var(--brand-watermark) center / contain no-repeat;
+}
+.brand-bg .bb-2{ background:rgba(255,255,255,.07); }
+.brand-bg .bb-3{
+  background:linear-gradient(105deg, rgba(255,255,255,0) 40%, rgba(255,255,255,.6) 50%, rgba(255,255,255,0) 60%) 100% 0 / 300% 100% no-repeat;
+  animation:lote-glint 9s ease-in-out infinite;
+}
+@keyframes lote-glint{ 0%{ background-position:100% 0 } 62%, 100%{ background-position:0% 0 } }
+.brand-bg .bb-4{ /* vignette */
+  inset:0;
+  background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.32) 100%);
+}
+
+/* Never set text in the league purple (2.3 to 1 on the ground): the footer
+   tagline runs lavender to white instead of purple to lavender. */
+.badge{ background:linear-gradient(90deg, #CDB9DA, #FFFFFF); -webkit-background-clip:text; background-clip:text; }
+
+/* Rocket League stats screens: the purple ground and the mark. */
+.rls{ background:radial-gradient(1400px 800px at 12% 8%, #270146 0%, #1A0327 62%, #12011c 100%); }
+.rls::before{ background:#FFFFFF; opacity:.035; }

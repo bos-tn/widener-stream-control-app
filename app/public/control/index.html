@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Widener Esports Stream Control</title>
+<title>Stream Control</title>
 <link rel="stylesheet" href="control.css">
+<!-- The league's brand (v1.0.0): colours, then window.BRAND for control.js. -->
+<link rel="stylesheet" href="/brand.css">
+<script src="/brand.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <img class="brand-logo" src="assets/logo.png" alt="Widener Esports">
+    <img class="brand-logo" id="brandLogo" alt="">
     <div class="brand">
-      <span class="brand-title">Widener Esports</span>
+      <span class="brand-title">{{name}}</span>
       <span class="brand-sub">Stream Control <span id="appVersion"></span></span>
     </div>
     <nav class="pages" role="tablist" aria-label="Pages">
@@ -94,14 +97,14 @@
           <!-- The select is the source of truth for the chosen overlay; the
                cards above are drawn from it. -->
           <select id="overlaySelect" hidden>
-            <optgroup label="Widener">
+            <optgroup label="Overlays">
               <option value="widener:starting-soon">Starting Soon</option>
               <option value="widener:post-match">Post-Match</option>
               <option value="widener:roster">Rosters</option>
               <option value="widener:brb">Be Right Back</option>
               <option value="widener:scoreboard">Scoreboard</option>
             </optgroup>
-            <optgroup label="NECC" id="neccOptGroup"></optgroup>
+            <optgroup label="{{league}}" id="neccOptGroup"></optgroup>
           </select>
           <label class="checkbox small strip-option">
             <input type="checkbox" id="switchPushInput">
@@ -241,7 +244,7 @@
               <div class="field-row" id="sbStockFields" style="margin-top:12px">
                 <label class="grow">
                   <span class="lbl">Players per team
-                    <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="NECC crews are 4. The first players listed under Prep, Teams are the crew, in that order.">i</span>
+                    <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Crews are usually 4. The first players listed under Prep, Teams are the crew, in that order.">i</span>
                   </span>
                   <input type="number" id="sbCrewInput" min="1" max="8" step="1" value="4">
                 </label>
@@ -269,7 +272,7 @@
             </div>
             <div class="field">
               <label for="subtitleInput"><span class="lbl">Subtitle</span></label>
-              <input type="text" id="subtitleInput" placeholder="Optional, such as vs Rowan">
+              <input type="text" id="subtitleInput" placeholder="Optional, such as the matchup">
             </div>
           </div>
 
@@ -342,23 +345,23 @@
             <div class="sub-head">Frame</div>
             <div class="field">
               <label for="logoInput"><span class="lbl">Logo (top left)
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave empty for the Widener logo.">i</span>
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Leave empty for the {{short}} logo.">i</span>
               </span></label>
               <input type="text" id="logoInput" placeholder="https://...">
             </div>
             <div class="field">
               <label for="nextInput"><span class="lbl">Next match (bottom right)</span></label>
-              <input type="text" id="nextInput" placeholder="Next: vs Rowan, Fri 7pm">
+              <input type="text" id="nextInput" placeholder="Next: Fri 7pm">
             </div>
           </div>
 
           <div class="insp-group" data-modes="necc">
             <label class="checkbox" id="neccBgField">
               <input type="checkbox" id="neccBgInput" checked>
-              Widener stripe background behind the graphic
-              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="See-through NECC graphics, like the bracket, show the Widener stripe background instead of plain black.">i</span>
+              {{short}} background behind the graphic
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="See-through {{league}} graphics, like the bracket, show the {{short}} background instead of plain black.">i</span>
             </label>
-            <p class="card-text">NECC graphics come from the match imported in Prep, Match.</p>
+            <p class="card-text">{{league}} graphics come from the match imported in Prep, Match.</p>
           </div>
 
         </section>
@@ -389,15 +392,15 @@
         <section class="card collapsible" data-section="prep-match">
           <div class="card-head">
             <h2>Match</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Import a match from NECC, or save this setup (teams, text, countdown, scoreboard settings) and load it again later. Loading does not change the overlay on stream or the live score.">i</span>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Import a match from {{league}}, or save this setup (teams, text, countdown, scoreboard settings) and load it again later. Loading does not change the overlay on stream or the live score.">i</span>
           </div>
           <div class="card-body">
             <div class="field">
-              <label for="neccUrlInput"><span class="lbl">Import from NECC / LeagueOS
-                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste the NECC match page link, or an overlay link, and click Import. It fills in both teams, the countdown and the NECC graphics, and saves both teams to the team library.">i</span>
+              <label for="neccUrlInput"><span class="lbl">Import from {{league}} (LeagueOS)
+                <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Paste the {{league}} match page link, or an overlay link, and click Import. It fills in both teams, the countdown and the {{league}} graphics, and saves both teams to the team library.">i</span>
               </span></label>
               <div class="input-row">
-                <input type="text" id="neccUrlInput" placeholder="Paste the NECC match page link">
+                <input type="text" id="neccUrlInput" placeholder="{{importHint}}">
                 <button id="neccFetchBtn" class="btn-accent" type="button">Import</button>
               </div>
               <div class="status-line" id="neccStatus"></div>
@@ -414,7 +417,7 @@
             <div class="field">
               <label for="matchNameInput"><span class="lbl">Save this setup as</span></label>
               <div class="input-row">
-                <input type="text" id="matchNameInput" placeholder="Widener vs Rowan, Week 3">
+                <input type="text" id="matchNameInput" placeholder="{{match}}">
                 <button id="matchSaveBtn" class="btn-secondary" type="button">Save</button>
               </div>
             </div>
@@ -437,7 +440,7 @@
         <section class="card collapsible" data-section="prep-library">
           <div class="card-head">
             <h2>Team library</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Teams saved from Teams or from a NECC import. Use one as team A or B, or edit it here.">i</span>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Teams saved from Teams or from a {{league}} import. Use one as team A or B, or edit it here.">i</span>
           </div>
           <div class="card-body" data-nodraft>
             <input type="search" id="libSearch" class="lib-search" placeholder="Search saved teams">
@@ -515,7 +518,7 @@
               </label>
               <div class="field" style="margin-top:12px">
                 <label for="obsTransitionSelect"><span class="lbl">OBS transition
-                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Pick the Widener stinger you set up in OBS. OBS default keeps whatever transition OBS already has selected.">i</span>
+                  <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Pick the stinger you set up in OBS. OBS default keeps whatever transition OBS already has selected.">i</span>
                 </span></label>
                 <select id="obsTransitionSelect"><option value="">OBS default</option></select>
               </div>
@@ -532,7 +535,7 @@
                 <p>OBS can show this control panel as a dock, right beside your scenes.</p>
                 <ol>
                   <li>In OBS, open <b>Docks</b> then <b>Custom Browser Docks…</b></li>
-                  <li>Give it a name, such as <b>Widener Control</b>.</li>
+                  <li>Give it a name, such as <b>{{short}} Control</b>.</li>
                   <li>Paste the address below, then click <b>Apply</b>.</li>
                 </ol>
               </div>
@@ -547,16 +550,16 @@
         <section class="card collapsible" data-section="set-music" data-nodraft>
           <div class="card-head">
             <h2>Background music</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays on every screen without gameplay: Starting Soon, Be Right Back, Post-Match, Rosters, NECC, and the Rocket League stats screens and menus between games. It fades out when gameplay is on screen.">i</span>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Plays on every screen without gameplay: Starting Soon, Be Right Back, Post-Match, Rosters, {{league}} graphics, and the Rocket League stats screens and menus between games. It fades out when gameplay is on screen.">i</span>
           </div>
           <div class="card-body">
             <details class="help">
               <summary>How does the music play?</summary>
               <div class="help-body">
-                <p>The included track downloads from the team Google Drive (36 MB) the first time it is
+                <p id="musicTrackHelp">The included track downloads from the team Google Drive (36 MB) the first time it is
                 needed, like the game videos. Or pick any audio file on this PC.</p>
-                <p>OBS plays it, through one media source called <b>WU: Music</b> that <b>Build or update
-                scenes</b> adds to every WU scene, so it carries on through scene changes instead of
+                <p>OBS plays it, through one media source called <b>{{prefix}}: Music</b> that <b>Build or update
+                scenes</b> adds to every {{prefix}} scene, so it carries on through scene changes instead of
                 starting over. The app fades it up and down, so the app must be switching your OBS
                 scenes (above) for music to play.</p>
               </div>
@@ -586,7 +589,7 @@
           </div>
         </section>
 
-        <section class="card collapsible" data-section="set-videos" data-nodraft>
+        <section class="card collapsible" data-section="set-videos" id="videosCard" data-nodraft>
           <div class="card-head">
             <h2>Game highlight videos</h2>
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Each game's highlight video downloads from the team Google Drive the first time the game is picked, then plays from this PC. Download them all before a stream so none starts mid-broadcast.">i</span>
@@ -602,8 +605,8 @@
 
         <section class="card collapsible" data-section="set-necc" data-nodraft>
           <div class="card-head">
-            <h2>NECC graphics</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Which NECC graphics get a card on the Live page. They need a match imported first.">i</span>
+            <h2>{{league}} graphics</h2>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Which {{league}} graphics get a card on the Live page. They need a match imported first.">i</span>
           </div>
           <div class="card-body">
             <div class="necc-type-list" id="neccTypeList"></div>
@@ -617,12 +620,12 @@
           </div>
           <div class="card-body">
             <div class="field-row">
-              <label class="grow"><span class="lbl">Twitch</span><input type="text" id="twitchInput" placeholder="wideneresports"></label>
-              <label class="grow"><span class="lbl">Twitter/X</span><input type="text" id="twitterInput" placeholder="wideneresports"></label>
+              <label class="grow"><span class="lbl">Twitch</span><input type="text" id="twitchInput" placeholder="{{social}}"></label>
+              <label class="grow"><span class="lbl">Twitter/X</span><input type="text" id="twitterInput" placeholder="{{social}}"></label>
             </div>
             <div class="field-row">
-              <label class="grow"><span class="lbl">Instagram</span><input type="text" id="instagramInput" placeholder="wideneresports"></label>
-              <label class="grow"><span class="lbl">YouTube</span><input type="text" id="youtubeInput" placeholder="wideneresports"></label>
+              <label class="grow"><span class="lbl">Instagram</span><input type="text" id="instagramInput" placeholder="{{social}}"></label>
+              <label class="grow"><span class="lbl">YouTube</span><input type="text" id="youtubeInput" placeholder="{{social}}"></label>
             </div>
           </div>
         </section>
@@ -728,7 +731,7 @@
 
       <div class="wiz-step" data-step="welcome">
         <h3 id="wizTitle">Set up the stream app</h3>
-        <p>This takes about two minutes: connect OBS, then download the game videos. You can change anything later in Settings.</p>
+        <p id="wizIntro">This takes about two minutes: connect OBS, then download the game videos. You can change anything later in Settings.</p>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="skip">Skip for now</button>
           <button class="btn-accent" type="button" data-wiz="next">Start</button>

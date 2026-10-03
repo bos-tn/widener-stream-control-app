@@ -8,14 +8,18 @@ const { importMatch } = require('./necc');
 const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
+const { profileId, loadProfile, clientBrand, brandCss } = require('./profile');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
 const APP_VERSION = require('./package.json').version;
 
-const GAMES = JSON.parse(fs.readFileSync(path.join(TEMPLATES_DIR, 'games.json'), 'utf8'));
+// The league this build is for (see profile.js): its games, colours, art,
+// OBS scene names and defaults.
+const PROFILE = loadProfile(profileId());
+const GAMES = PROFILE.games;
 
-const DEFAULT_SOCIAL = 'wideneresports';
+const DEFAULT_SOCIAL = PROFILE.socialHandle;
 
 function emptyTeam() {
   return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] };
@@ -123,10 +127,10 @@ const DEFAULT_STATE = {
   layout: 'right',
   clip: '',
   logo: '',
-  montage: true,
+  montage: PROFILE.defaults.montage !== false,
   neccUrl: '',
   neccType: '',
-  // Widener stripe backdrop behind transparent NECC overlays (vs flat black)
+  // Branded backdrop behind transparent league overlays (vs flat black)
   neccBg: true,
   socials: {
     twitch: DEFAULT_SOCIAL,
@@ -205,7 +209,8 @@ function readJsonSafe(file) {
 // The packaged Electron app passes app.getPath('userData') instead, since the
 // app's own install directory lives inside a read-only asar archive.
 function createServer(port, opts = {}) {
-  const dataDir = opts.dataDir || path.join(__dirname, 'data');
+  // In dev, each league other than Widener keeps its own app/data/<id>.
+  const dataDir = opts.dataDir || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
   const stateFile = path.join(dataDir, 'state.json');
   const libraryFile = path.join(dataDir, 'library.json');
   const logosDir = path.join(dataDir, 'logos');
@@ -213,9 +218,11 @@ function createServer(port, opts = {}) {
   // The included music track isn't in the installer: like the montages, it
   // downloads from the team Drive into this PC's data folder on request
   // (OBS reads it from there). A custom file needs no download.
+  // A profile without an included track (music: null) plays only a file
+  // picked on the PC.
   const musicDir = opts.musicDir || process.env.WIDENER_MUSIC_DIR || path.join(dataDir, 'music');
-  const MUSIC_TRACK = { file: 'rl-music-long.m4a', driveId: '1M4encA-tBLZ3dBZzKcqDpvBESad2WX26', bytes: 36077636 };
-  const DEFAULT_MUSIC = path.join(musicDir, MUSIC_TRACK.file);
+  const MUSIC_TRACK = PROFILE.music;
+  const DEFAULT_MUSIC = MUSIC_TRACK ? path.join(musicDir, MUSIC_TRACK.file) : '';
   // Game montages are several GB, so a dev run can point this somewhere other
   // than app/data (which sits inside OneDrive on the dev PC).
   const montageDir = opts.montageDir || process.env.WIDENER_MONTAGE_DIR || path.join(dataDir, 'montages');
@@ -401,6 +408,8 @@ function createServer(port, opts = {}) {
   // connected, none of this runs and the app behaves exactly as before.
   const obs = createObs({
     getOverlayBase: () => `http://localhost:${port}`,
+    prefix: PROFILE.obs.prefix,
+    leagueScene: PROFILE.obs.leagueScene,
     // Someone switched scenes by hand in OBS (or the push did it). With
     // scene-sync on, OBS decides what is actually on program, so the app's
     // idea of "live" follows it: the panel's LIVE marker and live monitor then
@@ -481,7 +490,7 @@ function createServer(port, opts = {}) {
     const m = musicConfig();
     return {
       ...m, db: Math.round(musicDb(m.volume)), path: musicFile(), defaultPath: DEFAULT_MUSIC,
-      download: musicTrack.status().music,
+      download: musicTrack.status().music, hasTrack: !!MUSIC_TRACK,
       customMissing: !!m.file && !fs.existsSync(m.file), playing: musicOn,
       obsConnected: obs.status().connected,
     };
@@ -511,12 +520,12 @@ function createServer(port, opts = {}) {
   // button) asks again, and also retries a failed download.
   function wantMusicTrack(retry) {
     const m = musicConfig();
-    if (m.enabled && !(m.file && fs.existsSync(m.file))) musicTrack.ensure('music', true, retry);
+    if (MUSIC_TRACK && m.enabled && !(m.file && fs.existsSync(m.file))) musicTrack.ensure('music', true, retry);
   }
   let musicHad = null;
   const musicTrack = createMontages({
     dir: musicDir,
-    games: [{ id: 'music', montage: MUSIC_TRACK }],
+    games: MUSIC_TRACK ? [{ id: 'music', montage: MUSIC_TRACK }] : [],
     onChange: () => {
       sendToPanels({ type: 'music', music: musicStatus() });
       // Finished downloading: OBS can have the file now.
@@ -656,6 +665,24 @@ function createServer(port, opts = {}) {
   // Media the overlay itself loads (stinger transition video, fonts, etc).
   app.use('/overlay-assets', express.static(path.join(__dirname, 'public', 'overlay-assets')));
   app.use('/logos', express.static(logosDir));
+  // The league's brand (v1.0.0, see profile.js): its art at /brand/*, its
+  // colours as CSS variables, an optional overlay theme, and window.BRAND for
+  // the overlay and the control panel. Fetched fresh like /overlay, so OBS's
+  // browser cache can never pin an old brand.
+  const noStore = (res) => res.set('Cache-Control', 'no-store');
+  app.use('/brand', express.static(PROFILE.assetsDir));
+  app.get('/brand.js', (req, res) => {
+    noStore(res);
+    res.type('application/javascript').send(`window.BRAND = ${JSON.stringify(clientBrand(PROFILE))};\n`);
+  });
+  app.get('/brand.css', (req, res) => { noStore(res); res.type('text/css').send(brandCss(PROFILE)); });
+  app.get('/brand-theme.css', (req, res) => {
+    noStore(res);
+    res.type('text/css');
+    if (!PROFILE.theme) return res.send('/* no theme for this profile */\n');
+    res.sendFile(PROFILE.theme);
+  });
+  app.get('/api/profile', (req, res) => res.json(clientBrand(PROFILE)));
   // Only finished, verified montages are served; never a .part file.
   app.get('/montages/:file', (req, res) => {
     const file = montages.readyPath(req.params.file);
@@ -665,8 +692,9 @@ function createServer(port, opts = {}) {
     });
   });
 
+  // The profile's game list (profiles/<id>/games.json).
   app.get('/games.json', (req, res) => {
-    res.sendFile(path.join(TEMPLATES_DIR, 'games.json'));
+    res.json(GAMES);
   });
 
   app.get('/api/games', (req, res) => res.json(GAMES));
@@ -790,7 +818,7 @@ function createServer(port, opts = {}) {
   });
 
   app.post('/api/music/download', (req, res) => {
-    musicTrack.ensure('music', true, true);
+    if (MUSIC_TRACK) musicTrack.ensure('music', true, true);
     res.json(musicStatus());
   });
 
@@ -983,7 +1011,7 @@ function createServer(port, opts = {}) {
     });
     if (i > 0) srv.on('error', () => {});
     srv.listen(port, hosts[i], () => {
-      if (i === 0) console.log(`Widener stream overlay server running on http://localhost:${port}`);
+      if (i === 0) console.log(`${PROFILE.appName} overlay server running on http://localhost:${port}`);
     });
   });
   // Closing the returned server closes every listener.
@@ -1128,9 +1156,9 @@ function createServer(port, opts = {}) {
   return server;
 }
 
-module.exports = { createServer, GAMES };
+module.exports = { createServer, GAMES, PROFILE };
 
 if (require.main === module) {
-  const port = process.env.PORT || 4310;
+  const port = process.env.PORT || PROFILE.port;
   createServer(port);
 }

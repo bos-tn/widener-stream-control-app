@@ -11,6 +11,7 @@
       "name": "stream-app-dev",
       "runtimeExecutable": "node",
       "runtimeArgs": ["app/server.js"],
+      "env": { "PORT": "4311" },
       "port": 4311
     },
     {
@@ -19,6 +20,13 @@
       "runtimeArgs": ["app/server.js"],
       "env": { "PORT": "4312", "WIDENER_RL_PORT": "49155" },
       "port": 4312
+    },
+    {
+      "name": "stream-app-lote-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/server.js", "--profile=lote"],
+      "env": { "PORT": "4321" },
+      "port": 4321
     }
   ]
 }

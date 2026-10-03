@@ -1,14 +1,19 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "0.12.0-beta.1",
+  "version": "1.0.0",
   "private": true,
-  "description": "Widener Esports stream overlay control app",
+  "description": "Esports stream overlay control app, one build per league profile",
   "main": "main.js",
   "author": "Widener University Esports",
   "scripts": {
     "start": "electron .",
+    "start:lote": "electron . --profile=lote",
     "server": "node server.js",
-    "dist": "electron-builder --win --publish never"
+    "server:lote": "node server.js --profile=lote",
+    "dist": "node build/dist.js",
+    "dist:widener": "node build/dist.js widener",
+    "dist:lote": "node build/dist.js lote",
+    "icons": "electron build/make-icon.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -34,14 +39,15 @@
       "obs.js",
       "montages.js",
       "rlstats.js",
+      "profile.js",
       "package.json",
       "templates/**/*",
       "public/**/*",
-      "build/icons/**/*"
+      "profiles/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icons/icon.ico"
+      "icon": "profiles/widener/icons/icon.ico"
     },
     "nsis": {
       "oneClick": false,

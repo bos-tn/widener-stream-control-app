@@ -1,10 +1,21 @@
 const path = require('path');
 const { app, BrowserWindow, dialog } = require('electron');
-const { createServer } = require('./server');
+const { createServer, PROFILE } = require('./server');
 
-const PORT = 4310;
-const ICON_PATH = path.join(__dirname, 'build', 'icons', 'icon-256.png');
-const APP_TITLE = 'Widener Esports Stream Control';
+// The league profile this build was made for (see profile.js): its window
+// title, icon and port. Each league's app has its own port, so two leagues'
+// apps on one PC never fight over the same address.
+const PORT = PROFILE.port;
+const ICON_PATH = path.join(PROFILE.iconsDir, 'icon-256.png');
+const APP_TITLE = PROFILE.appName;
+
+// Each league's app keeps its data in its own folder, named after its
+// package name. An installer already carries that name (build/dist.js); a dev
+// run (`npm run start:lote`) still has the shared package.json, so point it
+// at the same folder the installed app would use.
+if (PROFILE.build.packageName && app.getName() !== PROFILE.build.packageName) {
+  app.setPath('userData', path.join(app.getPath('appData'), PROFILE.build.packageName));
+}
 
 function createWindow() {
   // Wide enough for the preview and live monitors side by side (v0.12.0).
@@ -55,7 +66,7 @@ function setupAutoUpdates(win) {
   setInterval(check, UPDATE_CHECK_MS);
 }
 
-// Only one copy of the app can own port 4310 (and the OBS overlays pointed at
+// Only one copy of the app can own its port (and the OBS overlays pointed at
 // it). If a second copy is launched, just focus the existing window instead of
 // dying on a port conflict.
 if (!app.requestSingleInstanceLock()) {

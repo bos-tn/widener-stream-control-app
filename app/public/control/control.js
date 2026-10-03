@@ -15,6 +15,39 @@
 
 const $id = (id) => document.getElementById(id);
 
+// --- Brand (v1.0.0) ------------------------------------------------------------
+//
+// The league's name, logo, team colours and wording come from the app's
+// profile (/brand.js, see profile.js on the server). Page text written as
+// {{league}}, {{name}} and so on is filled in once, at start-up.
+
+const BRAND = window.BRAND || {
+  name: 'Stream Control', shortName: '', appName: 'Stream Control', panelLogo: '',
+  league: { name: 'League', importHint: '' }, obsPrefix: '', socialHandle: '', matchExample: '', homeTeam: '',
+  teamColors: { A: '#0054b8', B: '#f0b310' }, stinger: { type: 'none' }, hasMusicTrack: false,
+};
+const LEAGUE = BRAND.league.name;
+
+function applyBrandText(root) {
+  const tokens = {
+    name: BRAND.name, short: BRAND.shortName, league: LEAGUE, prefix: BRAND.obsPrefix,
+    social: BRAND.socialHandle || 'handle', match: BRAND.matchExample,
+    importHint: BRAND.league.importHint || `Paste the ${LEAGUE} match page link`,
+  };
+  const fill = (t) => t.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in tokens ? tokens[k] : m));
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeValue.includes('{{')) n.nodeValue = fill(n.nodeValue);
+  }
+  const attrs = ['placeholder', 'data-tip', 'title', 'label', 'aria-label', 'alt'];
+  root.querySelectorAll('[placeholder], [data-tip], [title], [label], [aria-label], [alt]').forEach((el) => {
+    attrs.forEach((a) => { const v = el.getAttribute(a); if (v && v.includes('{{')) el.setAttribute(a, fill(v)); });
+  });
+}
+applyBrandText(document.body);
+document.title = BRAND.appName;
+if (BRAND.panelLogo) $id('brandLogo').src = BRAND.panelLogo;
+
 // --- Element refs ------------------------------------------------------------
 
 const layoutEl = $id('layout');
@@ -148,6 +181,10 @@ function formatDuration(sec) {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 }
 
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -263,7 +300,7 @@ const MODE_DEFAULTS = {
 };
 const MODE_NAMES = {
   'starting-soon': 'Starting Soon', 'post-match': 'Post-Match', roster: 'Rosters',
-  brb: 'Be Right Back', scoreboard: 'Scoreboard', necc: 'NECC graphic',
+  brb: 'Be Right Back', scoreboard: 'Scoreboard', necc: `${LEAGUE} graphic`,
 };
 
 let ws = null;
@@ -409,7 +446,7 @@ function refreshFileFields() { fileFields.forEach((f) => f.render()); }
 // loadable from the team library. Each player is a plain { name, gamertag }.
 // A filled-in team folds down to one line with an Edit button.
 
-const DEFAULT_COLORS = { A: '#0054b8', B: '#f0b310' };
+const DEFAULT_COLORS = { A: BRAND.teamColors.A, B: BRAND.teamColors.B };
 function emptyRoster() { return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] }; }
 let rosterA = emptyRoster();
 let rosterB = emptyRoster();
@@ -1350,6 +1387,8 @@ function renderMontages() {
   });
   $id('montageTotal').textContent = total ? `${have} of ${total} on this PC` : '';
   $id('montageAllBtn').disabled = have === total;
+  // No game in this league's list has a highlight video.
+  $id('videosCard').hidden = total === 0;
   if (!$id('wizard').hidden) renderWizVideos();
 }
 
@@ -1477,7 +1516,7 @@ function isLiveOption(value) {
 function overlayLabel(mode, neccType) {
   if (mode === 'necc') {
     const t = NECC_TYPES.find((x) => x.key === neccType);
-    return t ? t.label : 'NECC graphic';
+    return t ? t.label : `${LEAGUE} graphic`;
   }
   return MODE_NAMES[mode] || '';
 }
@@ -1485,7 +1524,7 @@ function overlayLabel(mode, neccType) {
 function thumbHtml(kind, key) {
   if (kind === 'necc') {
     const t = NECC_TYPES.find((x) => x.key === key);
-    return `<span class="ov-thumb"><span class="t-necc">NECC<small>${esc(t ? t.label : key)}</small></span></span>`;
+    return `<span class="ov-thumb"><span class="t-necc">${esc(LEAGUE)}<small>${esc(t ? t.label : key)}</small></span></span>`;
   }
   const vt = viewTextFor(key);
   const a = rosterPayload(rosterA), b = rosterPayload(rosterB);
@@ -1600,7 +1639,7 @@ function gotoImport(key) {
   const t = NECC_TYPES.find((x) => x.key === key);
   setPage('prep');
   openSection('prep-match');
-  neccStatus.textContent = `Import a match to use ${t ? t.label : 'that NECC graphic'}.`;
+  neccStatus.textContent = `Import a match to use ${t ? t.label : `that ${LEAGUE} graphic`}.`;
   neccStatus.classList.add('error');
   neccUrlInput.focus();
   neccUrlInput.scrollIntoView({ block: 'center' });
@@ -1740,12 +1779,15 @@ neccFetchBtn.addEventListener('click', async () => {
     if (data.game) teamInput.value = data.game;
     neccBestOf = data.bestOf || null;
     if (neccBestOf) sbBestOfInput.value = String(neccBestOf);
-    // "vs <opponent>" goes on Starting Soon, whichever overlay is in the
-    // preview while importing.
-    const widener = data.teams.find((t) => /widener/i.test(t.org || t.name || ''));
-    const opponent = data.teams.find((t) => t !== widener) || data.teams[1];
-    if (opponent && opponent.name) {
-      const sub = `vs ${opponent.name}`;
+    // The Starting Soon subtitle, whichever overlay is in the preview while
+    // importing: "vs <opponent>" for a school's own stream (the profile's
+    // homeTeam), "<team A> vs <team B>" for a league's neutral stream.
+    const homeRe = BRAND.homeTeam ? new RegExp(escapeRe(BRAND.homeTeam), 'i') : null;
+    const home = homeRe ? data.teams.find((t) => homeRe.test(t.org || t.name || '')) : null;
+    const opponent = home ? data.teams.find((t) => t !== home) : null;
+    const [ta, tb] = data.teams;
+    const sub = opponent && opponent.name ? `vs ${opponent.name}` : (ta && tb && ta.name && tb.name ? `${ta.name} vs ${tb.name}` : '');
+    if (sub) {
       if (currentMode === 'starting-soon') subtitleInput.value = sub;
       else viewTexts['starting-soon'] = { ...(viewTexts['starting-soon'] || MODE_DEFAULTS['starting-soon']), subtitle: sub };
     }
@@ -1760,7 +1802,7 @@ neccFetchBtn.addEventListener('click', async () => {
     }
 
     const urlCount = Object.keys(lastImportedOverlayUrls).length;
-    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${data.bestOf ? `, best of ${data.bestOf}` : ''}${urlCount ? ` (${urlCount} NECC graphics ready)` : ' (no NECC graphics were found for this match)'}. Both teams were saved to the team library.`;
+    neccStatus.textContent = `Loaded ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${data.bestOf ? `, best of ${data.bestOf}` : ''}${urlCount ? ` (${urlCount} ${LEAGUE} graphics ready)` : ` (no ${LEAGUE} graphics were found for this match)`}. Both teams were saved to the team library.`;
     // Every view's text, so the Starting Soon subtitle lands even when
     // another overlay is in the preview.
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1835,7 +1877,7 @@ function renderTeamCards() {
   const q = libSearch.value.trim().toLowerCase();
   libTeamList.innerHTML = '';
   if (!library.teams.length) {
-    libTeamList.innerHTML = '<div class="lib-empty">No saved teams yet. Use Save to library under Teams, or import a NECC match.</div>';
+    libTeamList.innerHTML = `<div class="lib-empty">No saved teams yet. Use Save to library under Teams, or import a ${esc(LEAGUE)} match.</div>`;
     return;
   }
   const list = library.teams.filter((t) => !q || `${t.name} ${t.tag}`.toLowerCase().includes(q));
@@ -2381,7 +2423,7 @@ function renderObsStatus(st) {
   if (stingerInfo) {
     stingerInfo.setAttribute('data-tip', obsSceneSyncActive
       ? 'Off while the app switches your OBS scenes, because OBS plays its own transition. Two would stack on every push.'
-      : 'Plays the curtain transition on stream whenever you push, hiding the switch.');
+      : `Plays the ${BRAND.shortName} transition on stream whenever you push, hiding the switch.`);
   }
 
   // Header light: only for operators who use the OBS connection.
@@ -2535,16 +2577,22 @@ function renderMusic(m) {
   if (!m) return;
   musicEnable.checked = m.enabled;
   const dl = m.download || {};
-  const usingTrack = !m.file || m.customMissing;
-  musicFileText.value = m.file ? fileLabel(m.file) : 'Included track';
+  // A league profile may come without an included track (v1.0.0): then only
+  // a file picked on this PC plays.
+  const hasTrack = m.hasTrack !== false;
+  const usingTrack = hasTrack && (!m.file || m.customMissing);
+  musicFileText.value = m.file ? fileLabel(m.file) : (hasTrack ? 'Included track' : 'No file picked');
   musicFileText.title = m.path || '';
   if (document.activeElement !== musicVolume) musicVolume.value = String(m.volume);
   musicVolumeText.textContent = musicVolText(Number(musicVolume.value));
+  musicDefaultBtn.hidden = !hasTrack;
   musicDefaultBtn.disabled = !m.file;
   musicDownloadBtn.hidden = !usingTrack || dl.have || dl.downloading || dl.queued;
   let text;
   let error = false;
-  if (usingTrack && dl.downloading) text = `Downloading the included track: ${Math.floor(100 * dl.received / dl.bytes)}%`;
+  if (!hasTrack && !m.file) text = 'Pick an audio file to play between games.';
+  else if (!hasTrack && m.customMissing) { text = 'The music file is missing. Pick it again.'; error = true; }
+  else if (usingTrack && dl.downloading) text = `Downloading the included track: ${Math.floor(100 * dl.received / dl.bytes)}%`;
   else if (usingTrack && dl.queued) text = 'The included track is waiting to download.';
   else if (usingTrack && !dl.have) {
     text = dl.error ? `Download failed: ${dl.error}` : 'The included track is not downloaded yet.';
@@ -2612,7 +2660,7 @@ function renderRemoteList() {
   const list = $id('remoteList');
   if (!list) return;
   const base = `${location.origin}/api/remote/`;
-  const necc = NECC_TYPES.filter((t) => enabledNeccTypes.has(t.key)).map((t) => [`NECC ${t.label}`, `overlay/necc-${t.key}`]);
+  const necc = NECC_TYPES.filter((t) => enabledNeccTypes.has(t.key)).map((t) => [`${LEAGUE} ${t.label}`, `overlay/necc-${t.key}`]);
   list.innerHTML = '';
   REMOTE_ACTIONS.slice(0, 7).concat(necc, REMOTE_ACTIONS.slice(7)).forEach(([label, path]) => {
     const row = document.createElement('div');
@@ -2643,9 +2691,12 @@ const WIZ_SINGLE = ['welcome', 'choice', 'url', 'videos', 'done'];
 let wizStep = 'welcome';
 let wizardDecided = false;
 
+// A league whose games have no highlight videos skips the download step.
+function hasGameVideos() { return Object.keys(montageStatus).length > 0; }
 function wizOrder() {
   const v = (document.querySelector('input[name="wizObsMode"]:checked') || {}).value;
-  return v === 'single' ? WIZ_SINGLE : WIZ_SYNC;
+  const order = v === 'single' ? WIZ_SINGLE : WIZ_SYNC;
+  return hasGameVideos() ? order : order.filter((s) => s !== 'videos');
 }
 function showWizStep(step) {
   wizStep = step;
@@ -2659,7 +2710,13 @@ function showWizStep(step) {
   const focus = wizard.querySelector(`.wiz-step[data-step="${step}"] input:not([type=radio]), .wiz-step[data-step="${step}"] [data-wiz="next"], .wiz-step[data-step="${step}"] [data-wiz="finish"]`);
   if (focus) focus.focus();
 }
-function openWizard() { wizard.hidden = false; showWizStep('welcome'); }
+function openWizard() {
+  $id('wizIntro').textContent = hasGameVideos()
+    ? 'This takes about two minutes: connect OBS, then download the game videos. You can change anything later in Settings.'
+    : 'This takes about two minutes: connect OBS. You can change anything later in Settings.';
+  wizard.hidden = false;
+  showWizStep('welcome');
+}
 function closeWizard() {
   wizard.hidden = true;
   if (!prefs.setupDone) savePrefs({ setupDone: true });
@@ -2740,8 +2797,12 @@ $id('wizardOpenBtn').addEventListener('click', openWizard);
 
 // --- Init -----------------------------------------------------------------------------------------------
 
+// A league with no transition at all has nothing to switch off, and one with
+// no included music track only plays a file picked on this PC.
+if (BRAND.stinger.type === 'none') stingerInput.closest('label').hidden = true;
+if (!BRAND.hasMusicTrack) $id('musicTrackHelp').textContent = 'Pick any audio file on this PC to play between games.';
 try { rosterOpen = JSON.parse(lsGet(ROSTER_OPEN_KEY)) || {}; } catch (e) { rosterOpen = {}; }
-makeFileField(logoInput, { accept: 'image/*', emptyText: 'Default Widener logo' });
+makeFileField(logoInput, { accept: 'image/*', emptyText: `Default ${BRAND.shortName} logo` });
 makeFileField(clipInput, { accept: 'video/*', emptyText: "The game's highlight video" });
 tsLogoField = makeFileField(tsLogo, { accept: 'image/*', emptyText: 'No logo' });
 buildRosterEditor('A');

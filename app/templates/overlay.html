@@ -2,7 +2,9 @@
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Widener Esports Stream Overlay</title>
+<title>Stream Overlay</title>
+<!-- The league's brand (v1.0.0): window.BRAND, from the app's profile. -->
+<script src="/brand.js"></script>
 <style>
   /* Fonts ship with the app (v0.9.0). They used to load from Google Fonts,
      so a slow or dropped campus connection swapped in a fallback font on
@@ -14,20 +16,21 @@
   @font-face{ font-family:'Kanit'; font-weight:600; font-style:normal; font-display:block; src:url(/overlay-assets/fonts/kanit-latin-600-normal.woff2) format('woff2'); }
   @font-face{ font-family:'Kanit'; font-weight:700; font-style:normal; font-display:block; src:url(/overlay-assets/fonts/kanit-latin-700-normal.woff2) format('woff2'); }
   @font-face{ font-family:'Kanit'; font-weight:800; font-style:normal; font-display:block; src:url(/overlay-assets/fonts/kanit-latin-800-normal.woff2) format('woff2'); }
+  /* Brand colours (v1.0.0). /brand.css, loaded after this block, sets the
+     --brand-* values from the league profile (profiles/<id>/profile.json);
+     these are only fallbacks. */
   :root{
-    --widener-blue:#0054B8;
-    --widener-gold:#F0B310;
-    --bg1:#071022;
-    --bg2:#0a1b36;
-    --text:#eaf2ff;
-    --muted:#a9b7d6;
+    --brand-primary:#0054B8;
+    --brand-accent:#F0B310;
+    --text:var(--brand-text, #eaf2ff);
+    --muted:var(--brand-muted, #a9b7d6);
   }
   html,body{height:100%;margin:0}
   body{
     font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     color:var(--text);
     overflow:hidden;
-    background: radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%);
+    background: var(--brand-ground, radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%));
   }
   .bg-gradient{
     position:fixed; inset:0;
@@ -41,14 +44,18 @@
     position:fixed; inset:-20vh -20vw; opacity:.15; pointer-events:none;
     background:
       repeating-linear-gradient(-12deg,
-        var(--widener-blue) 0 18px,
+        var(--brand-primary) 0 18px,
         transparent 18px 48px,
-        var(--widener-gold) 48px 66px,
+        var(--brand-accent) 48px 66px,
         transparent 66px 96px);
     animation: drift 40s linear infinite;
     filter: blur(2px);
   }
   @keyframes drift{ from{transform:translate3d(-5vw,-2vh,0) scale(1.1)} to{transform:translate3d(5vw,2vh,0) scale(1.1)} }
+  /* Background layers for a league theme (v1.0.0). Hidden unless the
+     profile's theme.css styles them, as LotE's Mark Shine does. */
+  .brand-bg{ display:none; position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .brand-bg i{ position:absolute; display:block; }
 
   .wrap{ position:relative; height:100%; width:100%; display:grid; align-items:center; justify-items:center; padding:3.5vh 4vw; box-sizing:border-box; }
   .frame:before, .frame:after{ content:""; position:absolute; inset:30px; border:2px solid rgba(255,255,255,.06); border-radius:24px; pointer-events:none; }
@@ -67,7 +74,7 @@
 
   .bar{
     position:absolute; top:108px; left:0; right:0; height:6px;
-    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+    background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent));
     box-shadow:0 10px 25px rgba(0,0,0,.35);
     transform-origin: left center; animation: widen 1.2s ease-out 0.2s both;
     overflow:hidden;
@@ -93,7 +100,7 @@
   }
   .montage::after{
     content:""; position:absolute; inset:-1px; border-radius:18px; padding:1px;
-    background: linear-gradient(90deg,var(--widener-blue),var(--widener-gold),var(--widener-blue));
+    background: linear-gradient(90deg,var(--brand-primary),var(--brand-accent),var(--brand-primary));
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor; mask-composite: exclude;
     animation: borderflow 6s linear infinite; opacity:.45;
@@ -137,15 +144,15 @@
     padding:14px 18px; border-radius:999px; font-weight:600; letter-spacing:.03em;
     backdrop-filter: blur(6px);
   }
-  .dot{width:10px; height:10px; border-radius:50%; background:var(--widener-gold); box-shadow:0 0 12px var(--widener-gold);}
+  .dot{width:10px; height:10px; border-radius:50%; background:var(--brand-accent); box-shadow:0 0 12px var(--brand-accent);}
   .count{ font-variant-numeric: tabular-nums; font-family:'Kanit', system-ui, sans-serif; font-size:min(6vw, 64px); letter-spacing:.02em; }
   .soonPulse{ animation: glow 1.6s ease-in-out infinite; }
-  @keyframes glow{ 0%,100%{ text-shadow:0 0 0 rgba(240,179,16,0) } 50%{ text-shadow:0 0 24px rgba(240,179,16,.55) } }
+  @keyframes glow{ 0%,100%{ text-shadow:0 0 0 transparent } 50%{ text-shadow:0 0 24px var(--brand-accent-glow, rgba(240,179,16,.55)) } }
   .socials{ position:absolute; bottom:36px; left:48px; right:48px; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; }
   .handles{display:flex; flex-wrap:wrap; gap:10px 14px;}
   .tag{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:999px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.06); font-weight:600; letter-spacing:.02em; }
   .tag svg{width:18px; height:18px; opacity:.9}
-  .badge{ background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:800; font-family:'Kanit', system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+  .badge{ background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:800; font-family:'Kanit', system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; }
   .next{ font-weight:600; color:var(--muted); }
 
   .roster-view{
@@ -176,7 +183,7 @@
   .roster-player .realname{ color:var(--muted); font-size:clamp(10px, calc(90px / var(--roster-count, 5)), 14px); }
   .roster-vs{
     align-self:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800;
-    font-size:clamp(24px,3vw,40px); color:var(--widener-gold);
+    font-size:clamp(24px,3vw,40px); color:var(--brand-accent);
     text-shadow:0 4px 16px rgba(0,0,0,.5);
   }
 
@@ -203,7 +210,7 @@
      viewport it's in - the same trick the control panel preview uses. That
      keeps it pixel-exact on a 1080p OBS source and still correct in the
      smaller preview pane.
-     It draws its own full-screen layer over the standard Widener frame, and
+     It draws its own full-screen layer over the standard frame, and
      deliberately reuses the page's existing stripes + sheen backdrop rather
      than shipping its own copy. */
   .brb-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
@@ -216,7 +223,7 @@
   /* Trapezoid brand accents, top-left and bottom-right. */
   .brb-trap{
     position:absolute; width:760px; height:170px; pointer-events:none; opacity:.5;
-    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+    background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent));
   }
   .brb-trap-tl{ top:0; left:0; clip-path:polygon(0 0, 70% 0, 40% 100%, 0 100%); }
   .brb-trap-br{ bottom:0; right:0; clip-path:polygon(100% 0, 60% 0, 30% 100%, 100% 100%); }
@@ -245,7 +252,7 @@
     margin:0; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-style:italic;
     transform:skewX(-8deg); transform-origin:left center;
     font-size:150px; line-height:.9; letter-spacing:1px; text-transform:uppercase; white-space:nowrap;
-    background: linear-gradient(90deg, var(--widener-gold) 0%, var(--text) 85%);
+    background: linear-gradient(90deg, var(--brand-accent) 0%, var(--text) 85%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
     animation: brb-wipe 1.1s cubic-bezier(.22,1,.36,1) both;
   }
@@ -253,7 +260,7 @@
   .brb-subrow{ display:flex; align-items:flex-end; gap:48px; margin-top:14px; }
   .brb-bar{
     width:730px; height:5px; box-shadow:0 10px 25px rgba(0,0,0,.35); transform-origin:left center;
-    background: linear-gradient(90deg, var(--widener-blue), var(--widener-gold));
+    background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent));
     animation: widen 1s cubic-bezier(.22,1,.36,1) both;
   }
   .brb-sub{
@@ -268,7 +275,7 @@
     background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(6px);
     font-weight:600; font-size:16px; letter-spacing:.02em; color:var(--text);
   }
-  .brb-pill svg{ width:18px; height:18px; fill:var(--widener-gold); flex-shrink:0; }
+  .brb-pill svg{ width:18px; height:18px; fill:var(--brand-accent); flex-shrink:0; }
 
   /* Match scoreboard (v0.8.0 as Smash-only, all games since v0.9.0). Unlike
      every other view this is an in-game overlay: the page goes fully
@@ -280,7 +287,8 @@
      like the BRB view. */
   body[data-mode="scoreboard"]{ background:transparent; }
   body[data-mode="scoreboard"] .stripes,
-  body[data-mode="scoreboard"] .bg-gradient{ display:none; }
+  body[data-mode="scoreboard"] .bg-gradient,
+  body[data-mode="scoreboard"] .brand-bg{ display:none !important; }
   .sb-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
   .sb-view.active{ display:block; }
   .sb-stage{ position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; }
@@ -292,6 +300,11 @@
       radial-gradient(900px 500px at 50% 60%, rgba(0,84,184,.22), transparent 70%),
       repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 14px, transparent 14px 28px),
       #0b0f18;
+    /* The glow in the league's colour where the browser can mix colours. */
+    background:
+      radial-gradient(900px 500px at 50% 60%, color-mix(in srgb, var(--brand-primary) 24%, transparent), transparent 70%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 14px, transparent 14px 28px),
+      #0b0f18;
   }
   body[data-backdrop="1"] .sb-preview-bg{ display:grid; place-items:center; }
   .sb-preview-bg span{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:34px;
@@ -300,9 +313,9 @@
   /* Flat panel colours shared by every scoreboard part (v0.11.0 cleanup:
      the earlier gradients, glows and deep soft shadows read as blurry over
      gameplay). */
-  .sb-view{ --sb-panel:rgba(9,19,40,.96); --sb-dark:#050b1a; }
+  .sb-view{ --sb-panel:var(--brand-panel, rgba(9,19,40,.96)); --sb-dark:var(--brand-panel-dark, #050b1a); }
   .sb{
-    --a:#0054B8; --b:#F0B310; --a-ink:#fff; --b-ink:#111;
+    --a:var(--brand-team-a, #0054B8); --b:var(--brand-team-b, #F0B310); --a-ink:#fff; --b-ink:#111;
     position:absolute; top:22px; left:50%; transform:translateX(-50%);
     display:grid; grid-template-columns:470px 96px 190px 96px 470px; grid-template-rows:76px auto;
     font-family:'Inter', system-ui, sans-serif; color:var(--text);
@@ -332,7 +345,7 @@
   .sb-logo[hidden]{ display:none; }
   .sb-names{ display:flex; flex-direction:column; min-width:0; line-height:1; }
   .sb-team.right .sb-names{ align-items:flex-end; text-align:right; }
-  .sb-tag{ font-weight:700; font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--widener-gold); margin-bottom:6px; }
+  .sb-tag{ font-weight:700; font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--brand-accent); margin-bottom:6px; }
   .sb-tag:empty{ display:none; }
   .sb-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:32px; text-transform:uppercase;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; letter-spacing:.02em; }
@@ -349,7 +362,7 @@
 
   .sb-mid{
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
-    background:var(--sb-dark); border-bottom:3px solid var(--widener-gold);
+    background:var(--sb-dark); border-bottom:3px solid var(--brand-accent);
   }
   .sb-set{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
   .sb-bo{ font-weight:700; font-size:12px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
@@ -359,7 +372,7 @@
     grid-column:3; grid-row:2; justify-self:center; align-self:start;
     white-space:nowrap; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis;
     padding:7px 20px 8px; font-weight:800; font-size:13px; letter-spacing:.16em; text-transform:uppercase;
-    background:var(--widener-blue); color:#fff;
+    background:var(--brand-primary); color:#fff;
     clip-path:polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%);
   }
   .sb-round:empty{ display:none; }
@@ -372,17 +385,17 @@
   .sb-stocks-hidden .sb-crew{ display:none; }
   .sb-left-count{
     flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-width:70px; padding:4px 8px; background:rgba(7,16,34,.9); border-radius:8px;
+    min-width:70px; padding:4px 8px; background:var(--brand-chip, rgba(7,16,34,.9)); border-radius:8px;
     border-bottom:3px solid var(--c);
   }
   .sb-left-count b{ font-family:'Kanit', system-ui, sans-serif; font-size:30px; line-height:1; font-variant-numeric:tabular-nums; }
   .sb-left-count small{ font-size:9px; font-weight:700; letter-spacing:.2em; color:var(--muted); margin-top:2px; }
   .sb-chip{
     flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px;
-    padding:6px 8px 7px; background:rgba(7,16,34,.86); border-radius:8px;
+    padding:6px 8px 7px; background:var(--brand-chip, rgba(7,16,34,.86)); border-radius:8px;
     border-top:3px solid transparent; transition:opacity .3s, border-color .3s;
   }
-  .sb-chip.active{ border-top-color:var(--widener-gold); background:rgba(14,30,62,.96); }
+  .sb-chip.active{ border-top-color:var(--brand-accent); background:var(--brand-chip-active, rgba(14,30,62,.96)); }
   .sb-chip.gone{ opacity:.38; }
   .sb-chip.gone .sb-pname{ text-decoration:line-through; }
   .sb-pname{ font-weight:700; font-size:17px; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -408,11 +421,11 @@
   .sbc-head{
     display:flex; justify-content:space-between; align-items:center;
     padding:8px 14px; background:var(--sb-dark);
-    border-bottom:3px solid var(--widener-gold); border-radius:6px 6px 0 0;
+    border-bottom:3px solid var(--brand-accent); border-radius:6px 6px 0 0;
   }
   .sbc-set{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:20px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
   .sbc-bo{ font-weight:700; font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
-  .sbc-row{ display:flex; align-items:center; gap:12px; height:56px; padding-left:0; background:rgba(7,16,34,.92); }
+  .sbc-row{ display:flex; align-items:center; gap:12px; height:56px; padding-left:0; background:var(--brand-chip, rgba(7,16,34,.92)); }
   .sbc-row + .sbc-row{ border-top:1px solid rgba(255,255,255,.07); }
   .sbc-row:last-of-type{ border-radius:0 0 6px 6px; overflow:hidden; }
   .sbc.has-round .sbc-row:last-of-type{ border-radius:0; }
@@ -428,7 +441,7 @@
     background:var(--c); color:var(--ink); }
   .sbc-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
   .sbc-round{ padding:7px 14px 8px; font-weight:800; font-size:12px; letter-spacing:.18em; text-transform:uppercase;
-    background:var(--widener-blue); color:#fff; border-radius:0 0 6px 6px;
+    background:var(--brand-primary); color:#fff; border-radius:0 0 6px 6px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sbc-round:empty{ display:none; }
 
@@ -442,13 +455,13 @@
   .rl-only{ display:none; }
   .sb-view.rl .sb{ display:none; }
   .sb-view.rl .rl-only{ display:block; }
-  .rl-only{ --rl-ink:#071022; --rl-white:#f3f6fb; }
+  .rl-only{ --rl-ink:var(--brand-ink-dark, #071022); --rl-white:#f3f6fb; }
 
   .rlb{ position:absolute; top:18px; left:50%; transform:translateX(-50%); width:640px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); animation: rlb-in .5s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rlb-in{ from{ opacity:0; transform:translate(-50%,-24px) } to{ opacity:1; transform:translate(-50%,0) } }
   .rlb-top{ height:34px; display:flex; align-items:center; justify-content:center; gap:14px;
-    background:var(--sb-dark); color:#c9d6ee; font-family:'Kanit', system-ui, sans-serif; font-weight:700;
+    background:var(--sb-dark); color:var(--brand-soft-text, #c9d6ee); font-family:'Kanit', system-ui, sans-serif; font-weight:700;
     font-size:17px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; overflow:hidden; }
   .rlb-top i{ width:2px; height:16px; background:rgba(234,242,255,.35); }
   .rlb-main{ display:grid; grid-template-columns:112px 100px 216px 100px 112px; height:86px; }
@@ -460,15 +473,15 @@
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:64px; line-height:1; font-variant-numeric:tabular-nums; }
   .rlb-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
   .rlb-clock{ display:grid; place-items:center; background:var(--rl-white); color:var(--rl-ink);
-    border-bottom:4px solid var(--widener-gold); font-family:'Kanit', system-ui, sans-serif; font-weight:800;
+    border-bottom:4px solid var(--brand-accent); font-family:'Kanit', system-ui, sans-serif; font-weight:800;
     font-size:60px; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:.01em; transition:background .2s, color .2s; }
-  .rlb-clock.ot{ background:var(--widener-gold); border-bottom-color:var(--rl-ink); }
+  .rlb-clock.ot{ background:var(--brand-accent); border-bottom-color:var(--rl-ink); }
   .rlb-clock.word{ font-size:34px; letter-spacing:.14em; text-transform:uppercase; }
-  .rlb-clock.replay{ background:var(--widener-blue); color:#fff; }
-  .rlb-clock.paused{ background:#2c3954; color:#fff; }
+  .rlb-clock.replay{ background:var(--brand-primary); color:#fff; }
+  .rlb-clock.paused{ background:var(--brand-paused, #2c3954); color:#fff; }
   .rlb-foot{ display:grid; grid-template-columns:112px 208px 208px 112px; height:28px; }
   .rlb-abbr{ display:grid; place-items:center; background:var(--sb-dark); font-family:'Kanit', system-ui, sans-serif;
-    font-weight:700; font-size:16px; letter-spacing:.14em; color:#c9d6ee; text-transform:uppercase; white-space:nowrap; overflow:hidden; }
+    font-weight:700; font-size:16px; letter-spacing:.14em; color:var(--brand-soft-text, #c9d6ee); text-transform:uppercase; white-space:nowrap; overflow:hidden; }
   .rlb-pips{ display:flex; align-items:center; gap:6px; padding:0 10px; background:var(--sb-dark); }
   .rlb-pips.left{ justify-content:flex-end; }
   .rlb-pips i{ width:34px; height:7px; background:var(--c); }
@@ -484,7 +497,7 @@
   .rl-team.left.off{ transform:translateX(-30px); }
   .rl-team.right.off{ transform:translateX(30px); }
   .rl-p{ position:relative; height:44px; display:flex; align-items:center; gap:10px; padding:0 18px 4px 20px;
-    background:rgba(5,11,26,.88); transition:opacity .3s, background .2s; }
+    background:var(--brand-chip, rgba(5,11,26,.88)); transition:opacity .3s, background .2s; }
   .rl-team.right .rl-p{ flex-direction:row-reverse; }
   .rl-p-name{ flex:1 1 auto; min-width:0; font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:21px;
     text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -495,7 +508,7 @@
   .rl-p-bar{ position:absolute; left:0; right:0; bottom:0; height:4px; background:rgba(255,255,255,.07); }
   .rl-p-bar b{ position:absolute; top:0; bottom:0; left:0; width:0; background:var(--c); transition:width .12s linear; }
   .rl-team.right .rl-p-bar b{ left:auto; right:0; }
-  .rl-p.full .rl-p-bar b{ background:var(--widener-gold); }
+  .rl-p.full .rl-p-bar b{ background:var(--brand-accent); }
   .rl-p.target{ background:var(--c); color:var(--ink); }
   .rl-p.target .rl-p-bar{ background:rgba(0,0,0,.22); }
   .rl-p.target .rl-p-bar b{ background:var(--rl-white); }
@@ -510,7 +523,7 @@
   .rl-goal-tag{ display:grid; place-items:center; padding:0 22px; background:var(--c); color:var(--ink);
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:27px; letter-spacing:.14em; }
   .rl-goal-body{ display:flex; align-items:center; gap:20px; padding:0 24px;
-    background:var(--sb-panel); border-bottom:3px solid var(--widener-gold); white-space:nowrap; }
+    background:var(--sb-panel); border-bottom:3px solid var(--brand-accent); white-space:nowrap; }
   .rl-goal-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:26px; text-transform:uppercase; letter-spacing:.02em; }
   .rl-goal-meta{ font-weight:700; font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
   .rl-goal-meta b{ color:var(--text); }
@@ -521,8 +534,8 @@
   .sb-view.rls-on .rl-boost, .sb-view.rls-on .rl-sample{ visibility:hidden; }
 
   /* Full-screen stats screens: one game's stats, and the series overview.
-     Opaque, so they cover the game capture. Widener stripes and a big faint
-     W in the background, square-edged panels in front. */
+     Opaque, so they cover the game capture. The brand background and a big faint
+     league mark behind, square-edged panels in front. */
   .rls{ display:none; position:absolute; inset:0; overflow:hidden; color:var(--text);
     background:
       repeating-linear-gradient(-12deg, rgba(0,84,184,.07) 0 18px, transparent 18px 48px, rgba(240,179,16,.035) 48px 66px, transparent 66px 96px),
@@ -531,19 +544,19 @@
   @keyframes rls-in{ from{ clip-path:inset(0 0 100% 0) } to{ clip-path:inset(0 0 0 0) } }
   .rls.on.cut{ animation:none; }
   .rls::before{ content:""; position:absolute; right:-80px; bottom:-120px; width:760px; height:760px; background:#eaf2ff; opacity:.025;
-    -webkit-mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; }
+    -webkit-mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat; mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat; }
   .rls > *{ position:relative; }
 
   .rls-head{ position:absolute; top:58px; left:50%; transform:translateX(-50%); width:1720px; }
   .rls-top{ height:46px; display:flex; align-items:center; justify-content:center; gap:16px; background:var(--sb-dark);
-    font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:24px; letter-spacing:.18em; text-transform:uppercase; color:#c9d6ee; }
+    font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:24px; letter-spacing:.18em; text-transform:uppercase; color:var(--brand-soft-text, #c9d6ee); }
   .rls-top i{ width:2px; height:22px; background:rgba(234,242,255,.35); }
   .rls-row{ display:grid; grid-template-columns:1fr 116px 116px 236px 116px 116px 1fr; height:112px; }
   .rls-name{ position:relative; display:flex; align-items:center; justify-content:center; padding:0 30px; min-width:0;
     background:var(--sb-panel); border-bottom:6px solid var(--c); }
   .rls-name span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:50px; text-transform:uppercase;
     letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .rls-name.win::before{ content:"Winner"; position:absolute; top:-30px; padding:4px 14px; background:var(--widener-gold); color:var(--rl-ink);
+  .rls-name.win::before{ content:"Winner"; position:absolute; top:-30px; padding:4px 14px; background:var(--brand-accent); color:var(--rl-ink);
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:16px; letter-spacing:.2em; text-transform:uppercase; }
   .rls-logo{ display:grid; place-items:center; background:var(--sb-dark); }
   .rls-logo img{ width:88px; height:88px; object-fit:contain; }
@@ -552,8 +565,8 @@
   .rls-score{ display:grid; place-items:center; background:var(--c); color:var(--ink); font-family:'Kanit', system-ui, sans-serif;
     font-weight:800; font-size:84px; line-height:1; font-variant-numeric:tabular-nums; }
   .rls-center{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
-    background:var(--rl-white); color:var(--rl-ink); border-bottom:6px solid var(--widener-gold); }
-  .rls-center small{ font-weight:800; font-size:15px; letter-spacing:.24em; text-transform:uppercase; color:#46546e; }
+    background:var(--rl-white); color:var(--rl-ink); border-bottom:6px solid var(--brand-accent); }
+  .rls-center small{ font-weight:800; font-size:15px; letter-spacing:.24em; text-transform:uppercase; color:var(--brand-ink-muted, #46546e); }
   .rls-center b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:46px; line-height:.95; text-transform:uppercase; letter-spacing:.02em; }
   .rls-pips{ display:flex; justify-content:center; gap:22px; margin-top:12px; }
   .rls-pips span{ display:flex; gap:8px; }
@@ -569,14 +582,14 @@
     border-bottom:5px solid var(--c); min-width:0; }
   .rls-pname span{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:28px; text-transform:uppercase;
     letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .rls-pname em{ visibility:hidden; margin-bottom:8px; padding:3px 12px; background:var(--widener-gold); color:var(--rl-ink); font-style:normal;
+  .rls-pname em{ visibility:hidden; margin-bottom:8px; padding:3px 12px; background:var(--brand-accent); color:var(--rl-ink); font-style:normal;
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:15px; letter-spacing:.2em; }
   .rls-pname.mvp em{ visibility:visible; }
-  .rls-cell{ display:grid; place-items:center; margin:0 7px; background:rgba(5,11,26,.82);
+  .rls-cell{ display:grid; place-items:center; margin:0 7px; background:var(--brand-chip, rgba(5,11,26,.82));
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:48px; font-variant-numeric:tabular-nums; }
   .rls-cell.first{ margin-top:14px; }
   .rls-cell.last{ border-bottom:4px solid var(--c); }
-  .rls-cell.mvp{ color:var(--widener-gold); }
+  .rls-cell.mvp{ color:var(--brand-accent); }
   .rls-label{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:0 30px; }
   .rls-label.first{ margin-top:14px; }
   .rls-label span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:32px; letter-spacing:.06em; text-transform:uppercase; }
@@ -592,7 +605,7 @@
   /* Series overview: one card per game above the series totals. */
   .rls-games{ position:absolute; top:330px; left:50%; transform:translateX(-50%); display:flex; gap:12px; }
   .rls-game{ width:186px; padding:12px 0 10px; display:flex; flex-direction:column; align-items:center; gap:4px;
-    background:rgba(5,11,26,.86); border-bottom:5px solid var(--c); }
+    background:var(--brand-chip, rgba(5,11,26,.86)); border-bottom:5px solid var(--c); }
   .rls-game small{ font-weight:800; font-size:13px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
   .rls-game b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:40px; line-height:1; font-variant-numeric:tabular-nums; }
   .rls-game b u{ text-decoration:none; color:var(--muted); }
@@ -600,10 +613,10 @@
   .rls-game em{ font-style:normal; font-weight:700; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
     max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rls-subtitle{ position:absolute; left:50%; transform:translateX(-50%); font-family:'Kanit', system-ui, sans-serif; font-weight:700;
-    font-size:20px; letter-spacing:.24em; text-transform:uppercase; color:#c9d6ee; white-space:nowrap; }
+    font-size:20px; letter-spacing:.24em; text-transform:uppercase; color:var(--brand-soft-text, #c9d6ee); white-space:nowrap; }
 
   /* Boost meter for the player the camera follows: a gauge in the corner
-     with a faint Widener W behind the number, and that player's name and
+     with the faint league mark behind the number, and that player's name and
      stats on a plate tucked behind it. */
   .rl-boost{ position:absolute; right:32px; bottom:28px; width:500px; height:184px; pointer-events:none;
     transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); }
@@ -616,31 +629,31 @@
   .rl-card-name span{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px; text-transform:uppercase;
     letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rl-card-stats{ display:flex; height:38px; margin-left:16px; padding-right:34px;
-    background:var(--sb-dark); border-bottom:3px solid var(--widener-gold); }
+    background:var(--sb-dark); border-bottom:3px solid var(--brand-accent); }
   .rl-card-stats span{ flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
   .rl-card-stats span + span{ border-left:1px solid rgba(255,255,255,.08); }
   .rl-card-stats b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:18px; line-height:1; font-variant-numeric:tabular-nums; }
   .rl-card-stats small{ font-size:8.5px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
   .rl-gauge{ position:absolute; right:0; bottom:0; width:184px; height:184px; filter:drop-shadow(0 3px 8px rgba(0,0,0,.45)); }
   .rl-gauge svg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
-  .rl-g-disc{ fill:rgba(7,15,32,.97); }
+  .rl-g-disc{ fill:var(--brand-chip, rgba(7,15,32,.97)); }
   .rl-g-rim{ fill:none; stroke:url(#rlg-rim); stroke-width:2; }
-  /* The watermark: the Widener W as a flat silhouette, barely there. */
+  /* The watermark: the league mark as a flat silhouette, barely there. */
   .rl-g-mark{ position:absolute; left:50%; top:50%; width:104px; height:104px; transform:translate(-50%, -54%);
     background:#eaf2ff; opacity:.06;
-    -webkit-mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat;
-    mask:url(/overlay-assets/widener-logo.png) center / contain no-repeat; }
+    -webkit-mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat;
+    mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat; }
   .rl-g-track, .rl-g-fill{ fill:none; stroke-width:10; transform:rotate(135deg); transform-origin:92px 92px; }
   .rl-g-track{ stroke:rgba(255,255,255,.07); stroke-dasharray:75 100; }
   .rl-g-fill{ stroke:var(--c); stroke-dasharray:0 100; transition:stroke-dasharray .12s linear, stroke .2s; }
   .rl-g-fill.zero{ opacity:0; }
-  .rl-boost.full .rl-g-fill{ stroke:var(--widener-gold); }
+  .rl-boost.full .rl-g-fill{ stroke:var(--brand-accent); }
   .rl-g-tick{ stroke:rgba(234,242,255,.28); stroke-width:1.5; }
   .rl-g-tick.major{ stroke:rgba(234,242,255,.55); stroke-width:2; }
   .rl-g-num{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding-bottom:4px; }
   .rl-g-num b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:62px; line-height:.9;
     font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
-  .rl-g-num small{ margin-top:5px; font-weight:800; font-size:10px; letter-spacing:.32em; text-transform:uppercase; color:var(--widener-gold); }
+  .rl-g-num small{ margin-top:5px; font-weight:800; font-size:10px; letter-spacing:.32em; text-transform:uppercase; color:var(--brand-accent); }
   /* Only in the preview, when the game isn't sending a match. */
   .rl-sample{ position:absolute; left:50%; bottom:40px; transform:translateX(-50%); padding:8px 16px; border-radius:8px;
     background:rgba(0,0,0,.55); color:var(--muted); font-weight:700; font-size:16px; letter-spacing:.06em; }
@@ -652,7 +665,7 @@
   .necc-loading{ position:absolute; inset:0; display:none; place-items:center; pointer-events:none; }
   .necc-loading.active{ display:grid; }
   .necc-loading-inner{ display:flex; flex-direction:column; align-items:center; gap:22px; }
-  .necc-spinner{ width:56px; height:56px; border-radius:50%; border:5px solid rgba(255,255,255,.14); border-top-color:var(--widener-gold); animation: brb-spin 1s linear infinite; }
+  .necc-spinner{ width:56px; height:56px; border-radius:50%; border:5px solid rgba(255,255,255,.14); border-top-color:var(--brand-accent); animation: brb-spin 1s linear infinite; }
   .necc-loading-text{ display:none; font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:26px; letter-spacing:.06em; color:var(--muted); text-align:center; max-width:900px; }
   body[data-backdrop="1"] .necc-loading-text{ display:block; }
 
@@ -691,18 +704,33 @@
     box-shadow:0 4px 14px rgba(0,0,0,.5);
   }
   body[data-preview="1"] .preview-flag{ display:block; }
+
+  /* Drawn transition for a league with no stinger video (v1.0.0): two angled
+     panels in the league colours sweep across with the mark, and the content
+     swaps while they cover the screen. */
+  .css-stinger{ display:none; position:fixed; inset:0; z-index:950; pointer-events:none; overflow:hidden; }
+  .css-stinger.active{ display:block; }
+  .cs-panel{ position:absolute; top:0; bottom:0; left:-20%; width:140%; transform:translateX(-120%) skewX(-12deg); }
+  .cs-panel.p1{ background:var(--brand-primary); }
+  .cs-panel.p2{ background:var(--brand-panel-dark, #050b1a); display:grid; place-items:center; }
+  .cs-mark{ width:340px; height:340px; background:#fff; transform:skewX(12deg);
+    -webkit-mask:var(--brand-watermark) center / contain no-repeat; mask:var(--brand-watermark) center / contain no-repeat; }
 </style>
+<link rel="stylesheet" href="/brand.css">
+<link rel="stylesheet" href="/brand-theme.css">
 </head>
 <body data-mode="starting-soon">
   <div class="stripes"></div>
   <div class="bg-gradient"></div>
+  <div class="brand-bg" aria-hidden="true"><i class="bb-1"></i><i class="bb-2"></i><i class="bb-3"></i><i class="bb-4"></i></div>
   <div class="preview-flag">Preview, not live</div>
 
   <canvas id="stinger-canvas" width="1920" height="1080"></canvas>
+  <div class="css-stinger" id="css-stinger" aria-hidden="true"><div class="cs-panel p1"></div><div class="cs-panel p2"><div class="cs-mark"></div></div></div>
 
   <div class="necc-frame" id="necc-frame">
-    <iframe id="necc-iframe" title="NECC overlay" src="about:blank"></iframe>
-    <div class="necc-loading" id="necc-loading"><div class="necc-loading-inner"><div class="necc-spinner"></div><div class="necc-loading-text" id="necc-loading-text">Loading NECC graphic</div></div></div>
+    <iframe id="necc-iframe" title="League graphic" src="about:blank"></iframe>
+    <div class="necc-loading" id="necc-loading"><div class="necc-loading-inner"><div class="necc-spinner"></div><div class="necc-loading-text" id="necc-loading-text">Loading the league graphic</div></div></div>
   </div>
 
   <div class="brb-view" id="brb-view" aria-label="Be right back">
@@ -727,8 +755,8 @@
 
       <div class="brb-content">
         <div class="brb-brandrow">
-          <img class="brb-lion" id="brb-lion" alt="Widener Pride lion">
-          <span class="brb-brand" id="brb-brand">Widener Esports</span>
+          <img class="brb-lion" id="brb-lion" alt="">
+          <span class="brb-brand" id="brb-brand"></span>
         </div>
         <h1 class="brb-headline" id="brb-headline">Be Right Back</h1>
         <div class="brb-subrow">
@@ -796,7 +824,7 @@
             <svg viewBox="0 0 184 184" aria-hidden="true">
               <defs>
                 <linearGradient id="rlg-rim" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#0054B8"/><stop offset="1" stop-color="#F0B310"/>
+                  <stop offset="0" style="stop-color:var(--brand-primary)"/><stop offset="1" style="stop-color:var(--brand-accent)"/>
                 </linearGradient>
               </defs>
               <circle class="rl-g-disc" cx="92" cy="92" r="90"/>
@@ -826,9 +854,9 @@
     <div class="bar"></div>
 
     <header class="topbar">
-      <img class="logo" id="logo-img" alt="Widener Esports logo">
+      <img class="logo" id="logo-img" alt="">
       <div class="brand">
-        <span id="brand-line1">Widener Esports</span>
+        <span id="brand-line1"></span>
         <small id="brand-line2"></small>
       </div>
     </header>
@@ -878,7 +906,7 @@
     <footer class="socials">
       <div class="handles" id="handles"></div>
       <div class="right">
-        <div class="badge">Pride · Blue &amp; Gold</div>
+        <div class="badge" id="brand-tagline"></div>
         <div class="next" id="next"></div>
       </div>
     </footer>
@@ -887,9 +915,17 @@
 <script>
   const $ = sel => document.querySelector(sel);
 
-  // Served from this app, not the internet - the overlay must not depend on
-  // an external image host being reachable while streaming.
-  const defaultLogo = "/overlay-assets/widener-logo.png";
+  // The league's brand (/brand.js, from the app's profile): name, logo,
+  // mascot, team colours and transition. Served from this app, not the
+  // internet - the overlay must not depend on an external host while
+  // streaming. The fallback only matters if /brand.js failed to load.
+  const BRAND = window.BRAND || { name: '', tagline: '', logo: '', mascot: '', league: { name: 'League' },
+    teamColors: { A: '#0054B8', B: '#F0B310' }, stinger: { type: 'none' } };
+  const defaultLogo = BRAND.logo;
+  $('#brand-line1').textContent = BRAND.name;
+  $('#brand-tagline').textContent = BRAND.tagline;
+  $('#brb-brand').textContent = BRAND.name;
+  $('#necc-iframe').title = BRAND.league.name + ' graphic';
   const logoEl = $('#logo-img');
   const handles = $('#handles');
   const el = $('#countdown');
@@ -1038,7 +1074,7 @@
   // 1080p OBS source and in the much smaller preview pane alike.
   // Bundled locally, like every other overlay asset - nothing on this page may
   // depend on an external host being reachable mid-broadcast.
-  const BRB_LION = '/overlay-assets/widener-lion.png';
+  const BRB_LION = BRAND.mascot || BRAND.logo;
   $('#brb-lion').src = BRB_LION;
   const sbStage = $('#sb-stage');
   function fitBrbStage(){
@@ -1102,8 +1138,8 @@
 
   // --- Match scoreboard -----------------------------------------------------
   // Team colours come from NECC (or are blank for hand-typed teams). Only a
-  // plain hex colour is trusted into CSS; anything else falls back to Widener
-  // blue for team A and gold for team B.
+  // plain hex colour is trusted into CSS; anything else falls back to the league
+  // profile's team A and team B colours.
   function safeColor(c, fallback){
     c = String(c || '').trim();
     if(/^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c)) c = '#' + c;
@@ -1186,8 +1222,8 @@
     const isRl = sm.style === 'rl';
     sbView.classList.toggle('rl', isRl);
     if(isRl){ renderRlBoard(state); return; }
-    const colA = safeColor(t.A.team.color, '#0054B8');
-    const colB = safeColor(t.B.team.color, '#F0B310');
+    const colA = safeColor(t.A.team.color, BRAND.teamColors.A);
+    const colB = safeColor(t.B.team.color, BRAND.teamColors.B);
     [$('#sb'), $('#sbc')].forEach((box) => {
       box.style.setProperty('--a', colA); box.style.setProperty('--a-ink', inkFor(colA));
       box.style.setProperty('--b', colB); box.style.setProperty('--b-ink', inkFor(colB));
@@ -1277,7 +1313,7 @@
       name,
       tag: (team.tag || initials || key).toUpperCase(),
       logo: team.logoUrl ? mediaUrl(team.logoUrl) : '',
-      color: safeColor(team.color, key === 'A' ? '#0054B8' : '#F0B310'),
+      color: safeColor(team.color, BRAND.teamColors[key]),
     };
   }
   // Colour for a roster team playing on a side (0 blue, 1 orange): the car
@@ -1746,7 +1782,7 @@
     // title/subtitle/socials updates it live exactly like any other view.
     if(vTitle !== undefined){ $('#brb-headline').textContent = vTitle || ''; fitBrbHeadline(); }
     if(vSubtitle !== undefined) $('#brb-sub').textContent = vSubtitle || '';
-    if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || 'Widener Esports';
+    if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || BRAND.name;
     if(state.socials) renderBrbSocials(state.socials);
     lastState = state;
     applyClip(clipFor(state));
@@ -1756,7 +1792,7 @@
     // mode is one of 'starting-soon' | 'post-match' | 'roster' | 'necc' | 'brb'.
     // 'necc' is a full-bleed passthrough iframe to a LeagueOS-hosted overlay
     // (bracket, match preview, etc) - nothing of ours draws on top of it.
-    // 'roster' is a full third Widener view (not a flag layered on the
+    // 'roster' is a full third branded view (not a flag layered on the
     // others) - it hides the title/countdown content and montage panel and
     // shows the two-team lineup instead.
     // 'brb' is a full-screen Be Right Back card drawn on its own scaled
@@ -1795,7 +1831,7 @@
       }
       if(isNecc){
         // neccBg === false -> flat black behind the NECC page; anything else
-        // (true or absent, for old saved states) -> Widener stripe backdrop.
+        // (true or absent, for old saved states) -> the brand backdrop.
         neccFrame.classList.toggle('branded', state.neccBg !== false);
         if(state.neccUrl && neccIframe.src !== state.neccUrl) loadNecc(state.neccUrl);
       } else {
@@ -1824,7 +1860,7 @@
   let neccSlowTimer = 0;
   function loadNecc(url){
     neccLoading.classList.add('active');
-    neccLoadingText.textContent = 'Loading NECC graphic';
+    neccLoadingText.textContent = 'Loading the ' + BRAND.league.name + ' graphic';
     clearTimeout(neccSlowTimer);
     neccSlowTimer = setTimeout(() => {
       neccLoadingText.textContent = 'LeagueOS has not responded yet. Check the internet connection, or re-import the match.';
@@ -1883,8 +1919,12 @@
   // pixels only between 1.083s and 1.667s - the full-bleed W graphic that
   // completely covers the screen. New state is applied at 1.4s, dead center
   // of that window, so the swap is never visible.
-  const STINGER_URL = '/overlay-assets/curtain-stinger.webm';
-  const STINGER_SWAP_TIME = 1.4;
+  // The stinger comes from the league profile: a video and the moment it
+  // fully covers the screen (measured per video), a drawn transition (css),
+  // or none.
+  const STINGER = BRAND.stinger || { type: 'none' };
+  const STINGER_URL = STINGER.type === 'video' ? STINGER.url : '';
+  const STINGER_SWAP_TIME = STINGER.swapTime || 1.4;
   const STINGER_MAX_MS = 4000; // hard safety: new state is never delayed past this
 
   const stingerCanvas = $('#stinger-canvas');
@@ -1939,6 +1979,7 @@
 
   function getStingerVideo(){
     if(stingerVideo) return stingerVideo;
+    if(!STINGER_URL) return null; // this league has no stinger video
     stingerVideo = document.createElement('video');
     stingerVideo.muted = true;
     stingerVideo.playsInline = true;
@@ -1969,6 +2010,8 @@
   }
   function playStinger(apply){
     if(stingerActive){ queueStinger(apply); return; }
+    if(STINGER.type === 'css'){ playCssStinger(apply); return; }
+    if(STINGER.type !== 'video'){ apply(); return; }
     const glc = initStingerGL();
     const video = getStingerVideo();
     if(!glc || !video){ apply(); return; }
@@ -2044,6 +2087,44 @@
     }
   }
 
+  // The drawn transition (v1.0.0), for a league profile with no stinger
+  // video: the two panels sweep in from the left (the second carries the
+  // mark), the content swaps once they cover the screen, then they sweep out
+  // to the right in reverse order. Same queue and safety timeout as the
+  // video stinger, and plain CSS transforms, so it works with OBS's hardware
+  // acceleration off too.
+  const cssStinger = $('#css-stinger');
+  const CS_IN = 'translateX(-120%) skewX(-12deg)', CS_ON = 'translateX(0) skewX(-12deg)', CS_OUT = 'translateX(120%) skewX(-12deg)';
+  const CS_EASE = 'cubic-bezier(.7,0,.25,1)', CS_MS = 420, CS_STAGGER = 80, CS_HOLD_MS = 180;
+  function playCssStinger(apply){
+    const panels = Array.from(cssStinger.querySelectorAll('.cs-panel'));
+    if(!panels.length || !panels[0].animate){ apply(); return; }
+    stingerPending = apply;
+    stingerActive = true;
+    const applyPending = () => {
+      if(stingerPending){ const f = stingerPending; stingerPending = null; f(); }
+    };
+    let done = false;
+    const finish = () => {
+      if(done) return;
+      done = true;
+      clearTimeout(safety);
+      stingerActive = false;
+      applyPending();
+      cssStinger.classList.remove('active');
+      panels.forEach((p) => { p.getAnimations().forEach((a) => a.cancel()); });
+    };
+    const safety = setTimeout(finish, STINGER_MAX_MS);
+    cssStinger.classList.add('active');
+    const sweep = (from, to, order) => Promise.all(order.map((p, i) => p.animate(
+      [{ transform: from }, { transform: to }],
+      { duration: CS_MS, delay: i * CS_STAGGER, easing: CS_EASE, fill: 'forwards' }).finished));
+    sweep(CS_IN, CS_ON, panels)
+      .then(() => { applyPending(); return new Promise((r) => setTimeout(r, CS_HOLD_MS)); })
+      .then(() => sweep(CS_ON, CS_OUT, panels.slice().reverse()))
+      .then(finish, finish);
+  }
+
   // Live updates pushed from the control app's local server. There is exactly
   // one overlay URL for every game and both moments (starting-soon /
   // post-match) - it never needs to change in OBS. The one exception is the
@@ -2072,7 +2153,7 @@
             renderRlScreens(cut);
           };
           // Leaving the live game for a stats screen is covered by the
-          // Widener stinger, with the screen swapped in while it's covered.
+          // league stinger, with the screen swapped in while it's covered.
           const boardUp = sbView.classList.contains('active') && sbView.classList.contains('rl');
           if (boardUp && rlScreenState.screen === 'live' && next.screen !== 'live') playStinger(apply(true));
           else if (stingerActive) queueStinger(apply(false));

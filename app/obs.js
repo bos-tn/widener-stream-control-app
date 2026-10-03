@@ -2,7 +2,7 @@
 // opt-in: the app's single-URL live-push model works with zero OBS connection.
 // When the operator connects and enables "scene-sync", OBS owns the *between-
 // view* transitions (one scene per overlay type, switched with OBS's own
-// configured transition e.g. the Widener stinger) while the existing WebSocket
+// configured transition, e.g. the league's stinger) while the existing WebSocket
 // push keeps driving the *content* inside each view live.
 //
 // Everything here fails soft: OBS being unreachable, mid-call errors, or a
@@ -18,31 +18,38 @@ const { OBSWebSocket } = require('obs-websocket-js');
 // "build scenes" reuses anything already matching these names instead of
 // duplicating. Switching overlay type becomes a scene switch; the pushed state
 // still updates the content inside whichever scene is live.
-const SCENES = [
-  { view: 'starting-soon', scene: 'WU: Starting Soon', input: 'WU-src-starting-soon' },
-  { view: 'post-match',    scene: 'WU: Post-Match',    input: 'WU-src-post-match' },
-  { view: 'roster',        scene: 'WU: Rosters',       input: 'WU-src-roster' },
-  { view: 'brb',           scene: 'WU: Be Right Back', input: 'WU-src-brb' },
-  // Transparent scoreboard: the game capture goes in this scene *under* the
-  // browser source, so it's the one scene the operator adds their own source to.
-  // It was Smash-only in v0.8.0; `legacy` names are renamed in place on the
-  // next build so the operator's game capture inside it is kept.
-  { view: 'scoreboard',    scene: 'WU: Scoreboard',    input: 'WU-src-scoreboard',
-    legacy: { scene: 'WU: Smash Scoreboard', input: 'WU-src-smash' } },
-  // One NECC scene covers every NECC overlay type: the locked page reads the
-  // pushed neccUrl, so picking bracket vs match-preview is a live content
-  // update inside this same scene, not a new scene.
-  { view: 'necc',          scene: 'WU: NECC',          input: 'WU-src-necc' },
-];
+//
+// Since v1.0.0 the prefix comes from the league profile ("WU" for Widener,
+// "LotE" for League of the East), so each league's app builds and switches
+// only its own scenes, and both sets can live in one OBS.
+function sceneList(prefix, leagueScene) {
+  return [
+    { view: 'starting-soon', scene: `${prefix}: Starting Soon`, input: `${prefix}-src-starting-soon` },
+    { view: 'post-match',    scene: `${prefix}: Post-Match`,    input: `${prefix}-src-post-match` },
+    { view: 'roster',        scene: `${prefix}: Rosters`,       input: `${prefix}-src-roster` },
+    { view: 'brb',           scene: `${prefix}: Be Right Back`, input: `${prefix}-src-brb` },
+    // Transparent scoreboard: the game capture goes in this scene *under* the
+    // browser source, so it's the one scene the operator adds their own source to.
+    // It was Smash-only in v0.8.0; `legacy` names are renamed in place on the
+    // next build so the operator's game capture inside it is kept.
+    { view: 'scoreboard',    scene: `${prefix}: Scoreboard`,    input: `${prefix}-src-scoreboard`,
+      legacy: { scene: `${prefix}: Smash Scoreboard`, input: `${prefix}-src-smash` } },
+    // One league scene covers every league graphic: the locked page reads the
+    // pushed neccUrl, so picking bracket vs match-preview is a live content
+    // update inside this same scene, not a new scene.
+    { view: 'necc',          scene: `${prefix}: ${leagueScene}`, input: `${prefix}-src-necc` },
+  ];
+}
+let SCENES = sceneList('WU', 'NECC');
 
-// Background music (v0.11.0): ONE media source shared by every WU scene.
+// Background music (v0.11.0): ONE media source shared by every app scene.
 // Because it is the same source everywhere, a scene switch never restarts it:
 // it keeps playing straight through transitions. It loops, doesn't restart
 // when a scene becomes active, and stays open while hidden. The app fades its
 // volume (fadeMusic) so it is only heard when no gameplay is on screen; that
 // is decided in server.js, since the Rocket League stats screens are inside
 // the same Scoreboard scene as the game.
-const MUSIC_INPUT = 'WU: Music';
+let MUSIC_INPUT = 'WU: Music';
 const MUSIC_OFF_DB = -60;
 function musicSettings(file) {
   return {
@@ -66,6 +73,10 @@ const RECONNECT_MS = 5000;
 // opts.getOverlayBase() -> e.g. "http://localhost:4310" (where OBS should point
 // its browser sources; OBS runs on the same machine, so localhost is correct).
 function createObs(opts = {}) {
+  if (opts.prefix) {
+    SCENES = sceneList(opts.prefix, opts.leagueScene || 'League Graphics');
+    MUSIC_INPUT = `${opts.prefix}: Music`;
+  }
   const getOverlayBase = opts.getOverlayBase || (() => 'http://localhost:4310');
   const onProgramView = opts.onProgramView || (() => {});
   const obs = new OBSWebSocket();
@@ -366,7 +377,7 @@ function createObs(opts = {}) {
   }
 
   // Switch OBS's program scene to the one for `view`. Optionally selects the
-  // configured transition first (so the Widener stinger fires). Only does
+  // configured transition first (so the league's stinger fires). Only does
   // anything when connected AND scene-sync is enabled.
   async function switchToView(view) {
     if (!connected || !sceneSync) return { switched: false };

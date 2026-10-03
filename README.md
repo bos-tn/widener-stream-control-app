@@ -1,18 +1,30 @@
-<img src="app/public/control/assets/logo.png" alt="Widener Esports" width="80">
+<img src="app/profiles/widener/assets/panel-logo.png" alt="Widener Esports" width="80"> <img src="app/profiles/lote/assets/logo-square.png" alt="League of the East" width="80">
 
 # Widener Esports Stream Control
 
-A Windows app for running the Widener Esports stream overlays. It replaces the
-old folder of per-game overlay HTML files with one overlay that you edit from a
-control panel.
+A Windows app for running esports stream overlays. It replaces the old folder of
+per-game overlay HTML files with one overlay that you edit from a control panel.
 
-Download the installer from the [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest).
-From v0.9.0 on, the app checks for new versions by itself and offers to install
-them. Installing over an old version keeps your settings.
+Since v1.0.0 the same app is built once per league, each with that league's
+colours, logos, scene background, transition, games and OBS scene names:
+
+| App | For | Overlay address | OBS scenes |
+| --- | --- | --- | --- |
+| Widener Esports Stream Control | Widener Esports streams (NECC) | `http://localhost:4310/overlay` | `WU: …` |
+| LotE Stream Control | League of the East broadcasts | `http://localhost:4320/overlay` | `LotE: …` |
+
+Download the installers from the [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest).
+The two apps install side by side, keep separate settings, and can both be open
+at once. Each checks for its own new versions and offers to install them.
+Installing over an old version keeps your settings.
 
 The app runs entirely on the streaming PC and can only be reached from that PC.
-It needs internet access only for the NECC import, NECC graphics, and update
-checks.
+It needs internet access only for the LeagueOS import, league graphics, and
+update checks.
+
+The rest of this guide uses the Widener app's addresses. For League of the East,
+use port 4320 in place of 4310 and `LotE` in place of `WU`. LotE has no game
+highlight videos or included music track yet, so those parts don't appear in it.
 
 ## What it does
 
@@ -298,22 +310,54 @@ Requires [Node.js](https://nodejs.org/) 18 or newer.
 ```bash
 cd app
 npm install
-npm start        # run the full app
-npm run server   # run only the server at http://localhost:4310
-npm run dist     # build the installer
+npm start             # run the Widener app
+npm run start:lote    # run the League of the East app
+npm run server        # run only the server (Widener, port 4310)
+npm run server:lote   # run only the server (LotE, port 4320)
+npm run dist          # build every league's installer
+npm run dist:lote     # build one league's installer
+npm run icons         # rebuild app icons from profiles/<id>/icon-source.png
 ```
 
-Bump `version` in `app/package.json` before building. The installer and
-`latest.yml` are written to `app/dist/`, along with an unpacked copy in
-`app/dist/win-unpacked/`. Test the unpacked build before releasing, since the
-packaged app can behave differently from dev mode. Any new top-level `.js` file
-in `app/` must be added to `build.files` in `app/package.json` or the packaged
-app will crash on launch.
+### League profiles
 
-To release, create a GitHub release tagged `v<version>` and attach the
-installer `.exe`, its `.blockmap`, and `latest.yml`. Installed copies of the app
-read `latest.yml` from the latest release to find updates, so a release without
-it will not be offered to anyone.
+Everything that belongs to one league lives in `app/profiles/<id>/`, and each
+installer is built with exactly one profile inside:
+
+| File | What it holds |
+| --- | --- |
+| `profile.json` | Name, short name, app name, port, OBS scene prefix, league name and import hint, home team, colours (overlay and control panel), asset file names, stinger, music track, defaults, and the installer's app id, package name (its data folder), file name and update channel |
+| `games.json` | The game list and each game's scoreboard preset and highlight video |
+| `assets/` | Logo, control panel logo, mascot (Be Right Back), watermark, stinger video |
+| `theme.css` | Optional overlay styles loaded after the base ones, such as LotE's Mark Shine background |
+| `icon-source.png`, `icons/` | The app icon source and the generated icons |
+
+The server serves the active profile as `/brand.js` (`window.BRAND`),
+`/brand.css` (colours as CSS variables), `/brand-theme.css` and `/brand/*`
+(assets). The overlay and the control panel read only those, so neither has a
+league's name, colours or art written into it. Which profile runs comes from
+`--profile=<id>`, the `STREAM_PROFILE` variable, or `streamProfile` in
+`package.json`, which `build/dist.js` writes into each installer.
+
+To add a league: copy `profiles/lote` to `profiles/<id>`, change `profile.json`
+(a new `port`, `obs.prefix`, `build.appId`, `build.packageName`,
+`build.artifactName` and `build.channel`), replace the art and `games.json`, run `npm run icons -- <id>`,
+and `npm run dist -- <id>`.
+
+### Building and releasing
+
+Bump `version` in `app/package.json` before building; every league's app shares
+it. Each installer, its `.blockmap` and its update file are written to
+`app/dist/<id>/`, with an unpacked copy in `app/dist/<id>/win-unpacked/`. Test
+the unpacked builds before releasing, since the packaged app can behave
+differently from dev mode. Any new top-level `.js` file in `app/` must be added
+to `build.files` in `app/package.json` or the packaged app will crash on launch.
+
+To release, create one GitHub release tagged `v<version>` and attach, for every
+league, the installer `.exe`, its `.blockmap`, and its update file: `latest.yml`
+for Widener, `lote.yml` for League of the East. Each installed app reads only
+its own update file from the latest release, so a release missing one is not
+offered to that league's app.
 
 The server holds two copies of the overlay state: `draft`, which the control
 panel edits and the preview shows, and `live`, which OBS shows. Push Live copies
@@ -331,15 +375,20 @@ Repo layout:
 app/
   main.js            Electron entry point and update checks
   server.js          local server, overlay state, library, WebSocket messages
-  necc.js            NECC / LeagueOS import
+  profile.js         league profiles: loading, /brand.js and /brand.css
+  necc.js            LeagueOS import
   obs.js             optional OBS scene-sync
   rlstats.js         Rocket League Stats API client (live game data)
+  build/dist.js      builds one installer per league profile
+  build/make-icon.js app icons from each profile's icon source
   dev/mock-rlstats.js  fake Rocket League feed for testing without the game
+  profiles/
+    widener/         Widener Esports: profile.json, games.json, assets, icons
+    lote/            League of the East: the same, plus theme.css
   templates/
-    overlay.html     the overlay page (all overlays)
-    games.json       game list and per-game scoreboard settings
+    overlay.html     the overlay page (all overlays, every league)
   public/control/    control panel
-  public/overlay-assets/  stinger video, images, fonts
+  public/overlay-assets/  fonts shared by every league
 archive/             old per-game overlay files, kept for reference
 PROJECT_NOTES.md     detailed design notes and history
 ```

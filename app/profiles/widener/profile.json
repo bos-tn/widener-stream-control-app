@@ -1,0 +1,75 @@
+{
+  "id": "widener",
+  "name": "Widener Esports",
+  "shortName": "Widener",
+  "appName": "Widener Esports Stream Control",
+  "tagline": "Pride · Blue & Gold",
+  "port": 4310,
+  "homeTeam": "widener",
+  "league": {
+    "name": "NECC",
+    "importHint": "https://necc.v1.leagueos.gg/league/matches/..."
+  },
+  "obs": {
+    "prefix": "WU",
+    "leagueScene": "NECC"
+  },
+  "socialHandle": "wideneresports",
+  "matchExample": "Widener vs Rowan, Week 3",
+  "colors": {
+    "primary": "#0054B8",
+    "accent": "#F0B310",
+    "accentInk": "#111111",
+    "text": "#EAF2FF",
+    "muted": "#A9B7D6",
+    "teamA": "#0054B8",
+    "teamB": "#F0B310",
+    "panel": "rgba(9,19,40,.96)",
+    "panelDark": "#050B1A",
+    "chip": "rgba(7,16,34,.9)",
+    "chipActive": "rgba(14,30,62,.96)",
+    "softText": "#C9D6EE",
+    "inkDark": "#071022",
+    "inkMuted": "#46546E",
+    "paused": "#2C3954",
+    "ground": "radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%)",
+    "ui": {
+      "bg": "#0A0E17",
+      "panel": "#131A29",
+      "panel2": "#0D1420",
+      "border": "#242E42",
+      "muted": "#9FB0CC",
+      "focus": "#0054B8",
+      "button": "#1B2436",
+      "buttonHover": "#232F47",
+      "tint": "rgba(0,84,184,.15)",
+      "placeholder": "#66789A",
+      "primary2": "#0069E6",
+      "thumb": "repeating-linear-gradient(135deg, rgba(0,84,184,.16) 0 6px, transparent 6px 12px), linear-gradient(160deg, #0f1f3d, #070c16)"
+    }
+  },
+  "assets": {
+    "logo": "logo.png",
+    "panelLogo": "panel-logo.png",
+    "mascot": "mascot.png",
+    "watermark": "logo.png"
+  },
+  "stinger": {
+    "type": "video",
+    "file": "stinger.webm",
+    "swapTime": 1.4
+  },
+  "music": {
+    "file": "rl-music-long.m4a",
+    "driveId": "1M4encA-tBLZ3dBZzKcqDpvBESad2WX26",
+    "bytes": 36077636
+  },
+  "defaults": {
+    "montage": true
+  },
+  "build": {
+    "appId": "edu.widener.esports.streamcontrol",
+    "artifactName": "Widener-Esports-Stream-Control-Setup-${version}.${ext}",
+    "channel": "latest"
+  }
+}

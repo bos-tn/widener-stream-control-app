@@ -1,13 +1,22 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v0.12.0** (test build on branch `test/gui-overhaul`). If
-you're starting a new chat, read the summary below first, then the sections
-relevant to what you're changing. The later sections are a history: each one
-records why something is the way it is. The control panel was rebuilt in
-v0.12.0; read that section before touching `public/control/`.
+updated through **v1.0.0**. If you're starting a new chat, read the summary
+below first, then the sections relevant to what you're changing. The later
+sections are a history: each one records why something is the way it is. The
+control panel was rebuilt in v0.12.0, and v1.0.0 split everything
+league-specific into profiles (Widener and League of the East); read those two
+sections before touching `public/control/`, `templates/overlay.html` or the
+build.
 
-## How the app works now (v0.9.0 summary)
+## How the app works now (v0.9.0 summary, see v1.0.0 for profiles)
+
+- **One app per league (v1.0.0).** `profiles/<id>/` holds a league's name,
+  colours, art, stinger, games, OBS prefix, port and installer identity;
+  `build/dist.js` builds one installer per profile. Widener: port 4310,
+  `WU:` scenes, `latest.yml`. League of the East: port 4320, `LotE:`
+  scenes, `lote.yml`. Wherever this summary says 4310 or WU, read the
+  profile's values.
 
 - **One process, one port.** `main.js` starts `server.js` (Express + `ws`)
   inside Electron on port 4310, listening on `127.0.0.1` and `::1` only, and
@@ -914,6 +923,96 @@ and the WS protocol; nearly all of it is `index.html`, `control.css` and
   panel, score changes). **Not yet tried:** real OBS through the guide, a real
   Stream Deck, and the OBS dock's CEF (older Chromium: `:has()` only styles the
   guide's choice cards, so nothing breaks without it).
+
+## v1.0.0: league profiles (Option A)
+
+Built from "Option A" in the adaptation doc ("Adapting the Stream App for a
+New Esports League"): one codebase, one profile per league, one installer per
+profile. The first two profiles are Widener (unchanged on stream) and League
+of the East (LotE), from the "League of the East" design system artifact
+(colours, logos, games) and the "LotE Background Set" artifact (scene
+background 09, Mark Shine).
+
+- **Profiles.** `app/profiles/<id>/profile.json` + `games.json` + `assets/`
+  (+ optional `theme.css`, `icon-source.png`, `icons/`). `profile.js` loads
+  and checks one (missing assets throw at start-up, so a broken profile can't
+  ship), and turns it into `window.BRAND` (`clientBrand`) and CSS variables
+  (`brandCss`). Which profile runs: `--profile=<id>`, `STREAM_PROFILE`, or
+  `streamProfile` in package.json, which `build/dist.js` writes into each
+  installer through `extraMetadata`. Default widener.
+- **Served brand.** `/brand.js`, `/brand.css`, `/brand-theme.css` (empty
+  for a profile with no theme) and `/brand/*` (the assets folder), all
+  `no-store` like `/overlay`. `/games.json` now returns the profile's games.
+  The overlay and panel load `/brand.css` after their own styles and keep
+  Widener values as fallbacks, so a page that loses the brand files still
+  draws.
+- **Overlay.** `--widener-blue`/`--widener-gold` became `--brand-primary`/
+  `--brand-accent`; the navy panel tints, soft text, inks, ground gradient,
+  team defaults and the watermark mask all read `--brand-*` variables. Text
+  (brand line, BRB brand, tagline, alt texts, league name in the loading
+  text) comes from `BRAND`. `.brand-bg` (four empty layers) is hidden unless
+  a theme styles them: LotE's `theme.css` ports Mark Shine there (halo, the
+  mark at 7%, the 9 s shine, vignette) as plain CSS at the set's own 1920 x
+  1080 pixel positions, and gives the stats screens the purple ground.
+- **Transition per profile.** `stinger.type`: `video` (file + measured
+  `swapTime`, Widener's curtain at 1.4 s), `css`, or `none`. LotE has no
+  stinger video yet ("Motion: not defined yet" in its brand book), so
+  `playCssStinger` draws one: two skewed panels (league purple, then the dark
+  panel carrying the mark) sweep in with the Web Animations API, the content
+  swaps once they cover the screen, they sweep out in reverse. It shares the
+  video stinger's queue and 4 s safety and works with OBS hardware
+  acceleration off. Measured in the preview tool: covered at ~500 ms, clear
+  by ~1.2 s.
+- **Control panel.** Page text uses tokens (`{{name}}`, `{{short}}`,
+  `{{league}}`, `{{prefix}}`, `{{social}}`, `{{match}}`, `{{importHint}}`)
+  that `applyBrandText` fills at start-up, in text and in placeholder /
+  data-tip / title / label / aria-label / alt. control.css's colours are
+  `--brand-ui-*` variables (buttons, panels, borders, focus, tint, thumbnail
+  background). The amber "unpushed changes" colour and the green/red tallies
+  stay the same in every league on purpose. The home-team rule for the import
+  subtitle is `homeTeam` (Widener: "vs <opponent>"; LotE has none, so
+  "<team A> vs <team B>"). A profile with no included music track hides the
+  track buttons; a game list with no highlight videos hides the videos card
+  and the guide's download step.
+- **OBS.** `obs.js` builds its scene list from `obs.prefix` and
+  `obs.leagueScene` (`WU: NECC` stays `WU: NECC`; LotE gets `LotE: League
+  Graphics`), and the music source is `<prefix>: Music`. The legacy Smash
+  rename still applies.
+- **Two apps on one PC.** Different `appId` and productName (separate
+  install folders and uninstall entries), different package names, ports
+  (4310, 4320) and OBS prefixes. Both can run at once. **The data folder comes
+  from the package `name`, not productName**: the installed Widener app has
+  always used `%APPDATA%widener-stream-overlay-app` (verified on the dev
+  PC), because electron-builder does not write productName into the packaged
+  package.json. So `build.packageName` (LotE: `lote-stream-control`) is set
+  through `extraMetadata.name`, which also names electron-updater's download
+  cache (`lote-stream-control-updater`). Widener has no packageName and keeps
+  its folder, so upgrading keeps its data. `main.js` points a dev run of a
+  profile with a packageName at the same folder (`app.setPath('userData')`). localStorage keys keep their `widener-`
+  names: they are per origin, and the port makes each app its own origin.
+- **Updates.** One GitHub release per version carries every league's files.
+  `build/dist.js` sets `publish.channel` per profile, so electron-builder
+  writes `latest.yml` (Widener) or `lote.yml` (LotE), and the embedded
+  `app-update.yml` carries the channel; electron-updater's GitHub provider
+  reads `options.channel` and fetches that file from the latest release. No
+  `autoUpdater.channel` is set in code (setting it turns on allowDowngrade).
+- **What was not bundled, and why.** The repo and releases are public. The
+  Pink Blue accent font has an education licence held by the league, so it is
+  not shipped (the overlay has no accent-word element anyway). School logos
+  are not seeded into the LotE team library; they arrive with LeagueOS
+  imports. LotE body text uses Inter, the brand book's listed fallback for
+  Libre Franklin; Libre Franklin (OFL) could be added to
+  `public/overlay-assets/fonts` later.
+- **Dev.** `npm run start:lote` / `server:lote`; the `stream-app-lote-dev`
+  launch config (port 4321). A non-Widener profile keeps its dev data in
+  `app/data/<id>/`.
+- **Verified** in the preview tool and with full-size Electron captures:
+  Widener overlay and panel unchanged (stripes, gold, lion, W, NECC wording,
+  included track, video step), LotE Starting Soon / BRB / Rosters /
+  Scoreboard / control panel, the drawn transition's timing and its covering
+  frame, no leftover tokens or Widener/NECC text in the LotE panel, every
+  brand route for both profiles. Both installers built and their packaged
+  servers smoke-tested on spare ports.
 
 ## State shape (server.js `DEFAULT_STATE`)
 

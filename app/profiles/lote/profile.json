@@ -1,0 +1,71 @@
+{
+  "id": "lote",
+  "name": "League of the East",
+  "shortName": "LotE",
+  "appName": "LotE Stream Control",
+  "tagline": "League of the East",
+  "port": 4320,
+  "homeTeam": "",
+  "league": {
+    "name": "LotE",
+    "importHint": "Paste the LotE match page link from LeagueOS"
+  },
+  "obs": {
+    "prefix": "LotE",
+    "leagueScene": "League Graphics"
+  },
+  "socialHandle": "",
+  "matchExample": "Widener vs Messiah, Week 3",
+  "colors": {
+    "primary": "#8205A7",
+    "accent": "#CDB9DA",
+    "accentInk": "#1A0327",
+    "text": "#FFFFFF",
+    "muted": "#CDB9DA",
+    "teamA": "#8205A7",
+    "teamB": "#CDB9DA",
+    "panel": "rgba(37,8,57,.96)",
+    "panelDark": "#1A0327",
+    "chip": "rgba(37,8,57,.9)",
+    "chipActive": "rgba(49,12,77,.96)",
+    "softText": "#CDB9DA",
+    "inkDark": "#1A0327",
+    "inkMuted": "#6B4C80",
+    "paused": "#3A1650",
+    "ground": "radial-gradient(1400px 800px at 12% 8%, #270146 0%, #1A0327 62%, #12011c 100%)",
+    "ui": {
+      "bg": "#12011C",
+      "panel": "#1E0430",
+      "panel2": "#160124",
+      "border": "#3A1A52",
+      "muted": "#CDB9DA",
+      "focus": "#CDB9DA",
+      "button": "#2B0D42",
+      "buttonHover": "#3A1658",
+      "tint": "rgba(130,5,167,.2)",
+      "placeholder": "#8A6FA0",
+      "primary2": "#9B1BC2",
+      "thumb": "radial-gradient(120% 120% at 15% 10%, #270146 0%, #1A0327 60%, #12011c 100%)"
+    }
+  },
+  "assets": {
+    "logo": "mark-white.png",
+    "panelLogo": "logo-square.png",
+    "mascot": "mark-white.png",
+    "watermark": "mark-white.png"
+  },
+  "stinger": {
+    "type": "css"
+  },
+  "music": null,
+  "defaults": {
+    "montage": false
+  },
+  "theme": "theme.css",
+  "build": {
+    "appId": "edu.widener.esports.lotestreamcontrol",
+    "artifactName": "LotE-Stream-Control-Setup-${version}.${ext}",
+    "channel": "lote",
+    "packageName": "lote-stream-control"
+  }
+}
