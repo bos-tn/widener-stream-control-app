@@ -63,7 +63,7 @@ kbd{
   padding:10px 20px; border-bottom:1px solid var(--panel-border);
   background:linear-gradient(180deg, var(--tint), transparent);
 }
-.brand-logo{ width:36px; height:36px; border-radius:9px; flex-shrink:0; }
+.brand-logo{ width:36px; height:36px; object-fit:contain; flex-shrink:0; }
 .brand{display:flex; flex-direction:column; line-height:1.2; min-width:0}
 .brand-title{font-weight:800; font-size:1.125rem; white-space:nowrap}
 .brand-sub{font-size:.78rem; color:var(--muted); white-space:nowrap}
@@ -301,7 +301,10 @@ input:focus, select:focus, button:focus-visible{outline:2px solid var(--focus); 
   padding:10px 12px; display:flex; flex-direction:column; gap:10px; min-width:0;
 }
 .ret-summary{ display:flex; align-items:center; gap:10px; min-width:0; }
-.ret-sum-logo{ width:30px; height:30px; border-radius:6px; object-fit:cover; flex-shrink:0; background:rgba(255,255,255,.05); }
+/* Logos are never cropped (v2.0.0): the whole mark is fitted in its box with
+   square corners. Filling the box with rounded corners shaved the top of a
+   logo that reaches its own edges, like Widener's W. */
+.ret-sum-logo{ width:30px; height:30px; object-fit:contain; flex-shrink:0; }
 .ret-sum-text{ flex:1 1 auto; min-width:0; }
 .ret-sum-name{ display:block; font-weight:700; font-size:.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ret-sum-meta{ display:block; font-size:.74rem; color:var(--muted); }
@@ -346,7 +349,7 @@ input:focus, select:focus, button:focus-visible{outline:2px solid var(--focus); 
   background:var(--panel-2); border:1px solid var(--panel-border); border-top:4px solid var(--team, var(--panel-border)); min-width:0;
 }
 .tc-top{ display:flex; align-items:center; gap:10px; min-width:0; }
-.tc-logo{ width:36px; height:36px; border-radius:8px; object-fit:cover; flex-shrink:0; background:rgba(255,255,255,.05); }
+.tc-logo{ width:36px; height:36px; object-fit:contain; flex-shrink:0; }
 .tc-mono{ width:36px; height:36px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; background:var(--team, #242e42); color:var(--team-ink, #fff); }
 .tc-names{ min-width:0; }
 .tc-names b{ display:block; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -539,7 +542,8 @@ code.path{ word-break:break-all; }
   background:var(--panel-2); border:2px solid var(--panel-border); border-left:6px solid var(--team, var(--panel-border)); color:var(--text); font:inherit;
 }
 .slot.picking{ box-shadow:0 0 0 2px var(--focus); }
-.slot img, .slot .mono{ width:48px; height:48px; object-fit:contain; flex-shrink:0; border-radius:8px; }
+.slot img, .slot .mono{ width:48px; height:48px; object-fit:contain; flex-shrink:0; }
+.slot .mono, .school-tile .mono, .st-view-row .mono{ border-radius:8px; }
 .slot .mono, .school-tile .mono{ display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:.8rem; }
 .slot-text{ display:flex; flex-direction:column; min-width:0; }
 .slot-text small{ font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
@@ -561,9 +565,9 @@ code.path{ word-break:break-all; }
   color:var(--text); font:inherit; text-align:center; min-width:0;
 }
 .school-tile:hover{ border-color:var(--muted); border-bottom-color:var(--team); background:var(--btn-hover); }
-.school-tile img, .school-tile .mono{ width:64px; height:64px; object-fit:contain; border-radius:8px; }
+.school-tile img, .school-tile .mono{ width:64px; height:64px; object-fit:contain; }
 /* A soft light behind each logo, so a dark mark still reads on the dark tile. */
-.school-tile img, .slot img{ background:radial-gradient(circle, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 55%, transparent 72%); }
+.school-tile img, .slot img, .st-view-row img{ background:radial-gradient(circle, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 55%, transparent 72%); }
 .school-tile b{ font-size:.82rem; line-height:1.25; }
 .school-tile small{ font-size:.72rem; color:var(--muted); }
 .school-tile .as{ position:absolute; top:6px; right:6px; font-style:normal; font-size:.6rem; font-weight:800; padding:1px 6px; border-radius:4px; background:var(--brand-primary); color:#fff; }
@@ -626,3 +630,33 @@ code.path{ word-break:break-all; }
 #rosterEditor{ display:grid; }
 body > #rosterEditor{ display:none; }
 .stinger-guide .wiz-list{ margin-bottom:12px; }
+
+/* --- Scenes that differ from OBS (v2.0.0) ------------------------------------ */
+.scene-sync{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; padding:9px 11px; border-radius:10px;
+  background:var(--panel-2); border:1px solid var(--attention); font-size:.8rem; line-height:1.45; }
+.scene-sync[hidden]{ display:none; }
+/* The headline typeface choice: each name is set in its own face, larger
+   than a normal button so a display face can be told apart. */
+.head-font{ display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+.head-font[hidden]{ display:none; }
+.head-font .seg-btn{ padding:7px 10px 8px; font-size:1.3rem; line-height:1.15; }
+.head-font .seg-btn.active{ font-weight:400; }
+.scene-sync span{ flex:1 1 220px; min-width:0; }
+.scene-sync .btn-secondary{ flex:0 0 auto; padding:6px 11px; font-size:.76rem; white-space:nowrap; }
+
+/* --- League page: the standings table ------------------------------------------- */
+.lg-bar{ align-items:flex-end; }
+.lg-bar .push-row{ margin-bottom:14px; }
+.st-view{ display:flex; flex-direction:column; gap:6px; margin-top:10px; overflow-x:auto; }
+.st-view-row{ display:grid; grid-template-columns:26px 34px minmax(140px,1fr) repeat(3, 84px); align-items:center; gap:8px;
+  padding:6px 10px; border:1px solid var(--panel-border); border-left:4px solid var(--team, var(--panel-border)); border-radius:8px; background:var(--panel-2);
+  text-align:center; font-variant-numeric:tabular-nums; }
+.st-view-row.scored{ grid-template-columns:26px 34px minmax(140px,1fr) repeat(4, 84px); }
+.st-view-head{ padding-top:0; padding-bottom:0; background:none; border-color:transparent; font-size:.7rem; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted); }
+.st-view-head .l{ text-align:left; }
+.st-view-row.playing{ border-color:var(--focus); border-left-color:var(--team); }
+.st-view-rank{ color:var(--muted); }
+.st-view-row img, .st-view-row .mono{ width:34px; height:34px; object-fit:contain; }
+.st-view-row .mono{ display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:.62rem; }
+.st-view-name{ text-align:left; font-weight:700; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

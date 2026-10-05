@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.0.0-beta.1**. If you're starting a new chat, read the
+updated through **v2.0.0**. If you're starting a new chat, read the
 v2.0.0 section first: it changed the app's whole model (OBS first, one state,
 no Push Live), so much of the history below describes things that are gone.
 The later sections are a history: each one records why something is the way
@@ -1140,6 +1140,437 @@ text going out only on Enter. Both leagues' panels and the Stats scene
 renders. **Not yet verified against a real OBS** (the user's OBS was open and
 in use during the build, so it was left alone).
 
+## v2.0.0-beta.2: league design, league scenes, backgrounds
+
+Asked for after the user tried beta.1 ("I love the new gui look and use"):
+
+1. **No game preferred.** The user plays Rocket League and saw it leaking into
+   general wording. And "when building the scenes if RL isn't selected as a
+   game, rl stats scene needs to be deleted".
+2. **LotE's scenes were Widener's with new colours.** Keep the clean feel but
+   give the league its own layout. A director's concept art was offered as
+   loose inspiration only (the user finds it cluttered): small line above a
+   big headline on the left, the mark large on the right, socials bottom left.
+3. **League-wide scenes**, "like the League Standings", so a stream can show
+   how each school is doing in that game. The data has no source yet ("can be
+   pulled from LotE standing page at a later date").
+4. **Logos must never be cropped** (Widener's W lost its top corners).
+5. Mid-build: three more backgrounds from the LotE Background Set (Word Rows,
+   Mark Pattern, Curtains), **a background per scene**, mixed into the defaults.
+
+### Scenes follow the match
+
+- `buildOptions()` (server.js): `includeStats` is now `state.scoreboard.style
+  === 'rl'` (it was "the league plays Rocket League"), plus `leagueScenes`
+  from the prefs. `syncLayout()` re-runs it after every panel update and prefs
+  save, calls `obs.setLayout()` and tells panels `{type:'scenes'}`.
+- `obs.js` knows every scene the app could make (`everyScene()`: the stats
+  scene, both league scenes, every LeagueOS graphic via `allNeccTypes`). A
+  build **removes** the ones not in the layout: `RemoveInput` then
+  `RemoveScene`, after moving program off a scene that is about to go. The
+  build returns `removed`; `inspect()` returns `stale` (scene names).
+- Panel: the Live page's Scenes card shows one line when OBS differs (a scene
+  missing, or one of the app's still there but unused) with a build button;
+  the build step's checklist says what a build will remove.
+- Neutral wording: the game tiles all read "Best of N, by map/game/set"; the
+  scoreboard Style select became "Scores come from" (this panel / the game)
+  and only shows for a game whose preset has a live style; the setup guide,
+  the OBS banner, the music tip and the shortcut list no longer single a game
+  out. Picking "Another game" resets `scoreboard.style` to `standard`.
+
+### Logos
+
+Every logo box was `object-fit: cover` or had a `border-radius`, so a logo that
+reaches its own image edges (Widener's W, most of the league's tight-cropped
+files) lost its corners. Now `contain`, square corners, no plate: overlay
+(`.roster-logo`, `.sb-logo`, `.sbc-logo`, the new ones) and panel
+(`.brand-logo`, `.ret-sum-logo`, `.tc-logo`, `.slot img`, `.school-tile img`).
+The files themselves were checked against the league's originals: tight, but
+not cut. LotE's theme adds a thin light `drop-shadow` edge to school logos, so
+a dark mark (LVC's navy, Albright's black A) reads on the purple ground.
+
+### League of the East's own look (`profiles/lote/theme.css`, `theme.js`)
+
+- **Fixed stage.** `--fixed-stage:1` makes the overlay scale `#widener-frame`
+  and `.brand-bg` as one 1920x1080 stage (like Be Right Back), so the theme is
+  written in stream pixels.
+- **Layout.** Masthead (mark, league name, game) over a hairline with a short
+  purple rule; text column on the left under a spaced-capitals line (the old
+  pill); footer hairline with plain social handles. Square, lined panels in
+  `rgba(37,8,57,.9)` instead of Widener's pills and slants.
+- **Type.** Headlines in **Pink Blue** (the accent face in the LotE design
+  system, "for one to three words"), everything else Kanit and Inter.
+  `--title-lines:2` makes `fitTitle()` step the headline down until it fits two
+  lines. Pink Blue is a licensed font (Rometheme): the file sits in
+  `profiles/lote/assets/fonts/`, is **gitignored** (the repo is public) and is
+  packed into the LotE installer from the build PC; without it the headlines
+  fall back to Kanit. `build/dist.js` warns when it is missing. (beta.5 added
+  Zentras as a second headline face, see below.)
+- **Matchup row** (`#matchup`, hidden in the base CSS): both schools with logo,
+  name and record on Starting Soon; on Post-Match the series score, "Final"
+  once decided, the loser dimmed. A subtitle that only repeats "A vs B" is
+  dropped beside it.
+- **Rosters**: two panels topped with the school's colours (3:1 primary to
+  secondary), numbered rows, a page heading in the masthead (`#page-head`).
+- **Be Right Back**: masthead, a line above the headline (`#brb-kicker`: game
+  and round), headline, a purple rule and the subtitle, and the mark itself
+  large on the right (`#brb-art`).
+- **Scoreboard**: rounded ends, dark score boxes over the team colour, the
+  league's purple in the middle (standard bar and compact box). The Rocket
+  League board keeps its own shape.
+- **Backgrounds.** `profile.json` `backgrounds: { list, defaults }`; `theme.js`
+  (served at `/brand-theme.js`, a new optional `themeScript`) builds one
+  `.bg-<id>` layer per background in `.brand-bg`; `body[data-bg]` shows one.
+  `state.backgrounds[view]` holds the operator's pick per view (`necc` is
+  shared by every league graphic; the Scoreboard has none), merged per key like
+  `views`, and not part of a saved match. The Stats scene shows the picked
+  background too (`.rls` is transparent in this theme).
+- **Entrances.** Animations sit under `body.enter`. The overlay re-applies the
+  class when OBS reports the source active on program (`obsSourceActiveChanged`,
+  which fires at the start of a transition) and removes it a few seconds later,
+  so a row redrawn by a score or standings change appears in place.
+  `--enter-delay` is the stinger's cut point less 150 ms. An unlocked page
+  replays on a view change instead. This replaced Be Right Back restarting its
+  wipe on every state update. **Not seen in a real OBS yet.**
+
+### League scenes and standings
+
+- `profile.json` `leagueScenes: ['standings', 'matchup']` (LotE only). Views
+  `standings` and `matchup`, scenes `<prefix>: Standings` and `<prefix>: Head
+  to Head`, drawn in `#lg-view` on the fixed stage with base styles any league
+  could use.
+- Data: `league.json` in the data folder, `{ standings: { <gameId>: { rows,
+  note, playoffSpots, lastResult, updatedAt } } }`, a row being `{ teamId,
+  name, tag, w, l, gw, gl, streak }` in display order. `GET /api/league`, `PUT
+  /api/league/standings/<game>`; sent to every page as `{type:'league'}` with
+  each row hydrated from the team library (name, short name, colours, logo).
+  A future import from the league's standings page should write through the
+  same PUT.
+- Panel: a **League** page (only with `leagueScenes`): game, note, playoff
+  spots, the table (rows edit in place and save on change; arrows reorder;
+  Sort by record), Add every league school, and **Add this result to the
+  standings** from the match on the Live page (win/loss, games for and
+  against, streak; asks before adding the same result twice; Undo).
+- Overlay: Standings is one column to ten rows and two beyond, the row height
+  set from the count, the match's two schools highlighted, an optional playoff
+  line. Head to Head compares place, record, games, difference and streak and
+  dims the worse side. `recordText()` puts "4-1 · 2nd" on the matchup row and
+  Rosters. A team is matched to a row by name the way imports are matched to
+  schools (`sameSchool`, duplicated in the panel).
+
+### Verified for v2.0.0-beta.2
+
+Against the mock OBS: a Rocket League match builds the Stats scene; switching
+the game to Valorant marks it stale in the panel; a build removes the scene and
+its source, also when it is on program (program moves to Starting Soon first).
+Renders of every LotE scene at 1920x1080, each background, standings at 6, 8,
+12 and 16 rows, the video panel on. The League page: edit, sort, add result,
+undo. Widener's scenes unchanged apart from the logo fit. Still **not run
+against a real OBS**.
+
+## v2.0.0-beta.3: scenes pick up an app update
+
+The user, after installing beta.2 over beta.1: "when i update the app, and
+build new scenes the sources are stuck in their old look unless i refresh the
+browser source". Cause: the scene sources are created with `shutdown: false`,
+so OBS keeps each page loaded while the app is replaced underneath it; the
+page reconnects to the new server but is still the old HTML, CSS and script.
+Two fixes, either enough on its own:
+
+- **A build reloads them.** For a source that already existed, `obs.js` presses
+  the browser source's "Refresh cache of current page" button
+  (`PressInputPropertiesButton`, `propertyName: 'refreshnocache'`). The build
+  returns `reloaded` (a count) and the panel says so. This is also what moves a
+  page from beta.1 or beta.2, which has no self-reload, onto the new version.
+- **A page reloads itself.** `server.js` hashes what it serves into
+  `PAGE_STAMPS` (`overlay`: the template, the theme's CSS and script, the
+  profile; `panel`: the three control files, the profile; both with the
+  version). `/brand.js` hands a page its stamp as `window.APP_STAMP` as it
+  loads, and every (re)connect gets `{type:'hello', stamp}` first. A different
+  stamp reloads the page, at most once per stamp (`sessionStorage`
+  `reloaded-for`), so a mismatch can't loop. The control panel does the same,
+  for a dock left open in OBS.
+
+Marvel Rivals is best of 5 (both profiles' `games.json`).
+
+Verified: against the mock OBS a second build reports 9 reloaded and each
+source's button was pressed once; in the browser an open scene reloaded itself
+when the server came back with a different stamp. **`refreshnocache` has not
+been pressed on a real OBS yet.**
+
+## v2.0.0-beta.4: scenes in stream order
+
+The user: "modify the scene build order from top to bottom to be more in line
+with the use of the scenes throughout the stream, ie starting soon at the top,
+and ending at the bottom".
+
+- `sceneEntries()` (obs.js) now returns the scenes in stream order, which is
+  the order they are created in, the order of the panel's scene list and the
+  Stream Deck list: Starting Soon, Rosters, Head to Head, Standings, the league
+  graphics (Match Preview, Match Rosters, Bracket, Season Header, Match
+  Progress, Match Activity; `NECC_TYPES` in server.js and control.js is in
+  that order), Scoreboard, Rocket League Stats, Be Right Back, Post-Match.
+- **obs-websocket cannot reorder scenes.** A new scene lands at the bottom of
+  the list and there is no request to move one. `GetSceneList` answers bottom
+  scene first with `sceneIndex` 0 at the bottom, so `sceneOrder()` sorts by
+  it, descending, for the list as OBS shows it.
+- So `buildScenes()` works out how many scenes from the top of the wanted
+  order are already in place (existing, and in rising positions), and makes
+  everything after that in order: a missing scene is created, one that exists
+  is moved by `moveSceneToBottom()`. A new collection needs no moves; adding
+  the stats scene for a Rocket League match moves only Be Right Back and
+  Post-Match.
+- `moveSceneToBottom(name)`: create `<name> (moving)`, `DuplicateSceneItem`
+  every item bottom first (same sources, so nothing is recreated; transform,
+  crop and visibility come with it; lock and blend mode are set after), copy
+  the scene's filters and transition override, move program and preview
+  across if they were on it, `RemoveScene` the old one, `SetSceneName` the new
+  one back. A leftover `(moving)` scene from a cut-short move is renamed or
+  removed at the start of the next build. Lost: a hotkey bound to the scene
+  in OBS (no API for it).
+- It doesn't move anything (`ordering` in the build result says why) while OBS
+  is streaming or recording (`live`), when a scene to move holds a group or is
+  used as a source in another scene (`custom`), or with the `orderScenes`
+  preference off (`off`, Settings, OBS).
+- obs.js follows `SceneNameChanged`, so the scene on program is still known
+  after it is renamed.
+
+Verified against the mock OBS (which now answers `GetSceneList` the way the
+real one does): a new collection in order; an old-order collection with the
+operator's own scene in the middle put right, the Scoreboard's locked, cropped
+game capture, scene filter and transition override intact, program and preview
+unchanged; a second build moving nothing; the stats scene landing after the
+Scoreboard; and the three reasons for leaving the order alone. **Not run on a
+real OBS**: `DuplicateSceneItem` across scenes and removing a scene that was
+just on program are the calls to watch.
+
+## v2.0.0-beta.5: two headline typefaces
+
+The user, with `zentras-font.zip`: "For the 'alt' font like the artist one for
+big text, I want the option for 2 different ones. Can you also add this font
+to the LotE design artifact."
+
+- **Profile.** `headlineFonts: { list: [{ id, name, family, file }], default }`
+  in `profile.json` (LotE: `pink-blue`, `zentras`). `profile.js` keeps only
+  the ones whose file is in `assets/` (`missing` names the rest, and
+  `build/dist.js` warns about each), `brandCss()` writes an `@font-face` per
+  typeface into `/brand.css` (so the panel has them too), and `clientBrand()`
+  passes `{ list: [{ id, name, family }], default }`.
+- **State.** `headlineFont` (an id, `''` for the profile's default). One
+  choice for the whole stream, not per scene: I judged that mixing a brush
+  face and a blackletter between scenes would look unplanned. The user did not
+  say which they meant.
+- **Overlay.** `setHeadlineFont()` sets `body[data-headfont]`, loads the face
+  and refits the two fitted headlines; both faces are fetched at page load so
+  a switch shows at once. `fitTitle()` now measures `offsetHeight`:
+  `scrollHeight` counted the blackletter's descent below the last line, so two
+  lines read as three and the title was shrunk to one.
+- **Theme.** `theme.css` sets every headline with `var(--font-accent)` and
+  three variables a typeface can change: `--accent-case` (Pink Blue
+  `uppercase`, Zentras `none`: blackletter capitals in a row don't read),
+  `--accent-scale` (Zentras 1.24: it is narrow) and `--accent-space`. To add a
+  third typeface: the file, a `headlineFonts` entry, and one
+  `body[data-headfont="<id>"]` rule.
+- **Panel.** Live page, under the scene list: **Headline typeface**, one
+  button per face with its name set in that face (`buildHeadFontPicker()`).
+  Hidden with fewer than two.
+- **Licence.** `Zentras.ttf` is the free download from fontspace: its notes
+  say "Demo just for personal use, not permitted for commercial use" (Alit
+  Design, full version at alitdesign.net). It is gitignored like Pink Blue and
+  packed into the LotE installer from the build PC. The user was told a league
+  broadcast needs the full licence.
+- The LotE design system artifact got the same typeface: `fonts/Zentras.ttf`,
+  an `accent-2` family and `accent2-lg` / `accent2-md` styles in
+  `tokens.json`, and the README's type section.
+
+## v2.0.0-beta.6: Widener scene backgrounds
+
+The user: "Create an artifact similar to the LotE background options but for
+Widener. Then show it to me and I'll pick a few to give background options in
+the Widener app just like the LotE app." They picked 01 Varsity Stripes, 02
+Shutters, 12 W Shine, 14 Pride Lions and 27 Pride Tape.
+
+- **The set.** "Widener Background Set"
+  (https://claude.ai/artifact/X2XLXoJFFZqe14x5AZhx4n): a gallery page plus one
+  standalone 1920 x 1080 page per loop under `bg/`, 27 loops and the app's
+  current stripes for comparison, in blue and gold only. Each tile carries a
+  measured text-contrast figure (scene text against the brightest 0.5% of the
+  picture, worst case over a minute); all are 7 to 1 or better. Its builder
+  lived in the session scratchpad and is not in the repo; the artifact's own
+  files are the source.
+- **Profile.** `profiles/widener/profile.json` gained `backgrounds` (six: the
+  five picks and `stripes`, "Moving Stripes", the page's own), `theme` and
+  `themeScript`. Defaults are mine, chosen from renders of every scene on
+  every background: Starting Soon `varsity-stripes`, Rosters `shutters`, Be
+  Right Back `w-shine` (the W sits in that scene's free right half), Post-Match
+  `pride-tape`, league graphics `pride-lions`, Rocket League Stats `stripes`.
+  Widener was all `stripes` before, so its default look changed; the user was
+  told.
+- **`profiles/widener/theme.css` and `theme.js`** (new) hold backgrounds only.
+  The base overlay styles are still the Widener look. The layers are built in
+  `.brand-bg` on a 1920 x 1080 stage scaled to cover (`--bg-fit`, set by
+  theme.js, because Widener's page is not a fixed stage). Each layer starts
+  with its own copy of the ground: `.brand-bg` is a stacking context, so
+  without it the `screen` and `overlay` lights would blend against nothing
+  and look different from the set. `--bg-w` and `--bg-lions` point at the
+  profile's logo and mascot; the art is shown as it is, at low opacity, never
+  recoloured, and the whole W is inside the frame.
+- `stripes` shows the base page's `.stripes` and `.bg-gradient`; any other
+  choice hides them. theme.js sets `body[data-bg]` to the scene's default at
+  load, so a scene never shows the stripes for a moment before its state
+  arrives.
+- **Rocket League Stats** takes a background too (base CSS hid `.brand-bg`
+  there): the theme draws the stats screens over it at half strength and
+  drops `.rls`'s own ground. With `stripes` it looks close to what it did.
+- **A jump fixed in the base page.** `.stripes` ran `drift 40s linear
+  infinite` over a distance that was not a whole repeat of its 96px pattern,
+  so it snapped back every 40 s; the sheen did the same every 9 s. Now one
+  loop moves exactly one repeat (21.96px, 103.29px at scale 1.1, in 52 s, the
+  same pace), and the sheen starts and ends off the page (18 s). Measured in
+  the dev app: the frame before the restart and the frame after differ by no
+  more than two frames 40 ms apart mid-loop.
+- No panel or server change was needed: the Background select per scene, the
+  `backgrounds` state and the page stamps were all built for LotE in beta.2.
+
+Not checked on a real OBS. The canvas-drawn loops in the set were not picked,
+so every background in the app is CSS only.
+
+## v2.0.0-rc.1: standings from the league site, copy pass, release prep
+
+The user, on the day of LotE's first match (Widener vs Messiah, Rocket League,
+2026-10-05 8 PM, `https://lote.v1.leagueos.gg/league/matches/ak16dfawcqj8qxbxvdca0spaf`):
+"Start prepping for the full release, clean up the instruction language to
+sound less like AI giving casual instructions, it should be direct and
+technical. There is also too much 'feature confirmation' where it feels like
+you are trying to describe a feature in the way I told you to put it in just
+to match what I wanted, fix it. Default font should be Zentras. [...]
+Standings should not be manually editable. All details will come from the
+league website [...] Each game has its own standings; the app needs to be
+able to pull them from the site when the game is selected."
+
+### Standings from LeagueOS
+
+- The league site is an SPA; its season results page
+  (`/league/seasons/<id>/results`) calls `api.leagueos.gg` with the same
+  `x-leagueos-*` headers the match import already used. Found by reading the
+  site's script chunks (`SeasonResults`, `league.season.rosters`):
+  - `GET /league/seasons?ipp=&page=` (needs `x-leagueos-lid`): the league's
+    seasons, one per game: `{ id, name, stdAct, dateStart, dateEnd }`.
+  - `GET /league/seasons/<id>`: `scoringProps` (the sort order: `path`,
+    `sortDesc`) and `displayProps`.
+  - `GET /league/seasons/<id>/rosters?ipp=&page=` (`ipp` is required): teams
+    with `state`, `name`, `clanTag`, colours, `parent` and `stats` (wins,
+    losses, gameWins, gameLosses, totalScore, totalScoreAgainst, ...).
+  The page lists `state === 'confirmed'` teams sorted by the scoring props.
+  Win %, game win % and score delta are derived on the client, not stored.
+- `necc.js`: `listSeasons`, `pickSeason` (running now, else next to start,
+  else latest), `seasonStandings` (sorted rows with a rank shared on ties,
+  `played`, `scored`). `importMatch` now also returns `hostname`, `leagueId`,
+  `seasonId`, `activity`.
+- Profile: `league.site` and `league.id` in `profile.json`; `leagueActivity`
+  (LeagueOS `stdAct` values) and `scoreName` per game in `games.json`. LotE's
+  activity ids seen on the site: `rl`, `valorant`, `overwatch`, `ssbu`. No
+  Marvel Rivals season existed on 2026-10-05, so its ids are guesses and the
+  season-name fallback covers it.
+- `server.js`: `refreshStandings(gameId, force)` replaces the hand-typed
+  store. Called at start, on a game change (the panel's update handler), after
+  an import from the league's own host (which also pins that match's season
+  for the game in `league.seasons`), every 5 minutes for the current game,
+  and by `POST /api/league/refresh`. Results go to `league.json` (`v: 2`; the
+  beta tables are dropped) and to every page as `{type:'league'}`. A failed
+  read keeps the last rows and records `error`. `PUT
+  /api/league/standings/:game` is gone.
+- Overlay: columns are record, games, difference, plus the score difference
+  when `scored`. Streak, the playoff line and the note line are gone (the site
+  has none of them). No rank is drawn until `played`. Team-to-row matching is
+  by name prefix, then by short name only when one row has it: Messiah and
+  Marywood are both `MU`.
+- Panel: the League page is a read-only table with the season name, the read
+  time or error, Refresh and Put Standings on air.
+- At the time of writing every LotE record was 0-0 (the season started that
+  night), so the ordering and tie code was checked against the live data only
+  in its all-level case.
+
+### Copy
+
+Every string in `index.html`, `control.js`, `main.js` and the overlay's
+operator-visible lines was rewritten: noun headings, one factual sentence per
+tooltip, status lines as `subject: state`, no second-person narration, no
+reassurance, and no toast that only restates what a control just did (the
+font, team-slot and scene-toggle confirmations are gone). The README was
+rewritten as a reference in the same register. Button names that changed:
+"Build scenes", "Configure stinger", "Run setup", "Restart countdown", "Game
+stats", "Series overview", "Back to Scoreboard".
+
+A standing instruction from the user for future work: UI and documentation
+text is direct and technical, and never describes a feature in terms of the
+request that produced it.
+
+### Other
+
+- LotE's default headline font is Zentras (`headlineFonts.default`).
+- Version `2.0.0-rc.1`. Nothing was committed, pushed or published.
+
+## v2.0.0-rc.2: stats stay up until the next kickoff
+
+The user: "How long does the stats screen stay up for RL after a game? It
+should stay open until the next game is about to start."
+
+- It never had a time limit, but it came down when the next match *loaded*:
+  `onGameStarting()` ran on rlstats' `matchStart` (MatchCreated,
+  MatchInitialized, or the first UpdateState after none, which also fires
+  after the client's 4 s "no packets" timeout). A lobby that loads and then
+  waits would have lost the stats early.
+- The official docs (rocketleague.com/developer/stats-api, read 2026-10-05)
+  give the events: `MatchCreated` "when all teams are created and
+  replicated", `MatchInitialized` "when the first countdown starts",
+  `CountdownBegin` "at the start of each round when the countdown starts",
+  `RoundStarted` "after the countdown finishes", `MatchDestroyed` "when
+  leaving the game". `Game.Ball.TeamNum` is 255 until the ball is touched.
+- `rlstats.js` now emits `{ type: 'gameStarting', why }` once per game:
+  `countdown` (MatchInitialized, CountdownBegin), else `round`
+  (RoundStarted), else inferred `clock` (a clock below its highest value
+  this game, or overtime) or `play` (a state with no winner and a touched
+  ball). The latch resets on MatchEnded and MatchCreated. Inferred signals
+  are ignored for 10 s after a game ends (`INFER_AFTER_END_MS`) and until a
+  state without a winner has been seen, so the finished game's late packets
+  can't cancel the pending cut to the stats.
+- `server.js` calls `onGameStarting()` on `gameStarting` only. `matchStart`
+  is still sent to the pages but no longer cuts.
+- `dev/mock-rlstats.js` follows the documented order: MatchCreated, a wait,
+  MatchInitialized + CountdownBegin, RoundStarted, play; the ball is 255
+  until play.
+- Tested end to end with a fake feed, the mock OBS and the server in process
+  (dev code and the packaged LotE rc.2): stats at +3 s, kept through the
+  podium, a silent lobby and the next match loading, back at the first
+  countdown, back on the clock alone when every start event is missed, a
+  stray post-game packet not cancelling the cut, and the decided series
+  staying up. **Not run against the real game.**
+
+## v2.0.0: release
+
+The user, 2026-10-05: "Push the update for everything." Released from
+`master`, fast-forwarded to `test/obs-first`, tag `v2.0.0`. The code is
+rc.2's; only the version changed.
+
+- The first public release since v0.11.0. v0.12.0-beta.1, v1.0.0 and every
+  v2 beta and rc were local installers, and the v1.0.0 and v2 commits had
+  never been pushed.
+- One GitHub release holds both profiles' files: the Widener installer,
+  its `.blockmap` and `latest.yml`; the LotE installer, its `.blockmap` and
+  `lote.yml`. Installed Widener copies (0.9.0 and newer) update to it and
+  then need **Run setup** once: v2 replaced the single browser source with
+  a scene collection the app builds.
+- **Fonts.** The released LotE installer carries Pink Blue and Zentras. The
+  user's decision: "The fonts need to be with the app, the fonts are already
+  available online for download, they just have licenses for stopping
+  commercial use so you have to contact and pay the creator. Include the
+  fonts." The files stay gitignored and reach the installer from the build
+  PC. Do not strip them from a release build.
+- Packaged checks before the release: the smoke tests on both builds and the
+  Rocket League stats auto-cut test on the LotE build. **Still not run
+  against a real OBS or the real game.**
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
@@ -1151,8 +1582,10 @@ in use during the build, so it was left alone).
   layout: 'left'|'right', clip, logo, montage: bool,
   neccUrl, neccType,                                    // the league graphic on air (follows OBS, v2.0.0)
   neccUrls: { [type]: url },                            // every league graphic from the last import (v2.0.0)
+  backgrounds: { [view]: id },                          // the background picked per scene (v2.0.0, a league theme's)
+  headlineFont: '',                                     // the headline typeface for every scene (v2.0.0); '' = the profile's default
   views: {                                              // per-overlay text (v0.7.2); everything else is global
-    'starting-soon'|'post-match'|'roster'|'brb'|'necc'|'scoreboard': { title, subtitle, status },
+    'starting-soon'|'post-match'|'roster'|'brb'|'necc'|'scoreboard'|'standings'|'matchup': { title, subtitle, status },
   },
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },

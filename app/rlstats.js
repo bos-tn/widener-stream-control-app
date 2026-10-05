@@ -25,6 +25,10 @@ const RETRY_MS = 2000;
 const STALE_MS = 4000;
 // Overlays get at most this many snapshots a second, whatever the send rate.
 const EMIT_MS = 33;
+// Signs of play are not read as the next game starting for this long after a
+// game ends: the finished game's last packets can still be in flight, and no
+// game starts during the podium.
+const INFER_AFTER_END_MS = 10000;
 // Ball speed in the feed is in Unreal units/s (1 uu = 1 cm).
 const UU_TO_KPH = 0.036;
 
@@ -193,6 +197,23 @@ function createRlStats(opts = {}) {
   let lastEmit = 0;
   let snap = emptySnapshot('off');
   const framer = createFramer();
+  // The moment a game is about to start is reported once per game, as
+  // { type: 'gameStarting' }: the first kickoff countdown (MatchInitialized,
+  // CountdownBegin). If that was missed (the socket connected late), the
+  // first sign of play stands in for it: RoundStarted, the clock running, or
+  // a touched ball. `started` is that once-per-game latch; `fresh` says a
+  // state without a winner has been seen since the last game ended, so the
+  // finished game's own late packets are never read as play.
+  let started = false;
+  let fresh = true;
+  let clockMax = 0;
+  let endedAt = 0;
+  function starting(why) {
+    if (started) return;
+    if (why !== 'countdown' && why !== 'round' && Date.now() - endedAt < INFER_AFTER_END_MS) return;
+    started = true;
+    onEvent({ type: 'gameStarting', why });
+  }
 
   function emitNow() {
     clearTimeout(emitTimer); emitTimer = null;
@@ -224,6 +245,12 @@ function createRlStats(opts = {}) {
     // MatchCreated) still counts as a match starting.
     if (!snap.inMatch && !(d.Game && d.Game.bHasWinner)) onEvent({ type: 'matchStart' });
     const g = d.Game || {};
+    if (!g.bHasWinner) {
+      fresh = true;
+      // Ball.TeamNum is the last team to touch the ball, 255 before kickoff.
+      const touched = g.Ball ? num(g.Ball.TeamNum, 255) : 255;
+      if (!g.bReplay && (g.bOvertime || touched === 0 || touched === 1)) starting('play');
+    }
     const teams = [0, 1].map((n) => {
       const t = (g.Teams || []).find((x) => num(x.TeamNum) === n) || {};
       return { name: String(t.Name || (n ? 'Orange' : 'Blue')), score: num(t.Score), color: hexColor(t.ColorPrimary), color2: hexColor(t.ColorSecondary) };
@@ -262,10 +289,17 @@ function createRlStats(opts = {}) {
     const d = msg.data || {};
     switch (msg.event) {
       case 'UpdateState': onUpdate(d); break;
-      case 'ClockUpdatedSeconds':
+      case 'ClockUpdatedSeconds': {
         snap = { ...snap, clock: Math.max(0, Math.round(num(d.TimeSeconds, snap.clock))), overtime: !!d.bOvertime };
         emit();
+        // A clock below its highest value this game is a clock that has run.
+        const t = num(d.TimeSeconds, clockMax);
+        if (fresh && (d.bOvertime || t < clockMax)) starting('clock');
+        if (t > clockMax) clockMax = t;
         break;
+      }
+      case 'CountdownBegin': starting('countdown'); break;
+      case 'RoundStarted': starting('round'); break;
       case 'GoalScored': {
         const scorer = ref(d.Scorer);
         onEvent({
@@ -292,13 +326,19 @@ function createRlStats(opts = {}) {
           type: 'matchEnded', winner: winner === 0 || winner === 1 ? winner : -1, guid: d.MatchGuid || '',
           teams: snap.teams, players: snap.players, arena: snap.arena, overtime: snap.overtime,
         });
+        // The next start signal belongs to the next game.
+        started = false; fresh = false; clockMax = 0; endedAt = Date.now();
         break;
       }
       case 'MatchDestroyed': endMatch(); break;
+      // MatchCreated: the match has loaded (teams created). MatchInitialized:
+      // its first kickoff countdown has begun.
       case 'MatchCreated': case 'MatchInitialized':
         snap = { ...emptySnapshot(snap.status) };
         emitNow();
         onEvent({ type: 'matchStart' });
+        started = false; clockMax = 0;
+        if (msg.event === 'MatchInitialized') starting('countdown');
         break;
       default: break;
     }

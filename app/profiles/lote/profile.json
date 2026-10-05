@@ -8,7 +8,9 @@
   "homeTeam": "",
   "league": {
     "name": "LotE",
-    "importHint": "Paste the LotE match page link from LeagueOS"
+    "importHint": "https://lote.v1.leagueos.gg/league/matches/...",
+    "site": "https://lote.v1.leagueos.gg",
+    "id": "9kx1eizx9o0eq89ga5k4dda2e"
   },
   "obs": {
     "prefix": "LotE",
@@ -60,10 +62,37 @@
     "trackMatte": false
   },
   "music": null,
+  "leagueScenes": ["standings", "matchup"],
+  "backgrounds": {
+    "list": [
+      {"id": "mark-shine", "name": "Mark Shine"},
+      {"id": "word-rows", "name": "Word Rows"},
+      {"id": "mark-pattern", "name": "Mark Pattern"},
+      {"id": "curtains", "name": "Curtains"}
+    ],
+    "defaults": {
+      "starting-soon": "mark-shine",
+      "brb": "curtains",
+      "roster": "mark-pattern",
+      "post-match": "word-rows",
+      "stats": "mark-pattern",
+      "standings": "curtains",
+      "matchup": "word-rows",
+      "necc": "mark-shine"
+    }
+  },
+  "headlineFonts": {
+    "list": [
+      {"id": "pink-blue", "name": "Pink Blue", "family": "Pink Blue", "file": "fonts/PinkBlue.ttf"},
+      {"id": "zentras", "name": "Zentras", "family": "Zentras", "file": "fonts/Zentras.ttf"}
+    ],
+    "default": "zentras"
+  },
   "defaults": {
     "montage": false
   },
   "theme": "theme.css",
+  "themeScript": "theme.js",
   "build": {
     "appId": "edu.widener.esports.lotestreamcontrol",
     "artifactName": "LotE-Stream-Control-Setup-${version}.${ext}",

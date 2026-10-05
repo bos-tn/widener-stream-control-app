@@ -1,42 +1,287 @@
-/* League of the East overlay theme (v1.0.0). Loaded by the overlay page only,
+/* League of the East overlay theme (v2.0.0). Loaded by the overlay page only,
    after the base styles and /brand.css.
 
-   Scene background: "09 Mark Shine" from the LotE Background Set. The LotE
-   mark, huge and ghosted, with a band of light crossing it every nine
-   seconds, over a purple glow and the league's purple ground. Ported from
-   bg/09-mark-shine.html as plain CSS, so it costs nothing extra in OBS. The
-   overlay always renders at 1920 x 1080, so the set's pixel positions are
-   used as is. */
+   The league's scenes have their own layout, not Widener's with new colours:
+   a masthead (the mark and the league's name over a hairline), the text in
+   one column on the left under a small line of capitals, the mark large on
+   the right, and a footer line. Scene headlines are set in one of the
+   league's two accent faces, Pink Blue or Zentras, for one to three words;
+   everything else is Kanit and Inter. Starting Soon and Post-Match show the matchup with both
+   schools' logos and records (Post-Match the series score), Rosters are two
+   panels topped with the school's colours, and Standings and Head to Head
+   are the league's own scenes.
+
+   Every scene is drawn on a fixed 1920 x 1080 stage (--fixed-stage), so the
+   pixel positions below are the stream's pixels. */
+
+/* ---- Headline typefaces ----------------------------------------------------
+   The operator picks one for the whole stream (profile.json lists them,
+   /brand.css declares them, the page sets body[data-headfont]). Neither file
+   is in the repository (see assets/fonts/README.md); without them the
+   headlines use Kanit.
+
+   The two are drawn very differently, so each brings its own letter case and
+   scale: every headline size below is multiplied by --accent-scale.
+   Pink Blue is wide brush capitals. Zentras is a narrow blackletter, which
+   only reads in upper and lower case and has room to be set larger. */
+
+body[data-headfont="zentras"]{ --font-accent:'Zentras'; --accent-case:none; --accent-scale:1.24; --accent-space:.01em; }
+
+:root{
+  --fixed-stage:1;
+  --title-lines:2;
+  --brb-max:1120;
+  --font-accent:'Pink Blue';
+  --accent-case:uppercase;
+  --accent-scale:1;
+  --accent-space:0;
+  --lote-purple:#8205A7;
+  --lote-lav:#CDB9DA;
+  --lote-line:rgba(255,255,255,.16);
+  --lote-surface:rgba(37,8,57,.9);
+  --lote-ease:cubic-bezier(.22,1,.36,1);
+}
+
+/* ---- Backgrounds -----------------------------------------------------------
+   Four, from the LotE Background Set, built by theme.js. The operator picks
+   one per scene; profile.json holds the defaults. */
 
 .stripes, .bg-gradient{ display:none; }
+.brand-bg{ display:block; inset:0 auto auto 0; width:1920px; height:1080px; transform-origin:top left; }
+body[data-bg="mark-shine"] .bg-mark-shine,
+body[data-bg="word-rows"] .bg-word-rows,
+body[data-bg="mark-pattern"] .bg-mark-pattern,
+body[data-bg="curtains"] .bg-curtains{ display:block; }
+.brand-bg .vig{ inset:0; background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.32) 100%); }
 
-.brand-bg{ display:block; }
-.brand-bg .bb-1{ /* purple halo */
-  right:-60px; top:-180px; width:1500px; height:1500px;
+/* 09 Mark Shine. The mark stands on the right, clear of the text column. */
+.bg-mark-shine .halo{ right:-330px; top:-210px; width:1500px; height:1500px;
   background:radial-gradient(circle, rgba(130,5,167,.5) 0%, rgba(130,5,167,.14) 40%, rgba(130,5,167,0) 68%);
-  animation:lote-halo 16s ease-in-out infinite alternate;
-}
+  animation:lote-halo 16s ease-in-out infinite alternate; }
 @keyframes lote-halo{ from{ opacity:.7; transform:scale(.95) } to{ opacity:1; transform:scale(1.05) } }
-.brand-bg .bb-2, .brand-bg .bb-3{ /* the mark, and the shine across it */
-  right:190px; top:-30px; width:1140px; height:1140px;
-  -webkit-mask:var(--brand-watermark) center / contain no-repeat;
-  mask:var(--brand-watermark) center / contain no-repeat;
-}
-.brand-bg .bb-2{ background:rgba(255,255,255,.07); }
-.brand-bg .bb-3{
+.bg-mark-shine .mk{ right:-103px; top:21px; width:1040px; height:1040px;
+  -webkit-mask:var(--brand-watermark) center / contain no-repeat; mask:var(--brand-watermark) center / contain no-repeat; }
+.bg-mark-shine .mk.base{ background:rgba(255,255,255,.07); }
+.bg-mark-shine .mk.shine{
   background:linear-gradient(105deg, rgba(255,255,255,0) 40%, rgba(255,255,255,.6) 50%, rgba(255,255,255,0) 60%) 100% 0 / 300% 100% no-repeat;
-  animation:lote-glint 9s ease-in-out infinite;
-}
+  animation:lote-glint 9s ease-in-out infinite; }
 @keyframes lote-glint{ 0%{ background-position:100% 0 } 62%, 100%{ background-position:0% 0 } }
-.brand-bg .bb-4{ /* vignette */
-  inset:0;
-  background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.32) 100%);
-}
+/* Be Right Back has the mark itself on the right; no second one behind it. */
+body[data-mode="brb"] .bg-mark-shine .mk{ display:none; }
 
-/* Never set text in the league purple (2.3 to 1 on the ground): the footer
-   tagline runs lavender to white instead of purple to lavender. */
-.badge{ background:linear-gradient(90deg, #CDB9DA, #FFFFFF); -webkit-background-clip:text; background-clip:text; }
+/* 22 Word Rows. */
+.bg-word-rows .wr{ position:absolute; left:0; top:calc(var(--r) * 216px - 40px); width:100%; height:216px; overflow:hidden; white-space:nowrap; }
+.bg-word-rows .tk{ display:inline-block; font:800 188px/216px 'Kanit', 'Arial Narrow', Impact, sans-serif; text-transform:uppercase;
+  letter-spacing:.02em; color:transparent; -webkit-text-stroke:2px rgba(255,255,255,.085);
+  animation:lote-mq var(--d) linear infinite; animation-direction:var(--dir, normal); }
+.bg-word-rows .tk.fill{ color:rgba(130,5,167,.2); -webkit-text-stroke:0; }
+.brand-bg .tk i{ position:relative; top:-6px; display:inline-block; width:34px; height:34px; margin:0 76px; border-radius:50%;
+  background:rgba(255,255,255,.1); vertical-align:middle; }
+@keyframes lote-mq{ from{ transform:translateX(0) } to{ transform:translateX(-50%) } }
 
-/* Rocket League stats screens: the purple ground and the mark. */
-.rls{ background:radial-gradient(1400px 800px at 12% 8%, #270146 0%, #1A0327 62%, #12011c 100%); }
-.rls::before{ background:#FFFFFF; opacity:.035; }
+/* 23 Mark Pattern. */
+.bg-mark-pattern .mr{ left:-270px; top:calc(var(--r) * 135px); width:2460px; height:135px; opacity:.075;
+  background:var(--brand-watermark) 0 50% / 135px 135px repeat-x;
+  animation:lote-ms 60s linear infinite; animation-direction:var(--dir, normal); }
+@keyframes lote-ms{ from{ transform:translateX(0) } to{ transform:translateX(270px) } }
+.bg-mark-pattern .wash{ inset:-200px; background:linear-gradient(115deg, rgba(130,5,167,0) 30%, rgba(130,5,167,.28) 50%, rgba(130,5,167,0) 70%);
+  animation:lote-wv 22s ease-in-out infinite alternate; }
+@keyframes lote-wv{ from{ transform:translateX(-700px) } to{ transform:translateX(700px) } }
+
+/* 26 Curtains. */
+.bg-curtains .pn{ left:var(--l); top:-160px; width:var(--w); height:1400px; clip-path:polygon(22% 0, 100% 0, 78% 100%, 0 100%);
+  background:linear-gradient(90deg, rgba(130,5,167,0), rgba(130,5,167,var(--a))); mix-blend-mode:screen;
+  animation:lote-pn var(--d) ease-in-out infinite alternate; }
+.bg-curtains .pn.w{ background:linear-gradient(90deg, rgba(215,160,240,0), rgba(215,160,240,var(--a))); }
+@keyframes lote-pn{ from{ transform:translateX(calc(var(--m) * -1)) } to{ transform:translateX(var(--m)) } }
+
+/* ---- The frame: Starting Soon, Post-Match, Rosters ------------------------- */
+
+.wrap{ position:absolute; top:0; left:0; width:1920px; height:1080px; padding:0; display:block; transform-origin:top left; }
+.frame:before, .frame:after{ display:none; }
+
+/* Masthead: the mark, the league's name and the game, over a hairline with
+   a short purple rule at its start. */
+.topbar{ top:40px; left:72px; right:auto; height:108px; padding:0; gap:16px; background:none; }
+.logo{ height:92px; filter:none; }
+/* The mark's file has wide clear sides; pull the name in beside the art. */
+.logo:not(.custom), .brb-lion, .lg-mark{ margin:0 -22px; }
+.brand{ font-size:30px; letter-spacing:.04em; text-transform:uppercase; }
+.brand small{ margin-top:8px; font-family:'Inter', system-ui, sans-serif; font-size:15px; letter-spacing:.22em; color:var(--lote-lav); }
+.brand small:empty{ display:none; }
+.bar{ top:148px; left:72px; right:72px; height:1px; overflow:visible; background:var(--lote-line); box-shadow:none; animation:none; transform:none; }
+.bar::after{ inset:-1px auto auto 0; width:120px; height:3px; background:var(--lote-purple); mix-blend-mode:normal; opacity:1; transform:none; animation:none; }
+
+/* Footer: the social handles as plain text over a hairline. */
+.socials{ left:72px; right:72px; bottom:40px; height:80px; border-top:1px solid var(--lote-line); }
+.handles{ gap:10px 34px; }
+.tag{ padding:0; gap:10px; border:0; border-radius:0; background:none; font-size:20px; }
+.tag svg{ width:22px; height:22px; color:var(--lote-lav); opacity:1; }
+.badge{ display:none; }
+.next{ font-size:20px; letter-spacing:.04em; color:var(--lote-lav); }
+
+/* The text column. */
+.content, .content-left, .content-right{ position:absolute; left:72px; right:auto; top:148px; bottom:120px; width:1100px; max-width:none; margin:0;
+  display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:0; text-align:left; }
+.content-right{ left:auto; right:72px; }
+.pill{ padding:0; gap:14px; border:0; border-radius:0; background:none; backdrop-filter:none;
+  font-size:22px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:var(--lote-lav); }
+.pill:has(#status-text:empty){ display:none; }
+.dot{ width:12px; height:12px; border-radius:0; background:#fff; box-shadow:none; transform:rotate(45deg); animation:lote-beat 1.6s ease-in-out infinite; }
+.soonPulse{ animation:none; }
+@keyframes lote-beat{ 0%, 100%{ opacity:1 } 50%{ opacity:.3 } }
+.title, body[data-mode="starting-soon"] .title{ margin-top:20px; max-width:100%; font-family:var(--font-accent), 'Kanit', system-ui, sans-serif;
+  font-weight:400; font-size:calc(136px * var(--accent-scale)); line-height:.98; letter-spacing:var(--accent-space); text-transform:var(--accent-case); text-shadow:0 10px 40px rgba(0,0,0,.45); text-wrap:balance; }
+.subtitle{ margin-top:16px; font-size:30px; font-weight:500; color:var(--lote-lav); }
+.subtitle:empty, .content.sub-dup .subtitle{ display:none; }
+.count{ margin-top:30px; font-size:112px; font-weight:800; line-height:1; letter-spacing:0; }
+
+/* The matchup: both schools, with the record each brings in. On Post-Match
+   it carries the series score, and the school that lost steps back. */
+.content .matchup:not([hidden]){ display:grid; }
+.matchup{ width:1000px; margin-top:36px; padding:24px 0; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:30px;
+  border-top:1px solid var(--lote-line); border-bottom:1px solid var(--lote-line); }
+.mu-team{ display:flex; align-items:center; gap:20px; min-width:0; }
+.mu-team.right{ flex-direction:row-reverse; text-align:right; }
+.mu-logo{ width:96px; height:96px; flex-shrink:0; }
+.mu-logo[hidden]{ display:none; }
+.mu-who{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:9px; }
+.mu-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:40px; line-height:1; text-transform:uppercase; letter-spacing:.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mu-rec{ font-size:16px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--lote-lav); }
+.mu-rec:empty{ display:none; }
+.mu-score{ display:none; flex-shrink:0; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:88px; line-height:1; font-variant-numeric:tabular-nums; }
+.matchup.scored .mu-score{ display:block; }
+.mu-mid{ font-family:var(--font-accent), 'Kanit', system-ui, sans-serif; font-weight:400; font-size:calc(48px * var(--accent-scale)); line-height:1; text-transform:uppercase; color:var(--lote-lav); }
+.matchup.scored .mu-mid{ font-family:'Inter', system-ui, sans-serif; font-weight:700; font-size:16px; letter-spacing:.24em; }
+.mu-team.lost .mu-name, .mu-team.lost .mu-score, .mu-team.lost .mu-logo{ opacity:.5; }
+
+/* The video panel, when it is on: the text column narrows beside it. */
+.montage-wrap{ top:148px; bottom:120px; width:760px; }
+.montage-right{ right:72px; }
+.montage-left{ left:72px; }
+.montage{ border-radius:10px; border:1px solid var(--lote-line); background:rgba(0,0,0,.4); backdrop-filter:none;
+  box-shadow:0 0 0 6px rgba(130,5,167,.6), 0 24px 60px rgba(0,0,0,.5); }
+.montage::after{ display:none; }
+body.has-montage .content{ width:940px; }
+body.has-montage .title{ font-size:calc(116px * var(--accent-scale)); }
+body.has-montage .matchup{ width:940px; gap:20px; }
+body.has-montage .mu-logo{ width:80px; height:80px; }
+body.has-montage .mu-name{ font-size:34px; }
+
+/* Rosters: a heading in the masthead, and a panel per school. */
+.page-head{ position:absolute; top:40px; right:72px; height:108px; flex-direction:column; align-items:flex-end; justify-content:center; text-align:right; }
+body[data-mode="roster"] .page-head{ display:flex; }
+#ph-title, .lg-title b{ font-family:var(--font-accent), 'Kanit', system-ui, sans-serif; font-weight:400; font-size:calc(64px * var(--accent-scale)); line-height:1; letter-spacing:var(--accent-space); text-transform:var(--accent-case); }
+#ph-sub{ margin-top:6px; font-size:16px; font-weight:600; letter-spacing:.22em; text-transform:uppercase; color:var(--lote-lav); }
+.roster-view{ inset:176px 72px 144px 72px; grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr); gap:0; align-items:stretch; align-content:center; }
+.roster-team{ align-items:stretch; gap:0; overflow:hidden; text-align:left; border-radius:10px; background:var(--lote-surface);
+  box-shadow:inset 0 0 0 1px var(--lote-line), 0 20px 50px rgba(0,0,0,.4); }
+.roster-team::before{ content:""; display:block; height:8px; flex-shrink:0; background:linear-gradient(90deg, var(--team-c) 0 75%, var(--team-c2) 75% 100%); }
+.roster-team-header{ justify-content:flex-start; gap:24px; padding:24px 32px; border-bottom:1px solid var(--lote-line); }
+.roster-logo{ width:112px; height:112px; }
+.roster-team-name{ padding:0; border-bottom:0; font-weight:700; font-size:40px; line-height:1.04; }
+.roster-team-tag{ margin-top:10px; font-size:16px; font-weight:700; letter-spacing:.2em; color:var(--lote-lav); }
+.roster-team-tag:empty{ display:none; }
+.roster-players{ counter-reset:player; gap:0; padding:8px 32px 14px; box-sizing:border-box; }
+.roster-player{ counter-increment:player; justify-content:flex-start; gap:20px; padding:clamp(8px, calc(96px / var(--roster-count, 5)), 20px) 0;
+  border:0; border-bottom:1px solid rgba(255,255,255,.08); border-radius:0; background:none; }
+.roster-player:last-child{ border-bottom:0; }
+.roster-player::before{ content:counter(player, decimal-leading-zero); flex:0 0 38px; font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:20px;
+  color:var(--lote-lav); opacity:.75; }
+.roster-player .gamertag{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:'Kanit', system-ui, sans-serif; font-size:clamp(20px, calc(190px / var(--roster-count, 5)), 34px); }
+.roster-player .realname{ flex-shrink:0; margin-left:auto; white-space:nowrap; font-size:clamp(13px, calc(100px / var(--roster-count, 5)), 18px); color:var(--lote-lav); }
+.roster-vs{ justify-self:center; font-family:var(--font-accent), 'Kanit', system-ui, sans-serif; font-weight:400; font-size:calc(76px * var(--accent-scale)); color:#fff; text-shadow:none; }
+
+/* ---- Be Right Back ---------------------------------------------------------
+   The same masthead and footer, the headline in the text column, and the
+   mark itself, large, on the right. */
+
+.brb-trap, .brb-rule-v, .brb-spin-wrap{ display:none; }
+.brb-stage::before, .brb-stage::after, .lg-stage::after{ content:""; position:absolute; left:72px; right:72px; height:1px; background:var(--lote-line); }
+.brb-stage::before{ top:148px; }
+.brb-stage::after, .lg-stage::after{ top:960px; }
+.brb-content{ left:72px; right:72px; top:148px; bottom:120px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; }
+.brb-brandrow{ position:absolute; left:0; top:-108px; height:108px; margin:0; gap:16px; }
+.brb-brandrow::after, .lg-head::after{ content:""; position:absolute; left:0; bottom:-2px; width:120px; height:3px; background:var(--lote-purple); }
+.brb-lion{ height:92px; }
+.brb-brand{ transform:none; font-style:normal; font-weight:800; font-size:30px; letter-spacing:.04em; }
+.brb-kicker{ display:block; margin-bottom:22px; font-size:22px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:var(--lote-lav); }
+.brb-kicker:empty{ display:none; }
+.brb-headline{ transform:none; font-family:var(--font-accent), 'Kanit', system-ui, sans-serif; font-weight:400; font-style:normal; font-size:calc(210px * var(--accent-scale)); line-height:.95; letter-spacing:var(--accent-space); text-transform:var(--accent-case);
+  background:none; -webkit-background-clip:border-box; background-clip:border-box; color:#fff; text-shadow:0 12px 44px rgba(0,0,0,.45); }
+.brb-subrow{ align-items:center; gap:22px; margin-top:30px; }
+.brb-bar{ width:96px; height:6px; box-shadow:none; background:var(--lote-purple); }
+.brb-sub{ font-size:32px; font-weight:500; letter-spacing:.02em; text-transform:none; color:var(--lote-lav); }
+.brb-socials{ position:absolute; left:0; bottom:-80px; height:80px; margin:0; gap:34px; align-items:center; }
+.brb-pill{ padding:0; gap:10px; border:0; background:none; backdrop-filter:none; font-size:20px; }
+.brb-pill svg{ width:22px; height:22px; fill:var(--lote-lav); }
+.brb-art{ display:block; position:absolute; right:60px; top:160px; width:auto; height:780px;
+  filter:drop-shadow(0 20px 70px rgba(130,5,167,.7)); animation:lote-float 9s ease-in-out infinite alternate; }
+@keyframes lote-float{ from{ transform:translateY(-8px) } to{ transform:translateY(8px) } }
+
+/* ---- Scoreboard ------------------------------------------------------------
+   Square shoulders rounded off, dark score boxes over the team's colour, and
+   the league's purple in the middle. */
+
+.sb-team, .sb-team.right{ padding:0 24px; clip-path:none; border-bottom:6px solid var(--c); }
+.sb-team{ border-radius:10px 0 0 10px; }
+.sb-team.right{ border-radius:0 10px 10px 0; }
+.sb-team::before{ display:none; }
+.sb-score.side-a, .sb-score.side-b{ background:var(--sb-dark); color:#fff; border-bottom:6px solid var(--c); }
+.sb-mid{ background:var(--lote-purple); border-bottom:6px solid rgba(0,0,0,.28); }
+.sb-bo{ color:rgba(255,255,255,.82); }
+.sb-round{ clip-path:none; border-radius:0 0 8px 8px; background:var(--sb-dark); color:var(--lote-lav); }
+.sbc-head{ border-bottom:0; border-radius:10px 10px 0 0; background:var(--lote-purple); }
+.sbc-bo{ color:rgba(255,255,255,.82); }
+.sbc-score{ background:var(--sb-dark); color:#fff; }
+.sbc-row:last-of-type{ border-radius:0 0 10px 10px; }
+.sbc.has-round .sbc-row:last-of-type{ border-radius:0; }
+.sbc-round{ border-radius:0 0 10px 10px; background:var(--sb-dark); color:var(--lote-lav); }
+
+/* Rocket League stats screens: over the scene's background, not their own. */
+body[data-mode="stats"]{ background:var(--brand-ground); }
+body[data-mode="stats"] .brand-bg{ display:block !important; }
+.rls{ background:none; }
+.rls::before{ display:none; }
+
+/* ---- The league's scenes: Standings and Head to Head ----------------------- */
+
+.lg-mark{ height:92px; }
+.lg-league small{ font-size:15px; letter-spacing:.22em; color:var(--lote-lav); }
+.lg-title span{ color:var(--lote-lav); }
+.lg-head{ border-bottom-color:var(--lote-line); }
+.st-row, .h2h-row{ overflow:hidden; border-radius:8px; background:var(--lote-surface); box-shadow:inset 0 0 0 1px var(--lote-line); }
+.st-row.playing{ background:rgba(130,5,167,.82); box-shadow:inset 0 0 0 2px rgba(255,255,255,.6); }
+.st-heads, .st-num, .h2h-row span, .h2h-row b.dim{ color:var(--lote-lav); }
+.h2h-vs{ font-family:var(--font-accent), 'Kanit', system-ui, sans-serif; font-weight:400; font-size:calc(76px * var(--accent-scale)); }
+
+/* School logos on the league's dark grounds: a thin light edge, so a dark
+   mark (Lebanon Valley's navy, Albright's black A) still reads. It follows
+   the logo's own outline, and a light logo barely shows it. */
+.mu-logo, .roster-logo, .st-logo, .h2h-logo, .sb-logo, .sbc-logo, .rlb-team img, .rls-logo img{
+  filter:drop-shadow(0 0 1px rgba(255,255,255,.8)) drop-shadow(0 0 8px rgba(255,255,255,.28)); }
+
+/* ---- Entrances -------------------------------------------------------------
+   Replayed each time OBS puts the scene on program (body.enter), starting
+   just before the stinger uncovers it (--enter-delay). */
+
+@keyframes lote-up{ from{ opacity:0; transform:translateY(24px) } to{ opacity:1; transform:none } }
+@keyframes lote-in{ from{ opacity:0; transform:translateX(-28px) } to{ opacity:1; transform:none } }
+@keyframes lote-wipe{ from{ clip-path:inset(-30% 105% -30% -5%) } to{ clip-path:inset(-30% -5% -30% -5%) } }
+@keyframes lote-mark{ from{ opacity:0 } to{ opacity:1 } }
+body.enter .content > *{ animation:lote-up .7s var(--lote-ease) both; animation-delay:calc(var(--enter-delay, 0ms) + var(--n, 0) * 90ms); }
+body.enter .content > .title{ animation-name:lote-wipe; animation-duration:1s; }
+.content > .title{ --n:1; }
+.content > .subtitle{ --n:2; }
+.content > .matchup{ --n:3; }
+.content > .count{ --n:4; }
+body.enter .roster-team, body.enter .roster-vs, body.enter .h2h-team{ animation:lote-up .7s var(--lote-ease) var(--enter-delay, 0ms) both; }
+body.enter .roster-team.right{ animation-delay:calc(var(--enter-delay, 0ms) + 120ms); }
+body.enter .st-row, body.enter .h2h-row{ animation:lote-in .5s var(--lote-ease) both; animation-delay:calc(var(--enter-delay, 0ms) + var(--i, 0) * 45ms); }
+body.enter .brb-headline{ animation-name:lote-wipe; }
+body.enter .brb-kicker{ animation:lote-up .7s var(--lote-ease) var(--enter-delay, 0ms) both; }
+/* The float is listed first and unchanged, so it carries on undisturbed when
+   the entrance ends. */
+body.enter .brb-art{ animation:lote-float 9s ease-in-out infinite alternate, lote-mark 1.1s var(--lote-ease) var(--enter-delay, 0ms) both; }

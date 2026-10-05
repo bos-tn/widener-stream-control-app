@@ -1,7 +1,7 @@
 [
-  {"id": "mr", "name": "Marvel Rivals", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}},
-  {"id": "ow", "name": "Overwatch", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 5, "position": "top-left"}},
-  {"id": "rl", "name": "Rocket League", "scoreboard": {"round": "", "showStocks": false, "unit": "Game", "bestOf": 7, "position": "top", "style": "rl"}},
-  {"id": "smash", "name": "Smash Bros.", "scoreboard": {"round": "Crews", "showStocks": true, "unit": "Set", "bestOf": 3, "position": "top", "crewSize": 4, "stocksEach": 3}},
-  {"id": "val", "name": "Valorant", "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}}
+  {"id": "mr", "name": "Marvel Rivals", "leagueActivity": ["marvelrivals", "marvel-rivals", "rivals"], "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 5, "position": "top-left"}},
+  {"id": "ow", "name": "Overwatch", "leagueActivity": ["overwatch", "overwatch2", "ow2", "ow"], "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 5, "position": "top-left"}},
+  {"id": "rl", "name": "Rocket League", "leagueActivity": ["rl"], "scoreName": "Goal", "scoreboard": {"round": "", "showStocks": false, "unit": "Game", "bestOf": 7, "position": "top", "style": "rl"}},
+  {"id": "smash", "name": "Smash Bros.", "leagueActivity": ["ssbu", "smash"], "scoreboard": {"round": "Crews", "showStocks": true, "unit": "Set", "bestOf": 3, "position": "top", "crewSize": 4, "stocksEach": 3}},
+  {"id": "val", "name": "Valorant", "leagueActivity": ["valorant", "val"], "scoreboard": {"round": "", "showStocks": false, "unit": "Map", "bestOf": 3, "position": "top-left"}}
 ]

@@ -41,6 +41,13 @@ async function buildProfile(id) {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify({ extends: null, ...config }, null, 2));
   console.log(`\n=== ${p.appName} (${id}) ===`);
+  // A league's licensed fonts are kept out of the repository (see the README
+  // in its assets/fonts folder). The installer works without one: that
+  // typeface is left out of the choice, and with none the headlines use the
+  // fallback.
+  p.headlineFonts.missing.forEach((f) => {
+    console.warn(`WARNING: profiles/${id}/assets/${f} is missing, so this installer won't offer that headline typeface. See the README in that folder.`);
+  });
   await build({
     projectDir: path.join(__dirname, '..'),
     targets: Platform.WINDOWS.createTarget('nsis'),

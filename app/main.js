@@ -51,12 +51,12 @@ function setupAutoUpdates(win) {
     const { response } = await dialog.showMessageBox(win, {
       type: 'info',
       title: APP_TITLE,
-      buttons: ['Restart and update now', 'Later'],
+      buttons: ['Restart and update', 'Later'],
       defaultId: 1,
       cancelId: 1,
-      message: `Version ${info.version} is ready to install.`,
-      detail: 'Restarting stops the overlay for a few seconds, so OBS goes blank briefly. '
-        + 'If you are live, choose Later: the update installs automatically the next time you close the app.',
+      message: `Version ${info.version} downloaded.`,
+      detail: 'Restarting interrupts the overlay server for a few seconds; browser sources go blank meanwhile. '
+        + 'Later: the update installs when the app closes.',
     });
     if (response === 0) autoUpdater.quitAndInstall();
   });
@@ -85,7 +85,7 @@ if (!app.requestSingleInstanceLock()) {
       dialog.showErrorBox(
         APP_TITLE,
         err && err.code === 'EADDRINUSE'
-          ? `Port ${PORT} is already in use. Is another copy of the app, or an older version, still running?`
+          ? `Port ${PORT} is in use. Another instance of the app may be running.`
           : `The overlay server failed to start:\n${err}`
       );
       app.quit();

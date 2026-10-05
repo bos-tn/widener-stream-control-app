@@ -64,9 +64,29 @@
     "driveId": "1M4encA-tBLZ3dBZzKcqDpvBESad2WX26",
     "bytes": 36077636
   },
+  "backgrounds": {
+    "list": [
+      {"id": "stripes", "name": "Moving Stripes"},
+      {"id": "varsity-stripes", "name": "Varsity Stripes"},
+      {"id": "shutters", "name": "Shutters"},
+      {"id": "w-shine", "name": "W Shine"},
+      {"id": "pride-lions", "name": "Pride Lions"},
+      {"id": "pride-tape", "name": "Pride Tape"}
+    ],
+    "defaults": {
+      "starting-soon": "varsity-stripes",
+      "roster": "shutters",
+      "brb": "w-shine",
+      "post-match": "pride-tape",
+      "necc": "pride-lions",
+      "stats": "stripes"
+    }
+  },
   "defaults": {
     "montage": true
   },
+  "theme": "theme.css",
+  "themeScript": "theme.js",
   "build": {
     "appId": "edu.widener.esports.streamcontrol",
     "artifactName": "Widener-Esports-Stream-Control-Setup-${version}.${ext}",

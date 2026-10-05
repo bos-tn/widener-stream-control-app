@@ -1,0 +1,101 @@
+/* Widener Esports overlay theme (v2.0.0). Loaded by the overlay page only,
+   after the base styles and /brand.css.
+
+   The base styles are already the Widener look, so this file adds one thing:
+   scene backgrounds the operator can pick per scene (profile.json lists them
+   and holds each scene's default). "Moving Stripes" is the base page's own
+   stripes and sheen. The other five are from the Widener Background Set:
+   01 Varsity Stripes, 02 Shutters, 12 W Shine, 14 Pride Lions and 27 Pride
+   Tape. theme.js builds their layers inside .brand-bg, each drawn on a
+   1920 x 1080 stage that is scaled to cover the page (--bg-fit).
+
+   Each layer starts with the stage's own ground, so the lights that blend
+   with it (screen, overlay) look the same here as in the set. */
+
+.brand-bg{ display:block; inset:50% auto auto 50%; width:1920px; height:1080px; margin:-540px 0 0 -960px; transform:scale(var(--bg-fit, 1)); }
+.brand-bg .ground{ inset:0; background:var(--brand-ground, radial-gradient(1200px 600px at 10% 10%, #0a1b36 0%, #071022 60%, #050a18 100%)); }
+.brand-bg .vig{ inset:0; background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.3) 100%); }
+
+/* Moving Stripes is the page's own stripes; every other choice hides them
+   and shows its layer instead. (Until the first state arrives there is no
+   data-bg, and the stripes show.) */
+body[data-bg]:not([data-bg="stripes"]) .stripes,
+body[data-bg]:not([data-bg="stripes"]) .bg-gradient,
+body:not([data-bg]) .brand-bg,
+body[data-bg="stripes"] .brand-bg{ display:none; }
+body[data-bg="varsity-stripes"] .bg-varsity-stripes,
+body[data-bg="shutters"] .bg-shutters,
+body[data-bg="w-shine"] .bg-w-shine,
+body[data-bg="pride-lions"] .bg-pride-lions,
+body[data-bg="pride-tape"] .bg-pride-tape{ display:block; }
+
+/* The Rocket League stats screens sit on the scene's background too, held
+   back to half strength so the tables stay easy to read. */
+body[data-mode="stats"]{ background:var(--brand-ground, #071022); }
+body[data-mode="stats"]:not([data-bg="stripes"]) .brand-bg{ display:block !important; opacity:.5; }
+body[data-mode="stats"][data-bg="stripes"] .stripes{ display:block !important; opacity:.075; }
+body[data-mode="stats"][data-bg="stripes"] .bg-gradient{ display:block !important; }
+.rls{ background:none; }
+
+/* 01 Varsity Stripes: a broad blue band with a gold pinstripe beside it, at
+   two depths, drifting out and back under a slow sheen. */
+.bg-varsity-stripes .vs{ inset:-260px -460px; }
+.bg-varsity-stripes .vs.a{ opacity:.17;
+  background:repeating-linear-gradient(-12deg, var(--brand-primary) 0 56px, transparent 56px 74px, var(--brand-accent) 74px 82px, transparent 82px 230px);
+  animation:wid-vsa 30s ease-in-out infinite alternate; }
+.bg-varsity-stripes .vs.b{ opacity:.085;
+  background:repeating-linear-gradient(-12deg, var(--brand-primary) 0 150px, transparent 150px 520px);
+  animation:wid-vsb 44s ease-in-out infinite alternate; }
+@keyframes wid-vsa{ from{ transform:translate3d(-110px,-24px,0) } to{ transform:translate3d(110px,24px,0) } }
+@keyframes wid-vsb{ from{ transform:translate3d(150px,32px,0) } to{ transform:translate3d(-150px,-32px,0) } }
+.bg-varsity-stripes .sheen{ inset:0 -40%; background:linear-gradient(120deg, rgba(0,0,0,0) 30%, rgba(255,255,255,.07) 50%, rgba(0,0,0,0) 70%);
+  mix-blend-mode:overlay; animation:wid-sweep 12s ease-in-out infinite alternate; }
+@keyframes wid-sweep{ from{ transform:translateX(-28%) } to{ transform:translateX(28%) } }
+
+/* 02 Shutters: tall slanted slats that brighten one after another, so a wave
+   of blue light crosses the stage. Each slat has a gold edge. */
+.bg-shutters .sl{ top:-140px; left:calc(var(--i) * 130px - 330px); width:132px; height:1360px; transform:skewX(-12deg); opacity:.14;
+  background:linear-gradient(90deg, rgba(0,84,184,0) 0%, rgba(0,84,184,.42) 100%); box-shadow:inset -2px 0 0 rgba(240,179,16,.3);
+  animation:wid-sl 10s ease-in-out infinite; animation-delay:calc(var(--i) * .4s - 10s); }
+@keyframes wid-sl{ 0%, 46%, 100%{ opacity:.14 } 20%{ opacity:1 } }
+
+/* 12 W Shine: the W, whole and ghosted on the right, with a band of light
+   crossing it every nine seconds. --bg-w is the profile's logo (theme.js). */
+.bg-w-shine .halo{ right:-176px; top:-170px; width:1420px; height:1420px; border-radius:50%;
+  background:radial-gradient(circle, rgba(0,84,184,.5) 0%, rgba(0,84,184,.14) 40%, rgba(0,84,184,0) 68%);
+  animation:wid-halo 16s ease-in-out infinite alternate; }
+@keyframes wid-halo{ from{ opacity:.7; transform:scale(.95) } to{ opacity:1; transform:scale(1.05) } }
+.bg-w-shine .mk{ right:86px; top:92px; width:896px; height:896px; }
+.bg-w-shine .mk.art{ background:var(--bg-w) center / contain no-repeat; opacity:.15; }
+.bg-w-shine .mk.shine{ -webkit-mask:var(--bg-w) center / contain no-repeat; mask:var(--bg-w) center / contain no-repeat;
+  background:linear-gradient(105deg, rgba(255,255,255,0) 40%, rgba(255,240,200,.2) 50%, rgba(255,255,255,0) 60%) 100% 0 / 300% 100% no-repeat;
+  animation:wid-glint 9s ease-in-out infinite; }
+@keyframes wid-glint{ 0%{ background-position:100% 0 } 62%, 100%{ background-position:0% 0 } }
+
+/* 14 Pride Lions: the lions and their mane, large and ghosted across the
+   stage, with a slow glint along the mane. --bg-lions is the profile's
+   mascot art (theme.js). */
+.bg-pride-lions .halo{ right:-200px; top:-140px; width:1500px; height:1500px; border-radius:50%;
+  background:radial-gradient(circle, rgba(0,84,184,.42) 0%, rgba(0,84,184,.12) 42%, rgba(0,84,184,0) 68%);
+  animation:wid-halo 18s ease-in-out infinite alternate; }
+.bg-pride-lions .ln{ left:140px; top:20px; width:1741px; height:1038px; }
+.bg-pride-lions .ln.art{ background:var(--bg-lions) center / contain no-repeat; opacity:.16; }
+.bg-pride-lions .ln.shine{ -webkit-mask:var(--bg-lions) center / contain no-repeat; mask:var(--bg-lions) center / contain no-repeat;
+  background:linear-gradient(100deg, rgba(255,255,255,0) 42%, rgba(255,236,180,.2) 50%, rgba(255,255,255,0) 58%) 100% 0 / 300% 100% no-repeat;
+  animation:wid-glint-slow 14s ease-in-out infinite; }
+@keyframes wid-glint-slow{ 0%{ background-position:100% 0 } 70%, 100%{ background-position:0% 0 } }
+
+/* 27 Pride Tape: three bands of tape on the house angle, two blue and one
+   gold, each scrolling its words. A band holds its words twice, so sliding
+   by half its length loops without a seam. */
+.bg-pride-tape .glow{ inset:0; background:radial-gradient(1100px 700px at 80% 80%, rgba(0,84,184,.3), rgba(0,84,184,0) 70%); }
+.bg-pride-tape .tape{ position:absolute; left:-460px; top:var(--y); width:2840px; height:92px; transform:rotate(-12deg); overflow:hidden; white-space:nowrap;
+  background:rgba(0,84,184,.24); box-shadow:inset 0 2px 0 rgba(240,179,16,.3), inset 0 -2px 0 rgba(240,179,16,.3); }
+.bg-pride-tape .tk{ display:inline-block; font:800 46px/92px 'Kanit', 'Arial Narrow', Impact, sans-serif; text-transform:uppercase; letter-spacing:.12em;
+  color:rgba(234,242,255,.2); animation:wid-mq var(--d) linear infinite; animation-direction:var(--dir, normal); }
+.bg-pride-tape .tape.g{ height:64px; background:rgba(240,179,16,.09); box-shadow:none; }
+.bg-pride-tape .tape.g .tk{ font-size:30px; line-height:64px; color:rgba(240,179,16,.32); }
+.brand-bg .tk i{ position:relative; top:-5px; display:inline-block; width:14px; height:14px; margin:0 34px; vertical-align:middle;
+  background:rgba(240,179,16,.4); transform:rotate(45deg); }
+.brand-bg .tape.g .tk i{ top:-3px; width:10px; height:10px; background:rgba(234,242,255,.3); }
+@keyframes wid-mq{ from{ transform:translateX(0) } to{ transform:translateX(-50%) } }

@@ -1,14 +1,15 @@
-// Imports public match/roster data from LeagueOS (used by NECC and other
-// leagues running on leagueos.gg) given a match page or overlay link.
+// Reads public data from LeagueOS (used by NECC, League of the East and other
+// leagues running on leagueos.gg): a match and its rosters from a match page
+// or overlay link, and a season's standings.
 //
 // This talks to LeagueOS's internal API (api.leagueos.gg), which is NOT an
 // official/documented public API - it's the same one their own web app calls
 // for anyone viewing a public match page, with no login required. The three
 // x-leagueos-* headers below are a lightweight anti-abuse fingerprint (not a
 // secret credential) reverse-engineered from LeagueOS's own client bundle.
-// If LeagueOS changes this internal contract, importMatch() will start
-// throwing and this feature degrades to manual entry - nothing else in the
-// app depends on it.
+// If LeagueOS changes this internal contract, these calls start throwing:
+// the match import degrades to manual entry and the standings keep their
+// last fetched table. Nothing else in the app depends on it.
 
 const APP_ID = 'los-league';
 
@@ -166,6 +167,10 @@ async function importMatch(matchUrl) {
 
   return {
     matchId,
+    hostname,
+    leagueId: leagueId || '',
+    seasonId: seasonId || '',
+    activity: match.stdAct || '',
     game: match.activityName || '',
     eventName: match.eventName || '',
     division: (match.divisions && match.divisions[0]) || '',
@@ -180,4 +185,99 @@ async function importMatch(matchUrl) {
   };
 }
 
-module.exports = { importMatch, parseMatchUrl };
+// --- Standings (v2.0.0) -------------------------------------------------------
+// The same calls a league's season results page makes: the league's seasons
+// (one per game), the season's scoring order, and the season's teams with
+// their records. Teams the league has not confirmed are left out, as on the
+// site.
+
+const API = 'https://api.leagueos.gg';
+
+// Every page of a paged list ({ results, hasMore }).
+async function fetchPaged(pathname, hostname, leagueId) {
+  const out = [];
+  for (let page = 1; page <= 10; page++) {
+    const json = await fetchJSON(`${API}${pathname}?ipp=100&page=${page}`, buildHeaders(hostname, leagueId));
+    const data = json.data || {};
+    out.push(...(Array.isArray(data.results) ? data.results : []));
+    if (!data.hasMore) break;
+  }
+  return out;
+}
+
+// [{ id, name, activity, start, end }], times in ms. `activity` is
+// LeagueOS's id for the game ("rl", "valorant", "ssbu", ...).
+async function listSeasons(hostname, leagueId) {
+  const seasons = await fetchPaged('/league/seasons', hostname, leagueId);
+  return seasons.map((s) => ({
+    id: s.id, name: s.name || '', activity: String(s.stdAct || '').toLowerCase(),
+    start: (Number(s.dateStart) || 0) * 1000, end: (Number(s.dateEnd) || 0) * 1000,
+  }));
+}
+
+// The season for a game: its activity id is one of `activities`, or its name
+// holds the game's name. Of several, the one running now, then the next to
+// start, then the last one played.
+function pickSeason(seasons, activities, gameName, now) {
+  const acts = (activities || []).map((a) => String(a).toLowerCase());
+  const name = String(gameName || '').trim().toLowerCase();
+  const mine = seasons.filter((s) => acts.includes(s.activity) || (name && s.name.toLowerCase().includes(name)));
+  const t = now || Date.now();
+  const running = mine.filter((s) => s.start <= t && (!s.end || s.end >= t)).sort((a, b) => b.start - a.start);
+  if (running.length) return running[0];
+  const coming = mine.filter((s) => s.start > t).sort((a, b) => a.start - b.start);
+  if (coming.length) return coming[0];
+  return mine.sort((a, b) => b.start - a.start)[0] || null;
+}
+
+// One figure of a team's record by LeagueOS's path for it ("stats.wins").
+// The three rates are not stored; the site derives them the same way.
+function statValue(stats, statPath) {
+  const s = stats || {};
+  const n = (k) => Number(s[k]) || 0;
+  const key = String(statPath || '').replace(/^stats\./, '');
+  if (typeof s[key] === 'number') return s[key];
+  if (key === 'winPercentage') { const t = n('wins') + n('losses') + n('draws'); return t ? n('wins') / t : 0; }
+  if (key === 'gameWinPercentage') { const t = n('gameWins') + n('gameLosses') + n('gameDraws'); return t ? n('gameWins') / t : 0; }
+  if (key === 'totalScoreDelta') return n('totalScore') - n('totalScoreAgainst');
+  return n(key);
+}
+
+// A season's standings: { seasonId, seasonName, activity, played, scored,
+// rows }. Rows are in the season's own scoring order (its scoringProps, each
+// ascending or descending), then by name. `rank` is shared by teams level on
+// every scoring figure. `played` says whether any match has a result yet,
+// `scored` whether the league records a score for and against.
+async function seasonStandings(hostname, leagueId, seasonId) {
+  const seasonJson = await fetchJSON(`${API}/league/seasons/${seasonId}`, buildHeaders(hostname, leagueId));
+  const season = seasonJson.data;
+  if (!season) throw new Error('No season data returned.');
+  const props = (Array.isArray(season.scoringProps) ? season.scoringProps : []).filter((p) => p && p.path);
+  const rosters = await fetchPaged(`/league/seasons/${seasonId}/rosters`, hostname, leagueId);
+  const rows = rosters.filter((r) => r.state === 'confirmed').map((r) => {
+    const st = r.stats || {};
+    const n = (k) => Math.max(0, Number(st[k]) || 0);
+    return {
+      id: r.sourceId || r.id || '', name: r.name || '', tag: r.clanTag || '', org: r.parent ? r.parent.name || '' : '',
+      color: r.color || '', colorAlt: r.colorAlt || '', logoUrl: logoUrl(r),
+      w: n('wins'), l: n('losses'), gw: n('gameWins'), gl: n('gameLosses'), sf: n('totalScore'), sa: n('totalScoreAgainst'),
+      key: props.map((p) => statValue(st, p.path)),
+    };
+  });
+  const order = (a, b) => {
+    for (let i = 0; i < props.length; i++) {
+      const d = a.key[i] - b.key[i];
+      if (d) return props[i].sortDesc ? -d : d;
+    }
+    return 0;
+  };
+  rows.sort((a, b) => order(a, b) || a.name.localeCompare(b.name));
+  rows.forEach((r, i) => { r.rank = i > 0 && order(rows[i - 1], r) === 0 ? rows[i - 1].rank : i + 1; });
+  rows.forEach((r) => { delete r.key; });
+  return {
+    seasonId, seasonName: season.name || '', activity: String(season.stdAct || '').toLowerCase(),
+    played: rows.some((r) => r.w + r.l > 0), scored: rows.some((r) => r.sf + r.sa > 0), rows,
+  };
+}
+
+module.exports = { importMatch, parseMatchUrl, listSeasons, pickSeason, seasonStandings };

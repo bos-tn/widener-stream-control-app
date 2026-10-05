@@ -4,7 +4,7 @@ const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
 const { WebSocketServer } = require('ws');
-const { importMatch } = require('./necc');
+const { importMatch, listSeasons, pickSeason, seasonStandings } = require('./necc');
 const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
@@ -20,6 +20,23 @@ const PROFILE = loadProfile(profileId());
 const GAMES = PROFILE.games;
 
 const DEFAULT_SOCIAL = PROFILE.socialHandle;
+
+// A stamp of the pages this build serves, so a page left open across an app
+// update can tell it is the old one. OBS keeps every scene's browser source
+// loaded (and a dock stays open) while the app is replaced underneath it;
+// without this they showed the old version's look until refreshed by hand.
+// Each page gets its stamp with /brand.js as it loads, and the current one
+// again in a `hello` message every time it (re)connects: a mismatch reloads.
+function pageStamp(files) {
+  const h = crypto.createHash('sha1').update(APP_VERSION);
+  files.filter(Boolean).forEach((f) => { try { h.update(fs.readFileSync(f)); } catch (e) { h.update('missing'); } });
+  return h.digest('hex').slice(0, 12);
+}
+const PROFILE_FILE = path.join(PROFILE.dir, 'profile.json');
+const PAGE_STAMPS = {
+  overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), PROFILE.theme, PROFILE.themeScript, PROFILE_FILE]),
+  panel: pageStamp(['index.html', 'control.js', 'control.css'].map((f) => path.join(CONTROL_DIR, f)).concat(PROFILE_FILE)),
+};
 
 function emptyTeam() {
   return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] };
@@ -40,6 +57,10 @@ function defaultViewText() {
     'brb': { title: 'Be Right Back', subtitle: 'Thanks for waiting', status: '' },
     'necc': { title: '', subtitle: '', status: '' },
     'scoreboard': { title: '', subtitle: '', status: '' },
+    // The league's own scenes (see LEAGUE_VIEWS in obs.js). The subtitle is
+    // the line under the heading, e.g. "Through week 3".
+    'standings': { title: 'Standings', subtitle: '', status: '' },
+    'matchup': { title: 'Head to Head', subtitle: '', status: '' },
   };
 }
 
@@ -139,6 +160,12 @@ const DEFAULT_STATE = {
   // League graphic links from the last import, by type (stageBracket,
   // matchPreview, ...). Each league graphic has its own OBS scene (v2.0.0).
   neccUrls: {},
+  // The background picked for a scene, by view (v2.0.0), for a league whose
+  // profile has several. A view that isn't here uses the profile's default.
+  backgrounds: {},
+  // The headline typeface picked for the scenes (v2.0.0), for a league whose
+  // profile has more than one. Empty means the profile's default.
+  headlineFont: '',
   socials: {
     twitch: DEFAULT_SOCIAL,
     twitter: DEFAULT_SOCIAL,
@@ -159,6 +186,7 @@ function initialState() {
     teamB: emptyTeam(),
     views: defaultViewText(),
     scoreboard: defaultScoreboard(),
+    backgrounds: {},
     end: new Date(Date.now() + DEFAULT_STATE.durationSec * 1000).toISOString(),
   };
 }
@@ -175,6 +203,8 @@ function normalizeLoaded(raw) {
     // fresh defaults gives them the per-view text without losing anything.
     views: normalizeViews(raw.views, raw),
     scoreboard: normalizeScoreboard(raw),
+    backgrounds: raw.backgrounds && typeof raw.backgrounds === 'object' ? { ...raw.backgrounds } : {},
+    headlineFont: typeof raw.headlineFont === 'string' ? raw.headlineFont : '',
   };
   delete out.smash;
   if (out.mode === 'smash') out.mode = 'scoreboard';
@@ -286,6 +316,7 @@ function createServer(port, opts = {}) {
       // Merged per view key: the panel only sends the scene text it changed.
       views: partial.views ? mergeViews(target.views, partial.views) : target.views,
       neccUrls: partial.neccUrls ? { ...partial.neccUrls } : target.neccUrls,
+      backgrounds: partial.backgrounds ? { ...target.backgrounds, ...partial.backgrounds } : target.backgrounds,
       scoreboard: partial.scoreboard ? { ...target.scoreboard, ...partial.scoreboard } : target.scoreboard,
     };
     savePersisted();
@@ -378,6 +409,70 @@ function createServer(port, opts = {}) {
     return team;
   }
 
+  // --- League standings (v2.0.0) --------------------------------------------
+  // Each game's standings are read from the league's site (LeagueOS, see
+  // necc.js): the season for that game and its teams' records, in the
+  // league's own scoring order. Nothing is typed in. They are fetched when a
+  // game is selected, after a match import, every few minutes for the game
+  // on stream and on request, and kept in league.json so the scenes have the
+  // last table at the next start or without a connection.
+  //   standings[gameId] = { rows, seasonId, seasonName, played, scored,
+  //                         scoreName, updatedAt, checkedAt, error }
+  //   row = { name, tag, rank, w, l, gw, gl, sf, sa, color, colorAlt, logoUrl }
+  // w/l are matches, gw/gl games (or maps), sf/sa the score for and against.
+  const leagueFile = path.join(dataDir, 'league.json');
+  const LEAGUE_HOST = (() => { try { return new URL(PROFILE.league.site).hostname; } catch (e) { return ''; } })();
+  const LEAGUE_ID = String(PROFILE.league.id || '');
+  const LEAGUE_ON = !!(LEAGUE_HOST && LEAGUE_ID && PROFILE.leagueScenes.length);
+  let league = readJsonSafe(leagueFile) || {};
+  // Tables typed in by hand (the betas) are dropped.
+  if (league.v !== 2 || !league.standings || typeof league.standings !== 'object') league = { v: 2, standings: {}, seasons: {} };
+  if (!league.seasons || typeof league.seasons !== 'object') league.seasons = {};
+  const STANDINGS_MIN_AGE = 60 * 1000;
+  const STANDINGS_EVERY = 5 * 60 * 1000;
+  const refreshing = {};
+  function leagueMessage() {
+    return { type: 'league', league: { standings: league.standings, site: LEAGUE_HOST } };
+  }
+  function refreshStandings(gameId, force) {
+    const game = PROFILE.games.find((g) => g.id === gameId);
+    if (!LEAGUE_ON || !game) return Promise.resolve(null);
+    const have = league.standings[gameId];
+    if (!force && have && Date.now() - new Date(have.checkedAt || 0).getTime() < STANDINGS_MIN_AGE) return Promise.resolve(have);
+    if (refreshing[gameId]) return refreshing[gameId];
+    refreshing[gameId] = (async () => {
+      const now = new Date().toISOString();
+      try {
+        const seasons = await listSeasons(LEAGUE_HOST, LEAGUE_ID);
+        // The season of the last imported match for this game while it is
+        // still listed and not over; otherwise the game's season by date.
+        const kept = league.seasons[gameId];
+        const season = (kept && seasons.find((x) => x.id === kept.id && (!x.end || x.end >= Date.now())))
+          || pickSeason(seasons, game.leagueActivity, game.name);
+        if (!season) throw new Error(`${LEAGUE_HOST} has no ${game.name} season`);
+        const st = await seasonStandings(LEAGUE_HOST, LEAGUE_ID, season.id);
+        const rows = await Promise.all(st.rows.map(async (r) => {
+          // A member school shows the league's own logo; any other team's is
+          // downloaded once and served from /logos.
+          const lt = leagueTeamFor(r.name) || leagueTeamFor(r.org);
+          return {
+            name: r.name, tag: r.tag || (lt ? lt.tag : ''), rank: r.rank,
+            w: r.w, l: r.l, gw: r.gw, gl: r.gl, sf: r.sf, sa: r.sa,
+            color: r.color || (lt ? lt.color : ''), colorAlt: r.colorAlt || (lt ? lt.colorAlt : ''),
+            logoUrl: lt && lt.logoUrl ? lt.logoUrl : await cacheLogo(r.logoUrl),
+          };
+        }));
+        league.standings[gameId] = { rows, seasonId: st.seasonId, seasonName: st.seasonName, played: st.played, scored: st.scored, scoreName: game.scoreName || '', updatedAt: now, checkedAt: now, error: '' };
+      } catch (err) {
+        league.standings[gameId] = { rows: [], ...(have || {}), checkedAt: now, error: String((err && err.message) || 'The league site did not answer').slice(0, 200) };
+      }
+      writeJsonSafe(leagueFile, league);
+      sendToAll(leagueMessage());
+      return league.standings[gameId];
+    })().finally(() => { delete refreshing[gameId]; });
+    return refreshing[gameId];
+  }
+
   // --- NECC logo cache (v0.9.0) -------------------------------------------
   // Team logos from a NECC import are downloaded once and served locally from
   // /logos, so the overlay doesn't depend on images.leagueos.gg answering
@@ -411,11 +506,23 @@ function createServer(port, opts = {}) {
   // What OBS has on program: { key, view, necc, scene }. key is '' for a
   // scene the app didn't build (a camera or replay scene of the operator's).
   let onAir = { key: '', view: '', necc: '', scene: '' };
+  // The LeagueOS graphics a scene can be made for, in the order their scenes
+  // sit in OBS: the ones for before the match first, then the ones for
+  // during it.
+  const NECC_TYPES = [
+    { key: 'matchPreview', label: 'Match Preview' },
+    { key: 'matchRosters', label: 'Match Rosters' },
+    { key: 'stageBracket', label: 'Bracket' },
+    { key: 'seasonHeader', label: 'Season Header' },
+    { key: 'matchProgress', label: 'Match Progress' },
+    { key: 'matchActivity', label: 'Match Activity' },
+  ];
   const obs = createObs({
     getOverlayBase: () => `http://localhost:${port}`,
     prefix: PROFILE.obs.prefix,
     collection: PROFILE.obs.collection || `${PROFILE.shortName} Stream`,
     stingerName: `${PROFILE.shortName} Stinger`,
+    allNeccTypes: NECC_TYPES,
     onProgram: (p) => {
       if (p.key !== 'stats') autoStatsUp = false;
       onAir = { key: p.key, view: p.view, necc: p.necc, scene: p.scene };
@@ -443,50 +550,64 @@ function createServer(port, opts = {}) {
 
   // --- Panel preferences --------------------------------------------------
   // Choices every open panel must agree on (the app window and an OBS dock):
-  // which league graphics get an OBS scene, whether the Scoreboard scene gets
-  // a game capture, whether setup turns on OBS Studio Mode, and whether the
-  // setup guide has run.
-  const NECC_TYPES = [
-    { key: 'stageBracket', label: 'Bracket' },
-    { key: 'seasonHeader', label: 'Season Header' },
-    { key: 'matchPreview', label: 'Match Preview' },
-    { key: 'matchActivity', label: 'Match Activity' },
-    { key: 'matchProgress', label: 'Match Progress' },
-    { key: 'matchRosters', label: 'Match Rosters' },
-  ];
+  // which league graphics and league scenes get an OBS scene, whether the
+  // Scoreboard scene gets a game capture, whether setup turns on OBS Studio
+  // Mode, and whether the setup guide has run.
   const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
-  const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'studioMode'];
+  const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'studioMode', 'orderScenes'];
+  const onlyLeagueScenes = (list) => PROFILE.leagueScenes.filter((s) => list.includes(s));
   function panelPrefs() {
     const p = appSettings.panel || {};
     return {
       neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t)) : DEFAULT_NECC_TYPES.slice(),
+      // The league's own scenes: all of them until the operator unticks one.
+      leagueScenes: Array.isArray(p.leagueScenes) ? onlyLeagueScenes(p.leagueScenes) : PROFILE.leagueScenes.slice(),
       setupDone: p.setupDone === true,
       // The v2 setup guide (OBS scenes and the stinger) has run on this PC.
       guideV2: p.guideV2 === true,
       gameCapture: p.gameCapture !== false,
       studioMode: p.studioMode !== false,
+      // A build puts the app's scenes in stream order in OBS's list.
+      orderScenes: p.orderScenes !== false,
     };
   }
   function savePanelPrefs(patch) {
     const next = panelPrefs();
     PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
+    if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
     appSettings = { ...appSettings, panel: next };
     writeJsonSafe(settingsFile, appSettings);
-    obs.setLayout(buildOptions());
     sendToPanels({ type: 'prefs', prefs: next });
+    syncLayout();
     return next;
   }
-  // What a scene build makes: the base scenes, Rocket League Stats when the
-  // league plays Rocket League, and one scene per picked league graphic.
+  // What a scene build makes: the base scenes, the stats scene when this
+  // match's scoreboard has one (the Rocket League board), the league's own
+  // scenes, and one scene per picked league graphic. Scenes of the app's
+  // that are not in this list are removed by the next build, so a Valorant
+  // match never carries a Rocket League scene.
   function buildOptions() {
     const prefs = panelPrefs();
     return {
       neccTypes: NECC_TYPES.filter((t) => prefs.neccTypes.includes(t.key)),
-      includeStats: GAMES.some((g) => g.scoreboard && g.scoreboard.style === 'rl'),
+      includeStats: state.scoreboard.style === 'rl',
+      leagueScenes: prefs.leagueScenes,
       gameCapture: prefs.gameCapture,
       studioMode: prefs.studioMode,
+      orderScenes: prefs.orderScenes,
     };
+  }
+  // The scene list follows the match (its game) and the picked scenes. OBS
+  // itself only changes on a build; until then the panel marks what differs.
+  let layoutKey = '';
+  function syncLayout(quiet) {
+    const o = buildOptions();
+    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key)]);
+    if (key === layoutKey) return;
+    layoutKey = key;
+    obs.setLayout(o);
+    if (!quiet) sendToPanels({ type: 'scenes', scenes: obs.status().scenes });
   }
   // v1 kept the last import's league graphic links in the panel preferences;
   // they belong to the match, so they now live in the state.
@@ -496,8 +617,8 @@ function createServer(port, opts = {}) {
       state = { ...state, neccUrls: { ...legacy } };
     }
   }
-  // The scenes the app manages, as the last build made them.
-  obs.setLayout(buildOptions());
+  // The scenes this match uses. Quiet: no panel is connected this early.
+  syncLayout(true);
 
   function musicConfig() {
     const m = appSettings.music || {};
@@ -589,7 +710,7 @@ function createServer(port, opts = {}) {
     },
     onEvent: (ev) => {
       if (ev.type === 'matchEnded') onGameEnded(ev);
-      if (ev.type === 'matchStart') onGameStarting();
+      if (ev.type === 'gameStarting') onGameStarting();
       // The full player list is for the server's record only.
       const { players, ...light } = ev;
       sendToAll({ type: 'rlEvent', event: light });
@@ -687,9 +808,11 @@ function createServer(port, opts = {}) {
       if (won) rlScreenTimers.push(setTimeout(() => setRlScreen('series'), OVERVIEW_AFTER_MS));
     }, STATS_DELAY_MS));
   }
-  // The next game loading puts the Scoreboard back on air, mid-series, if the
-  // app was the one that cut to the stats. Once the series is won the stats
-  // stay up (a show match must not pull them off).
+  // The stats have no time limit: they stay on air until the next game is
+  // about to start. Its first kickoff countdown (rlstats.js 'gameStarting')
+  // puts the Scoreboard back, mid-series, if the app was the one that cut to
+  // the stats. The next match merely loading does not. Once the series is
+  // won the stats stay up (a show match must not pull them off).
   function onGameStarting() {
     const sb = state.scoreboard;
     const need = Math.ceil((Number(sb.bestOf) || 3) / 2);
@@ -713,7 +836,7 @@ function createServer(port, opts = {}) {
   app.use('/brand', express.static(PROFILE.assetsDir));
   app.get('/brand.js', (req, res) => {
     noStore(res);
-    res.type('application/javascript').send(`window.BRAND = ${JSON.stringify(clientBrand(PROFILE))};\n`);
+    res.type('application/javascript').send(`window.BRAND = ${JSON.stringify(clientBrand(PROFILE))};\nwindow.APP_STAMP = ${JSON.stringify(PAGE_STAMPS)};\n`);
   });
   app.get('/brand.css', (req, res) => { noStore(res); res.type('text/css').send(brandCss(PROFILE)); });
   app.get('/brand-theme.css', (req, res) => {
@@ -721,6 +844,14 @@ function createServer(port, opts = {}) {
     res.type('text/css');
     if (!PROFILE.theme) return res.send('/* no theme for this profile */\n');
     res.sendFile(PROFILE.theme);
+  });
+  // The theme's script, for what CSS can't do alone: it builds the layers of
+  // the league's scene backgrounds.
+  app.get('/brand-theme.js', (req, res) => {
+    noStore(res);
+    res.type('application/javascript');
+    if (!PROFILE.themeScript) return res.send('/* no theme script for this profile */\n');
+    res.sendFile(PROFILE.themeScript);
   });
   app.get('/api/profile', (req, res) => res.json(clientBrand(PROFILE)));
   // Only finished, verified montages are served; never a .part file.
@@ -797,6 +928,16 @@ function createServer(port, opts = {}) {
         if (upsertTeam({ ...t, players: (t.players || []).filter((p) => p.position >= 0) })) changed = true;
       });
       if (changed) { saveLibrary(); broadcastLibrary(); }
+      // A match from this league's own site names the season its game's
+      // standings come from.
+      if (LEAGUE_ON && data.hostname === LEAGUE_HOST && data.seasonId) {
+        const name = String(data.game || '').toLowerCase();
+        const g = PROFILE.games.find((x) => x.name.toLowerCase() === name || (x.leagueActivity || []).includes(String(data.activity || '').toLowerCase()));
+        if (g) {
+          league.seasons[g.id] = { id: data.seasonId, at: new Date().toISOString() };
+          refreshStandings(g.id, true).catch(() => {});
+        }
+      }
       res.json(data);
     } catch (err) {
       res.status(502).json({ error: err.message || 'Failed to import match' });
@@ -835,6 +976,18 @@ function createServer(port, opts = {}) {
     library.matches = library.matches.filter((m) => m.id !== req.params.id);
     saveLibrary(); broadcastLibrary();
     res.json({ library });
+  });
+
+  // --- League routes ---
+  // Every game's standings as last read, and a re-read of one game's.
+  app.get('/api/league', (req, res) => res.json(leagueMessage().league));
+
+  app.post('/api/league/refresh', async (req, res) => {
+    const game = String((req.body && req.body.game) || state.game || '');
+    if (!LEAGUE_ON) return res.status(400).json({ error: 'This profile has no league site' });
+    if (!PROFILE.games.some((g) => g.id === game)) return res.status(400).json({ error: 'Unknown game' });
+    await refreshStandings(game, true);
+    res.json(leagueMessage().league);
   });
 
   // --- Montage routes ---
@@ -1111,6 +1264,7 @@ function createServer(port, opts = {}) {
   }
   // The one state, to every page: the scenes redraw, the panels refill.
   function broadcastState() { sendToAll({ type: 'state', data: state }); }
+  // The standings show each team as the library has it, so they follow it.
   function broadcastLibrary() { sendToPanels({ type: 'library', library }); }
 
   // What a panel's edit may not change: OBS decides which view is on air,
@@ -1127,12 +1281,15 @@ function createServer(port, opts = {}) {
       if (msg.type === 'subscribe') {
         // v1 pages subscribed to a channel: 'draft' was a panel.
         ws.role = msg.role === 'panel' || msg.channel === 'draft' ? 'panel' : 'overlay';
+        // First, so a page from an older version reloads before anything else.
+        ws.send(JSON.stringify({ type: 'hello', version: APP_VERSION, stamp: PAGE_STAMPS[ws.role] }));
         // Montage status first, so an overlay's first render already knows
         // whether the game's montage can play.
         ws.send(JSON.stringify({ type: 'montages', montages: montages.status() }));
         ws.send(JSON.stringify({ type: 'state', data: state }));
         ws.send(JSON.stringify({ type: 'rl', rl: rl.snapshot() }));
         ws.send(JSON.stringify(rlSeriesMessage()));
+        ws.send(JSON.stringify(leagueMessage()));
         if (ws.role === 'panel') {
           ws.send(JSON.stringify({ type: 'library', library }));
           ws.send(JSON.stringify({ type: 'music', music: musicStatus() }));
@@ -1147,9 +1304,12 @@ function createServer(port, opts = {}) {
       if (msg.type === 'update' && ws.role === 'panel') {
         const data = { ...(msg.data || {}) };
         PROGRAM_FIELDS.forEach((k) => delete data[k]);
+        const gameBefore = state.game;
         updateState(data);
+        if (state.game !== gameBefore) refreshStandings(state.game).catch(() => {});
         wantMontage(state.game);
         updateRlActive();
+        syncLayout();
         broadcastState();
         return;
       }
@@ -1181,6 +1341,11 @@ function createServer(port, opts = {}) {
   updateRlActive();
   updateMusic();
   wantMusicTrack(false);
+  // The current game's standings now, then every few minutes.
+  if (LEAGUE_ON) {
+    refreshStandings(state.game).catch(() => {});
+    setInterval(() => { refreshStandings(state.game, true).catch(() => {}); }, STANDINGS_EVERY).unref();
+  }
 
   return server;
 }

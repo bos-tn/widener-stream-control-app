@@ -1,6 +1,6 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0",
   "private": true,
   "description": "Esports stream overlay control app, one build per league profile",
   "main": "main.js",

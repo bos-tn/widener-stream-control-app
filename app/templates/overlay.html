@@ -36,10 +36,11 @@
     position:fixed; inset:0;
     background: linear-gradient(120deg, rgba(0,0,0,0) 0%, rgba(255,255,255,0.06) 50%, rgba(0,0,0,0) 100%);
     mix-blend-mode: overlay;
-    animation: sweep 9s linear infinite;
+    animation: sweep 18s linear infinite;
     pointer-events:none;
   }
-  @keyframes sweep{ 0%{transform:translateX(-50%)} 100%{transform:translateX(50%)} }
+  /* The band starts and ends fully off the page, so the loop has no jump. */
+  @keyframes sweep{ 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
   .stripes{
     position:fixed; inset:-20vh -20vw; opacity:.15; pointer-events:none;
     background:
@@ -48,14 +49,30 @@
         transparent 18px 48px,
         var(--brand-accent) 48px 66px,
         transparent 66px 96px);
-    animation: drift 40s linear infinite;
+    animation: drift 52s linear infinite;
     filter: blur(2px);
   }
-  @keyframes drift{ from{transform:translate3d(-5vw,-2vh,0) scale(1.1)} to{transform:translate3d(5vw,2vh,0) scale(1.1)} }
+  /* One loop moves the stripes by exactly one repeat of their pattern (96px
+     along its -12deg axis, 105.6px at this scale), at the pace they always
+     had, so the restart can't be seen. It used to travel a distance that
+     wasn't a whole repeat and jumped every 40 seconds. */
+  @keyframes drift{ from{transform:translate3d(0,0,0) scale(1.1)} to{transform:translate3d(21.96px,103.29px,0) scale(1.1)} }
   /* Background layers for a league theme (v1.0.0). Hidden unless the
-     profile's theme.css styles them, as LotE's Mark Shine does. */
+     profile's theme styles them. A theme with several backgrounds builds a
+     .bg layer for each (its theme.js); the one this scene uses is picked by
+     body[data-bg], from the state (see sceneBackground in the script). */
   .brand-bg{ display:none; position:fixed; inset:0; pointer-events:none; overflow:hidden; }
   .brand-bg i{ position:absolute; display:block; }
+  .brand-bg .bg{ display:none; position:absolute; inset:0; overflow:hidden; }
+  /* Parts only a league theme shows: the matchup row on Starting Soon and
+     Post-Match, a page heading on Rosters, a line above the Be Right Back
+     headline and its large mark. */
+  .matchup, .page-head, .brb-kicker, .brb-art{ display:none; }
+  /* Team logos are never cropped: the whole mark is fitted inside its box,
+     with square corners. (They used to fill the box with rounded corners,
+     which shaved the top of any logo that reaches its own edges, like
+     Widener's W.) */
+  .roster-logo, .sb-logo, .sbc-logo, .mu-logo, .st-logo, .h2h-logo{ object-fit:contain; border-radius:0; background:none; }
 
   .wrap{ position:relative; height:100%; width:100%; display:grid; align-items:center; justify-items:center; padding:3.5vh 4vw; box-sizing:border-box; }
   .frame:before, .frame:after{ content:""; position:absolute; inset:30px; border:2px solid rgba(255,255,255,.06); border-radius:24px; pointer-events:none; }
@@ -162,7 +179,7 @@
   .roster-view.active{ display:grid; }
   .roster-team{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; min-width:0; }
   .roster-team-header{ display:flex; align-items:center; justify-content:center; gap:14px; }
-  .roster-logo{ width:56px; height:56px; border-radius:12px; object-fit:cover; background:rgba(0,0,0,.3); flex-shrink:0; }
+  .roster-logo{ width:56px; height:56px; flex-shrink:0; }
   .roster-team-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:clamp(20px,2.4vw,30px); text-transform:uppercase; line-height:1.05; }
   /* Team colour (hand-picked or from NECC) as an underline on the name. */
   .roster-team-name{ padding-bottom:6px; border-bottom:4px solid var(--team-c, transparent); }
@@ -254,20 +271,23 @@
     font-size:150px; line-height:.9; letter-spacing:1px; text-transform:uppercase; white-space:nowrap;
     background: linear-gradient(90deg, var(--brand-accent) 0%, var(--text) 85%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
-    animation: brb-wipe 1.1s cubic-bezier(.22,1,.36,1) both;
   }
+  /* Entrances play under body.enter, which the script re-applies each time
+     OBS puts this page's scene on program. --enter-delay holds them back
+     until the stinger is about to uncover the scene. */
+  body.enter .brb-headline{ animation: brb-wipe 1.1s cubic-bezier(.22,1,.36,1) var(--enter-delay, 0ms) both; }
   @keyframes brb-wipe{ 0%{ clip-path:inset(0 100% 0 0) } 100%{ clip-path:inset(0 0 0 0) } }
   .brb-subrow{ display:flex; align-items:flex-end; gap:48px; margin-top:14px; }
   .brb-bar{
     width:730px; height:5px; box-shadow:0 10px 25px rgba(0,0,0,.35); transform-origin:left center;
     background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent));
-    animation: widen 1s cubic-bezier(.22,1,.36,1) both;
   }
+  body.enter .brb-bar{ animation: widen 1s cubic-bezier(.22,1,.36,1) var(--enter-delay, 0ms) both; }
   .brb-sub{
     font-weight:600; font-size:30px; letter-spacing:.14em; text-transform:uppercase;
     color:var(--muted); white-space:nowrap;
-    animation: brb-fadeup .9s cubic-bezier(.22,1,.36,1) both .5s;
   }
+  body.enter .brb-sub{ animation: brb-fadeup .9s cubic-bezier(.22,1,.36,1) calc(var(--enter-delay, 0ms) + .5s) both; }
   @keyframes brb-fadeup{ from{ opacity:0; transform:translateY(10px) } to{ opacity:1; transform:translateY(0) } }
   .brb-socials{ display:flex; gap:16px; margin-top:64px; }
   .brb-pill{
@@ -344,7 +364,7 @@
      only moves these classes between the left and right slots. */
   .sb .side-a, .sbc .side-a{ --c:var(--a); --ink:var(--a-ink); }
   .sb .side-b, .sbc .side-b{ --c:var(--b); --ink:var(--b-ink); }
-  .sb-logo{ width:50px; height:50px; border-radius:10px; object-fit:cover; flex-shrink:0; background:rgba(255,255,255,.06); }
+  .sb-logo{ width:52px; height:52px; flex-shrink:0; }
   .sb-logo[hidden]{ display:none; }
   .sb-names{ display:flex; flex-direction:column; min-width:0; line-height:1; }
   .sb-team.right .sb-names{ align-items:flex-end; text-align:right; }
@@ -433,7 +453,7 @@
   .sbc-row:last-of-type{ border-radius:0 0 6px 6px; overflow:hidden; }
   .sbc.has-round .sbc-row:last-of-type{ border-radius:0; }
   .sbc-bar{ align-self:stretch; width:8px; background:var(--c); flex-shrink:0; }
-  .sbc-logo{ width:36px; height:36px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  .sbc-logo{ width:38px; height:38px; flex-shrink:0; }
   .sbc-logo[hidden]{ display:none; }
   .sbc-name{ flex:1 1 auto; min-width:0; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px; text-transform:uppercase;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.02em; }
@@ -687,16 +707,87 @@
   /* The Rocket League Stats scene (v2.0.0): the stats screens on their own,
      without the in-game board. It is a full scene of its own, so it is opaque
      and never needs a game capture underneath. */
-  .sb-view.stats-scene .sb, .sb-view.stats-scene .sbc{ display:none !important; }
+  .sb-view.stats-scene .sb, .sb-view.stats-scene .sbc, .sb-view.stats-scene .sb-preview-bg{ display:none !important; }
   .sb-view.stats-scene .rl-only{ display:block; }
+
+  /* The league's own scenes (v2.0.0): Standings and Head to Head, drawn from
+     the standings read from the league's site. Authored on the fixed
+     1920x1080 stage, like Be Right Back. */
+  .lg-view{ display:none; position:fixed; inset:0; z-index:40; overflow:hidden; }
+  .lg-view.active{ display:block; }
+  .lg-stage{ position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left;
+    font-family:'Inter', system-ui, sans-serif; color:var(--text); }
+  .lg-head{ position:absolute; top:40px; left:72px; right:72px; height:108px; display:flex; align-items:center;
+    justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.14); }
+  .lg-brand{ display:flex; align-items:center; gap:16px; }
+  .lg-mark{ height:72px; width:auto; }
+  .lg-league{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; line-height:1; text-transform:uppercase; letter-spacing:.04em; }
+  .lg-league small{ display:block; margin-top:8px; font-family:'Inter', system-ui, sans-serif; font-weight:600; font-size:14px;
+    letter-spacing:.2em; color:var(--muted); }
+  .lg-league small:empty{ display:none; }
+  .lg-title{ text-align:right; }
+  .lg-title b{ display:block; font-family:var(--font-accent, 'Kanit'), 'Kanit', system-ui, sans-serif; font-weight:800; font-size:60px; line-height:1; text-transform:uppercase; }
+  .lg-title span{ display:block; margin-top:8px; font-weight:600; font-size:16px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
+  .lg-title span:empty{ display:none; }
+  /* Said only on a page opened outside OBS, when there is nothing to draw. */
+  .lg-empty{ display:none; position:absolute; left:0; right:0; top:480px; text-align:center; font-weight:600; font-size:28px; color:var(--muted); }
+  body[data-backdrop="1"] .lg-empty:not(:empty){ display:block; }
+
+  /* Standings: one column up to ten schools, two beyond that. --st-h is the
+     row height, set from the number of rows so the table fills its space. */
+  .st{ position:absolute; left:72px; right:72px; top:176px; bottom:112px; display:none; grid-template-columns:minmax(0, 1320px); gap:36px;
+    justify-content:center; align-content:center; align-items:start; }
+  .lg-view[data-view="standings"] .st{ display:grid; }
+  .st.two{ grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }
+  .st-col{ min-width:0; display:flex; flex-direction:column; gap:6px; }
+  /* Rank, logo, school, record, games, difference; .scored adds the score
+     difference (a league that records goals or rounds). */
+  .st-heads, .st-row{ display:grid; grid-template-columns:76px 72px minmax(0,1fr) 170px 170px 130px; align-items:center; }
+  .st.scored .st-heads, .st.scored .st-row{ grid-template-columns:76px 72px minmax(0,1fr) 150px 150px 110px 150px; }
+  .st.two .st-heads, .st.two .st-row{ grid-template-columns:60px 62px minmax(0,1fr) 120px 120px 90px; }
+  .st.two.scored .st-heads, .st.two.scored .st-row{ grid-template-columns:60px 62px minmax(0,1fr) 104px 104px 76px 112px; }
+  .st-heads{ height:34px; font-weight:700; font-size:13px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); text-align:center; }
+  .st-heads .l{ text-align:left; grid-column:2 / 4; padding-left:8px; }
+  .st-row{ position:relative; height:var(--st-h, 64px); background:var(--brand-chip, rgba(7,16,34,.9));
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); --fs:clamp(20px, calc(var(--st-h, 64px) * .46), 30px); }
+  .st-row::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:8px; background:var(--c, var(--brand-primary)); }
+  .st-rank{ text-align:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:var(--fs); font-variant-numeric:tabular-nums; padding-left:8px; }
+  .st-logo{ justify-self:center; width:calc(var(--st-h, 64px) * .74); height:calc(var(--st-h, 64px) * .74); }
+  .st-logo[hidden]{ display:block; visibility:hidden; }
+  .st-name{ padding:0 16px 0 8px; font-family:'Kanit', system-ui, sans-serif; font-weight:700; font-size:var(--fs); text-transform:uppercase;
+    letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .st-rec{ text-align:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:calc(var(--fs) * 1.1); font-variant-numeric:tabular-nums; }
+  .st-num{ text-align:center; font-family:'Kanit', system-ui, sans-serif; font-weight:600; font-size:calc(var(--fs) * .86); font-variant-numeric:tabular-nums; color:var(--muted); }
+  /* The two schools in this match. */
+  .st-row.playing{ background:var(--brand-primary); box-shadow:inset 0 0 0 2px rgba(255,255,255,.55); }
+  .st-row.playing .st-num{ color:var(--text); }
+
+  /* Head to Head: the two teams of this match, compared from the standings. */
+  .h2h{ position:absolute; left:72px; right:72px; top:176px; bottom:112px; display:none; grid-template-columns:1fr 600px 1fr; align-items:center; }
+  .lg-view[data-view="matchup"] .h2h{ display:grid; }
+  .h2h-team{ display:flex; flex-direction:column; align-items:center; gap:20px; min-width:0; text-align:center; }
+  .h2h-logo{ width:300px; height:300px; }
+  .h2h-logo[hidden]{ display:block; visibility:hidden; }
+  /* Room for two lines either way, so a long name on one side doesn't push
+     its logo out of line with the other's. */
+  .h2h-name{ display:flex; align-items:center; justify-content:center; max-width:560px; min-height:2.1em;
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:48px; line-height:1.04; text-transform:uppercase; letter-spacing:.01em; }
+  .h2h-bar{ width:180px; height:8px; background:var(--c, var(--brand-primary)); }
+  .h2h-mid{ display:flex; flex-direction:column; gap:10px; }
+  .h2h-vs{ margin-bottom:10px; text-align:center; font-family:var(--font-accent, 'Kanit'), 'Kanit', system-ui, sans-serif; font-weight:800; font-size:76px; line-height:1; }
+  .h2h-row{ display:grid; grid-template-columns:1fr 190px 1fr; align-items:center; height:78px; background:var(--brand-chip, rgba(7,16,34,.9));
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }
+  .h2h-row b{ text-align:center; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:40px; font-variant-numeric:tabular-nums; }
+  .h2h-row b.dim{ font-weight:600; color:var(--muted); }
+  .h2h-row span{ text-align:center; font-weight:700; font-size:14px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
 </style>
 <link rel="stylesheet" href="/brand.css">
 <link rel="stylesheet" href="/brand-theme.css">
 </head>
-<body data-mode="starting-soon">
+<body data-mode="starting-soon" class="enter">
   <div class="stripes"></div>
   <div class="bg-gradient"></div>
-  <div class="brand-bg" aria-hidden="true"><i class="bb-1"></i><i class="bb-2"></i><i class="bb-3"></i><i class="bb-4"></i></div>
+  <div class="brand-bg" id="brand-bg" aria-hidden="true"></div>
 
   <div class="necc-frame" id="necc-frame">
     <iframe id="necc-iframe" title="League graphic" src="about:blank"></iframe>
@@ -723,11 +814,13 @@
         </div>
       </div>
 
+      <img class="brb-art" id="brb-art" alt="">
       <div class="brb-content">
         <div class="brb-brandrow">
           <img class="brb-lion" id="brb-lion" alt="">
           <span class="brb-brand" id="brb-brand"></span>
         </div>
+        <div class="brb-kicker" id="brb-kicker"></div>
         <h1 class="brb-headline" id="brb-headline">Be Right Back</h1>
         <div class="brb-subrow">
           <div class="brb-bar"></div>
@@ -820,8 +913,24 @@
     </div>
   </div>
 
+  <div class="lg-view" id="lg-view" aria-label="League">
+    <div class="lg-stage" id="lg-stage">
+      <header class="lg-head">
+        <div class="lg-brand">
+          <img class="lg-mark" id="lg-mark" alt="">
+          <div class="lg-league"><span id="lg-league"></span><small id="lg-game"></small></div>
+        </div>
+        <div class="lg-title"><b id="lg-title"></b><span id="lg-sub"></span></div>
+      </header>
+      <section class="st" id="st" aria-label="Standings"></section>
+      <section class="h2h" id="h2h" aria-label="Head to head"></section>
+      <div class="lg-empty" id="lg-empty"></div>
+    </div>
+  </div>
+
   <div class="wrap frame" id="widener-frame">
     <div class="bar"></div>
+    <div class="page-head" id="page-head"><b id="ph-title"></b><span id="ph-sub"></span></div>
 
     <header class="topbar">
       <img class="logo" id="logo-img" alt="">
@@ -835,8 +944,8 @@
       <div class="montage" id="montage">
         <div class="placeholder" id="placeholder">
           <div style="text-align:center">
-            <div id="placeholder-title">Montage Area</div>
-            <small id="placeholder-sub">Pick a game with a montage, set a clip in the control panel, or align an OBS Media Source under this overlay.</small>
+            <div id="placeholder-title">Video</div>
+            <small id="placeholder-sub">No video source. Select a game with a highlight video or set a video in Match, Details.</small>
           </div>
         </div>
       </div>
@@ -846,6 +955,11 @@
       <div class="pill soonPulse"><span class="dot"></span><span id="status-text">Starting Soon</span></div>
       <div class="title" id="title">Stream Starting Soon</div>
       <div class="subtitle" id="subtitle"></div>
+      <div class="matchup" id="matchup" hidden>
+        <div class="mu-team" id="muA"><img class="mu-logo" alt="" hidden><div class="mu-who"><b class="mu-name"></b><span class="mu-rec"></span></div><b class="mu-score"></b></div>
+        <div class="mu-mid" id="mu-mid">VS</div>
+        <div class="mu-team right" id="muB"><img class="mu-logo" alt="" hidden><div class="mu-who"><b class="mu-name"></b><span class="mu-rec"></span></div><b class="mu-score"></b></div>
+      </div>
       <div class="count" id="countdown">09:52</div>
     </main>
 
@@ -882,6 +996,8 @@
     </footer>
   </div>
 
+<!-- The league theme's own script (it builds its scene backgrounds). -->
+<script src="/brand-theme.js"></script>
 <script>
   const $ = sel => document.querySelector(sel);
 
@@ -912,6 +1028,17 @@
   const brbStage = $('#brb-stage');
   const brbSocials = $('#brb-socials');
   const sbView = $('#sb-view');
+  const lgView = $('#lg-view');
+  const lgStage = $('#lg-stage');
+  const brandBg = $('#brand-bg');
+  $('#lg-mark').src = BRAND.logo;
+  // A theme draws its scenes at a fixed 1920x1080 (--fixed-stage:1 in its
+  // theme.css): the frame and the background are then scaled as one stage,
+  // like Be Right Back, instead of reflowing with the window.
+  const fixedStage = getComputedStyle(document.documentElement).getPropertyValue('--fixed-stage').trim() === '1';
+  // The league's headline typefaces, when its profile has any (see
+  // headlineFont below).
+  const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
   const rosterEls = {
     a: { logo: $('#roster-logo-a'), name: $('#roster-name-a'), tag: $('#roster-tag-a'), players: $('#roster-players-a') },
     b: { logo: $('#roster-logo-b'), name: $('#roster-name-b'), tag: $('#roster-tag-b'), players: $('#roster-players-b') },
@@ -979,9 +1106,9 @@
   function placeholderNote(state){
     const m = !state.clip && montageStatus[state.game];
     if(!m || m.have || document.body.dataset.backdrop !== '1') return placeholderSubDefault;
-    if(m.downloading) return "Downloading this game's montage: " + Math.floor(100 * m.received / m.bytes) + '%';
-    if(m.queued) return "This game's montage is waiting to download";
-    if(m.error) return 'Montage download failed: ' + m.error;
+    if(m.downloading) return 'Highlight video downloading: ' + Math.floor(100 * m.received / m.bytes) + '%';
+    if(m.queued) return 'Highlight video queued';
+    if(m.error) return 'Highlight video download failed: ' + m.error;
     return placeholderSubDefault;
   }
 
@@ -1024,7 +1151,12 @@
     else { els.logo.removeAttribute('src'); els.logo.style.visibility = 'hidden'; }
     els.name.textContent = team.name || '';
     els.name.style.setProperty('--team-c', safeColor(team.color, 'transparent'));
-    els.tag.textContent = team.tag || '';
+    // The team's colours on its whole block too, for themes that use them
+    // there, and its place in the standings beside the short name.
+    const block = els.name.closest('.roster-team');
+    block.style.setProperty('--team-c', safeColor(team.color, BRAND.teamColors[key.toUpperCase()]));
+    block.style.setProperty('--team-c2', safeColor(team.colorAlt, 'rgba(255,255,255,.35)'));
+    els.tag.textContent = [team.tag, recordText(lastState, team)].filter(Boolean).join(' · ');
     els.players.innerHTML = '';
     els.players.style.setProperty('--roster-count', String(Math.max(1, (team.players || []).length)));
     (team.players || []).forEach((p) => {
@@ -1046,14 +1178,21 @@
   // depend on an external host being reachable mid-broadcast.
   const BRB_LION = BRAND.mascot || BRAND.logo;
   $('#brb-lion').src = BRB_LION;
+  $('#brb-art').src = BRB_LION;
   const sbStage = $('#sb-stage');
   function fitBrbStage(){
     const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
     const x = (window.innerWidth - 1920 * s) / 2;
     const y = (window.innerHeight - 1080 * s) / 2;
     brbStage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
-    // The scoreboard uses the same fixed 1920x1080 stage.
+    // The scoreboard and the league scenes use the same fixed 1920x1080
+    // stage, and so do the frame and the background of a fixed-stage theme.
     sbStage.style.transform = brbStage.style.transform;
+    lgStage.style.transform = brbStage.style.transform;
+    if(fixedStage){
+      widenerFrame.style.transform = brbStage.style.transform;
+      brandBg.style.transform = brbStage.style.transform;
+    }
   }
   window.addEventListener('resize', fitBrbStage);
   fitBrbStage();
@@ -1063,11 +1202,13 @@
   // a longer line would run past the stage edge and get clipped - so shrink the
   // type until it fits the space left of the vertical rule. Short headlines are
   // untouched and render at the intended 150px.
-  const BRB_HEADLINE_MAX = 1450; // stage 1920 - content left 304 - rule gutter
-  const BRB_HEADLINE_SIZE = 150;
+  // The size it shrinks from is whatever the stylesheet gives the headline,
+  // and a theme can narrow the space with --brb-max.
+  const BRB_HEADLINE_MAX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--brb-max')) || 1450; // stage 1920 - content left 304 - rule gutter
   function fitBrbHeadline(){
     const h = $('#brb-headline');
     h.style.fontSize = '';
+    const BRB_HEADLINE_SIZE = parseFloat(getComputedStyle(h).fontSize) || 150;
     // Measure the text itself, not the block. The h1 is a block that fills its
     // container, so scrollWidth reports the widest sibling row instead of the
     // headline - which would shrink short headlines for no reason. Width is
@@ -1086,9 +1227,53 @@
   // would size the headline wrongly, so re-fit once the real font is ready.
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
     fitBrbHeadline();
+    fitTitle();
     // Team names are fitted against the real font too.
-    if(lastState) renderScoreboard(lastState);
+    if(lastState){ renderScoreboard(lastState); renderMatchup(lastState); renderLeague(lastState); }
   });
+
+  // A theme can cap the Starting Soon / Post-Match headline at a number of
+  // lines (--title-lines in its theme.css): the type steps down until what
+  // the operator typed fits. Without the variable the headline is untouched.
+  const TITLE_LINES = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--title-lines'), 10) || 0;
+  function fitTitle(){
+    if(!TITLE_LINES) return;
+    const t = $('#title');
+    t.style.fontSize = '';
+    const cs = getComputedStyle(t);
+    let size = parseFloat(cs.fontSize);
+    const ratio = parseFloat(cs.lineHeight) / size || 1;
+    // offsetHeight is the lines alone. scrollHeight also counts how far a
+    // typeface's tall letters reach below the last line, which made two
+    // lines of a blackletter look like three.
+    while(size > 56 && t.offsetHeight > size * ratio * TITLE_LINES + 4){
+      size -= 4;
+      t.style.fontSize = size + 'px';
+    }
+  }
+
+  // Entrances (v2.0.0). OBS tells a browser source when its scene goes on
+  // program; the page then replays its entrance animations, which sit under
+  // body.enter. They are held back by --enter-delay, so with the league's
+  // stinger they start just before it uncovers the scene. Opened in a plain
+  // browser, they play once on load.
+  const stingerPoint = (BRAND.stinger && BRAND.stinger.transitionPoint) || 0;
+  document.documentElement.style.setProperty('--enter-delay', Math.max(0, stingerPoint - 150) + 'ms');
+  // body.enter only stays for the length of an entrance: afterwards a row
+  // redrawn by a new score or standings must appear in place, not fly in.
+  let enterTimer = 0;
+  function endEntranceLater(){
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => document.body.classList.remove('enter'), stingerPoint + 3500);
+  }
+  function replayEntrance(){
+    document.body.classList.remove('enter');
+    void document.body.offsetWidth; // reflow, so the animations restart
+    document.body.classList.add('enter');
+    endEntranceLater();
+  }
+  endEntranceLater();
+  window.addEventListener('obsSourceActiveChanged', (e) => { if(e.detail && e.detail.active) replayEntrance(); });
 
   // Social pills, built from the same socials object every other view uses so
   // there is one place to edit handles. Blank handles are skipped.
@@ -1346,12 +1531,12 @@
     sample: true, inMatch: true, clock: 187, overtime: false, replay: false, paused: false, target: '0:1',
     teams: [{ score: 2 }, { score: 1 }],
     players: [
-      { key: '0:1', name: 'Pride Lion', team: 0, boost: 64, goals: 1, assists: 1, saves: 2, shots: 3 },
-      { key: '0:2', name: 'Blue Hen', team: 0, boost: 100, goals: 1, assists: 0, saves: 0, shots: 2 },
-      { key: '0:3', name: 'Chester', team: 0, boost: 12, goals: 0, assists: 1, saves: 1, shots: 1 },
-      { key: '1:4', name: 'Opponent One', team: 1, boost: 33, goals: 1, assists: 0, saves: 1, shots: 2 },
-      { key: '1:5', name: 'Opponent Two', team: 1, boost: 0, demolished: true, goals: 0, assists: 1, saves: 0, shots: 0 },
-      { key: '1:6', name: 'Opponent Three', team: 1, boost: 78, goals: 0, assists: 0, saves: 3, shots: 1 },
+      { key: '0:1', name: 'Player One', team: 0, boost: 64, goals: 1, assists: 1, saves: 2, shots: 3 },
+      { key: '0:2', name: 'Player Two', team: 0, boost: 100, goals: 1, assists: 0, saves: 0, shots: 2 },
+      { key: '0:3', name: 'Player Three', team: 0, boost: 12, goals: 0, assists: 1, saves: 1, shots: 1 },
+      { key: '1:4', name: 'Player Four', team: 1, boost: 33, goals: 1, assists: 0, saves: 1, shots: 2 },
+      { key: '1:5', name: 'Player Five', team: 1, boost: 0, demolished: true, goals: 0, assists: 1, saves: 0, shots: 0 },
+      { key: '1:6', name: 'Player Six', team: 1, boost: 78, goals: 0, assists: 0, saves: 3, shots: 1 },
     ],
   };
 
@@ -1750,10 +1935,14 @@
     const vSubtitle = vt && vt.subtitle !== undefined ? vt.subtitle : state.subtitle;
     const vStatus = vt && vt.status !== undefined ? vt.status : state.status;
 
+    // Set first: the roster and matchup renders below read the standings
+    // through it.
+    lastState = state;
     logoEl.src = state.logo ? mediaUrl(state.logo) : defaultLogo;
+    logoEl.classList.toggle('custom', !!state.logo);
     if(state.brand) $('#brand-line1').textContent = state.brand;
     if(state.team !== undefined) $('#brand-line2').textContent = state.team || '';
-    if(vTitle !== undefined) $('#title').textContent = vTitle || '';
+    if(vTitle !== undefined && $('#title').textContent !== (vTitle || '')){ $('#title').textContent = vTitle || ''; fitTitle(); }
     if(vSubtitle !== undefined) $('#subtitle').textContent = vSubtitle || '';
     if(state.next !== undefined) $('#next').textContent = state.next || '';
     if(vStatus !== undefined) $('#status-text').textContent = vStatus || '';
@@ -1767,7 +1956,14 @@
     if(vSubtitle !== undefined) $('#brb-sub').textContent = vSubtitle || '';
     if(state.brand !== undefined) $('#brb-brand').textContent = state.brand || BRAND.name;
     if(state.socials) renderBrbSocials(state.socials);
-    lastState = state;
+    // The line a theme shows above the Be Right Back headline, and the
+    // heading it gives a full-width scene: the game and where in the season.
+    const sbState = state.scoreboard || {};
+    const gameLine = [state.team, sbState.round].filter(Boolean).join(' · ');
+    const seriesLine = [sbState.round, 'Best of ' + clampInt(sbState.bestOf, 1, 9, 3)].filter(Boolean).join(' · ');
+    $('#brb-kicker').textContent = gameLine || BRAND.tagline || '';
+    $('#ph-title').textContent = vTitle || (textMode === 'roster' ? 'Rosters' : '');
+    $('#ph-sub').textContent = seriesLine;
     applyClip(clipFor(state));
     placeholderSub.textContent = placeholderNote(state);
     if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
@@ -1788,15 +1984,20 @@
     const effectiveMode = lockedView || state.mode;
     if(effectiveMode){
       document.body.dataset.mode = effectiveMode;
+      document.body.dataset.bg = sceneBackground(state, effectiveMode);
+      setHeadlineFont(headlineFont(state));
       const isNecc = effectiveMode === 'necc';
       const isRoster = effectiveMode === 'roster';
       const isBrb = effectiveMode === 'brb';
       const isStats = effectiveMode === 'stats';
       const isBoard = effectiveMode === 'scoreboard' || isStats;
-      widenerFrame.style.display = (isNecc || isBrb || isBoard) ? 'none' : '';
+      const isLeague = effectiveMode === 'standings' || effectiveMode === 'matchup';
+      widenerFrame.style.display = (isNecc || isBrb || isBoard || isLeague) ? 'none' : '';
       sbView.classList.toggle('stats-scene', isStats);
       neccFrame.classList.toggle('active', isNecc);
       brbView.classList.toggle('active', isBrb);
+      lgView.classList.toggle('active', isLeague);
+      if(isLeague){ lgView.dataset.view = effectiveMode; fitBrbStage(); }
       if(isBoard && !sbView.classList.contains('active')){
         // Restart the entrance so entering the view always animates.
         [$('#sb'), $('#sbc')].forEach((box) => { box.style.animation = 'none'; void box.offsetWidth; box.style.animation = ''; });
@@ -1805,14 +2006,10 @@
       sbView.classList.toggle('active', isBoard);
       if(isBrb){
         // Re-fit on entry: the viewport may have changed while this view was
-        // hidden, and restart the headline wipe so switching to BRB always
-        // plays its intro rather than showing an already-finished card.
+        // hidden. (The headline's intro replays with every entrance, see
+        // replayEntrance.)
         fitBrbStage();
         fitBrbHeadline();
-        const h = $('#brb-headline');
-        h.style.animation = 'none';
-        void h.offsetWidth; // force reflow so the animation restarts
-        h.style.animation = '';
       }
       if(isNecc){
         // neccBg === false -> flat black behind the NECC page; anything else
@@ -1824,9 +2021,11 @@
         if(url && neccIframe.src !== url) loadNecc(url);
         if(!url && neccIframe.getAttribute('src') !== 'about:blank'){ neccIframe.src = 'about:blank'; neccLoading.classList.remove('active'); }
       } else {
-        placeholderTitle.textContent = effectiveMode === 'post-match' ? 'Post-Match Clips' : 'Montage Area';
+        placeholderTitle.textContent = 'Video';
         content.style.display = isRoster ? 'none' : '';
         rosterView.classList.toggle('active', isRoster);
+        // For a theme that lays the text out differently beside the video.
+        document.body.classList.toggle('has-montage', !isRoster && state.montage !== false);
         if(isRoster){
           wrap.style.display = 'none';
         } else if(state.montage !== undefined){
@@ -1840,6 +2039,248 @@
     // or an OBS scene cut to it, never shows stale stocks.
     renderScoreboard(state);
     renderRlScreens(false);
+    renderMatchup(state);
+    renderLeague(state);
+    // An unlocked page that follows OBS replays the entrance as its view
+    // changes; a scene's own source hears it from OBS instead.
+    if(!lockedView && effectiveMode && effectiveMode !== shownMode){
+      if(shownMode) replayEntrance();
+      shownMode = effectiveMode;
+    }
+  }
+  let shownMode = '';
+
+  // Which of the theme's backgrounds a scene shows: the one picked for it in
+  // the panel, else the profile's default for that view, else the first.
+  function sceneBackground(state, view){
+    const bgs = (BRAND.backgrounds && BRAND.backgrounds.list) || [];
+    if(!bgs.length) return '';
+    const ok = (id) => bgs.some((b) => b.id === id);
+    const picked = (state.backgrounds || {})[view];
+    if(ok(picked)) return picked;
+    const dflt = (BRAND.backgrounds.defaults || {})[view];
+    return ok(dflt) ? dflt : bgs[0].id;
+  }
+
+  // Which of the league's headline typefaces the scenes are set in: the one
+  // picked in the panel, else the profile's default. The theme styles each
+  // under body[data-headfont]. They differ in width, so the headlines are
+  // fitted again once the new face has loaded.
+  function headlineFont(state){
+    if(!HEAD_FONTS.length) return '';
+    const ok = (id) => HEAD_FONTS.some((f) => f.id === id);
+    return ok(state.headlineFont) ? state.headlineFont : ok(BRAND.headlineFonts.default) ? BRAND.headlineFonts.default : HEAD_FONTS[0].id;
+  }
+  function loadHeadlineFont(id){
+    const f = HEAD_FONTS.find((x) => x.id === id);
+    return f && document.fonts && document.fonts.load ? document.fonts.load(`400 64px '${f.family}'`).catch(() => {}) : Promise.resolve();
+  }
+  function setHeadlineFont(id){
+    if((document.body.dataset.headfont || '') === id) return;
+    document.body.dataset.headfont = id;
+    const refit = () => { fitBrbHeadline(); fitTitle(); };
+    refit();
+    loadHeadlineFont(id).then(() => { if(document.body.dataset.headfont === id) refit(); });
+  }
+  // Both are fetched up front, so a switch during a stream shows at once.
+  HEAD_FONTS.forEach((f) => loadHeadlineFont(f.id));
+
+  // --- League standings (v2.0.0) --------------------------------------------
+  // The server reads each game's standings from the league's site and sends
+  // them to every page as {type:'league'}. They are not part of the match
+  // state. They draw the Standings and Head to Head scenes, and give each
+  // team its record on the theme's matchup row and on Rosters.
+  let leagueData = { standings: {} };
+  function norm(s){ return String(s || '').trim().toLowerCase(); }
+  function standingsFor(state){
+    const s = leagueData.standings[(state && state.game) || 'other'];
+    return s && Array.isArray(s.rows) ? s : { rows: [] };
+  }
+  // The standings row of a match team: by name ("Widener University Gold"
+  // is Widener University's row), else by short name when only one row has
+  // it. Two schools can share a short name.
+  function rowIndex(rows, team){
+    const n = norm(team && team.name);
+    if(!n) return -1;
+    const starts = (a, b) => a === b || (a.startsWith(b) && /^[^a-z0-9]/.test(a.slice(b.length)));
+    const byName = rows.findIndex((r) => { const rn = norm(r.name); return !!rn && (starts(n, rn) || starts(rn, n)); });
+    if(byName >= 0) return byName;
+    const tag = norm(team.tag);
+    const byTag = tag ? rows.filter((r) => norm(r.tag) === tag) : [];
+    return byTag.length === 1 ? rows.indexOf(byTag[0]) : -1;
+  }
+  // The row, with `placed` false until the season has a result: before
+  // that every team is level and a rank says nothing.
+  function rowFor(state, team){
+    const s = standingsFor(state);
+    const i = rowIndex(s.rows, team);
+    return i < 0 ? null : { ...s.rows[i], placed: !!s.played };
+  }
+  function ordinal(n){
+    const v = n % 100;
+    return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  }
+  function signed(n){ return (n > 0 ? '+' : '') + n; }
+  // "4-1 · 2nd", or nothing for a team that isn't in the standings.
+  function recordText(state, team){
+    const r = state ? rowFor(state, team) : null;
+    return r ? r.w + '-' + r.l + (r.placed ? ' · ' + ordinal(r.rank) : '') : '';
+  }
+  // The word for one game of the series, as the standings count them.
+  function unitWord(state){
+    const u = String(((state && state.scoreboard) || {}).unit || 'Game').trim() || 'Game';
+    return u + 's';
+  }
+
+  // The matchup row (a league theme's Starting Soon and Post-Match): both
+  // teams with their logos and records, and on Post-Match the series score.
+  function renderMatchup(state){
+    const mu = $('#matchup');
+    const teams = { A: state.teamA || {}, B: state.teamB || {} };
+    const has = !!(teams.A.name && teams.B.name);
+    mu.hidden = !has;
+    // A subtitle that only repeats the matchup is dropped beside the row.
+    const sub = norm($('#subtitle').textContent);
+    const dup = has && (sub === norm(teams.A.name + ' vs ' + teams.B.name) || sub === norm(teams.B.name + ' vs ' + teams.A.name));
+    content.classList.toggle('has-matchup', has);
+    content.classList.toggle('sub-dup', dup);
+    if(!has) return;
+    const sm = state.scoreboard || {};
+    const score = { A: clampInt(sm.scoreA, 0, 99, 0), B: clampInt(sm.scoreB, 0, 99, 0) };
+    const need = Math.ceil(clampInt(sm.bestOf, 1, 9, 3) / 2);
+    const decided = score.A >= need || score.B >= need;
+    const scored = (lockedView || state.mode) === 'post-match' && score.A + score.B > 0;
+    mu.classList.toggle('scored', scored);
+    ['A', 'B'].forEach((k) => {
+      const el = $('#mu' + k);
+      const t = teams[k];
+      el.style.setProperty('--c', safeColor(t.color, BRAND.teamColors[k]));
+      const logo = el.querySelector('.mu-logo');
+      const src = t.logoUrl ? mediaUrl(t.logoUrl) : '';
+      if(src){ if(logo.getAttribute('src') !== src) logo.src = src; logo.hidden = false; }
+      else { logo.removeAttribute('src'); logo.hidden = true; }
+      // The full name where it fits, then without "University", then the
+      // short name.
+      const nameEl = el.querySelector('.mu-name');
+      fitTeamName(nameEl, t.name);
+      if(t.tag && nameEl.scrollWidth > nameEl.clientWidth + 1) nameEl.textContent = t.tag;
+      el.querySelector('.mu-rec').textContent = recordText(state, t);
+      el.querySelector('.mu-score').textContent = scored ? String(score[k]) : '';
+      el.classList.toggle('lost', scored && decided && score[k] < score[k === 'A' ? 'B' : 'A']);
+    });
+    $('#mu-mid').textContent = scored ? (decided ? 'Final' : '–') : 'VS';
+  }
+
+  function renderLeague(state){
+    const view = lockedView || state.mode;
+    const isStandings = view === 'standings';
+    const vt = (state.views || {})[isStandings ? 'standings' : 'matchup'] || {};
+    const sm = state.scoreboard || {};
+    $('#lg-league').textContent = state.brand || BRAND.name;
+    $('#lg-game').textContent = state.team || '';
+    $('#lg-title').textContent = vt.title || (isStandings ? 'Standings' : 'Head to Head');
+    const s = standingsFor(state);
+    $('#lg-sub').textContent = isStandings
+      ? (state.team || '')
+      : [sm.round, 'Best of ' + clampInt(sm.bestOf, 1, 9, 3)].filter(Boolean).join(' · ');
+    renderStandings(state, s);
+    renderH2h(state);
+    $('#lg-empty').textContent = isStandings && !s.rows.length
+      ? 'No standings for ' + (state.team || 'this game') + (s.error ? ': ' + s.error : '') : '';
+  }
+
+  // Row height from the row count, so six schools and sixteen both fill the
+  // table's space: 742px tall, less the heading row and the gaps.
+  // Both league scenes are redrawn only when what they show has changed, so
+  // a score update elsewhere doesn't rebuild a table that is on air.
+  let stShown = '', h2hShown = '';
+  function scoreLabel(s){ return (s.scoreName || 'Score') + ' diff'; }
+  function renderStandings(state, s){
+    const box = $('#st');
+    const rows = s.rows;
+    const sig = JSON.stringify([rows, s.played, s.scored, s.scoreName, unitWord(state), (state.teamA || {}).name, (state.teamB || {}).name,
+      (state.teamA || {}).tag, (state.teamB || {}).tag, lgView.classList.contains('active'), !!(document.fonts && document.fonts.status === 'loaded')]);
+    if(sig === stShown) return;
+    stShown = sig;
+    box.innerHTML = '';
+    const two = rows.length > 10;
+    box.classList.toggle('two', two);
+    box.classList.toggle('scored', !!s.scored);
+    if(!rows.length) return;
+    const perCol = two ? Math.ceil(rows.length / 2) : rows.length;
+    const room = 742 - 40 - 6 * (perCol - 1);
+    box.style.setProperty('--st-h', Math.max(40, Math.min(84, Math.floor(room / perCol))) + 'px');
+    const playing = [rowIndex(rows, state.teamA || {}), rowIndex(rows, state.teamB || {})];
+    for(let c = 0; c * perCol < rows.length; c++){
+      const col = mk('div', 'st-col');
+      // In the page before its rows are filled: names are measured to fit.
+      box.appendChild(col);
+      const heads = mk('div', 'st-heads');
+      heads.append(mk('span', '', '#'), mk('span', 'l', 'School'), mk('span', '', 'Record'), mk('span', '', unitWord(state)), mk('span', '', 'Diff'));
+      if(s.scored) heads.append(mk('span', '', scoreLabel(s)));
+      col.appendChild(heads);
+      rows.slice(c * perCol, (c + 1) * perCol).forEach((r, j) => {
+        const i = c * perCol + j;
+        const row = mk('div', 'st-row' + (playing.includes(i) ? ' playing' : ''));
+        row.style.setProperty('--c', safeColor(r.color, 'var(--brand-primary)'));
+        row.style.setProperty('--i', String(i));
+        const logo = mk('img', 'st-logo'); logo.alt = '';
+        if(r.logoUrl) logo.src = mediaUrl(r.logoUrl); else logo.hidden = true;
+        const name = mk('span', 'st-name');
+        row.append(mk('span', 'st-rank', s.played ? String(r.rank) : '–'), logo, name,
+          mk('span', 'st-rec', r.w + '-' + r.l), mk('span', 'st-num', r.gw + '-' + r.gl),
+          mk('span', 'st-num', signed(r.gw - r.gl)));
+        if(s.scored) row.append(mk('span', 'st-num', signed(r.sf - r.sa)));
+        col.appendChild(row);
+        // The short name where the full one would be cut off.
+        fitTeamName(name, r.name);
+        if(r.tag && name.scrollWidth > name.clientWidth + 1) name.textContent = r.tag;
+      });
+    }
+  }
+
+  function renderH2h(state){
+    const box = $('#h2h');
+    const s = standingsFor(state);
+    const sig = JSON.stringify([state.teamA, state.teamB, s.rows, s.played, s.scored, s.scoreName, unitWord(state)]);
+    if(sig === h2hShown) return;
+    h2hShown = sig;
+    box.innerHTML = '';
+    const side = (k) => {
+      const t = (k === 'A' ? state.teamA : state.teamB) || {};
+      const el = mk('div', 'h2h-team');
+      el.style.setProperty('--c', safeColor(t.color, BRAND.teamColors[k]));
+      const logo = mk('img', 'h2h-logo'); logo.alt = '';
+      if(t.logoUrl) logo.src = mediaUrl(t.logoUrl); else logo.hidden = true;
+      el.append(logo, mk('div', 'h2h-name', t.name || 'Team ' + k), mk('i', 'h2h-bar'));
+      return { el, row: rowFor(state, t) };
+    };
+    const A = side('A'), B = side('B');
+    const mid = mk('div', 'h2h-mid');
+    mid.appendChild(mk('div', 'h2h-vs', 'VS'));
+    // [label, text for a row, a number to compare (higher is better)].
+    const pct = (r) => (r.w + r.l ? r.w / (r.w + r.l) : 0);
+    const stats = [
+      ['Standing', (r) => (r.placed ? ordinal(r.rank) : '–'), (r) => (r.placed ? -r.rank : 0)],
+      ['Record', (r) => r.w + '-' + r.l, pct],
+      [unitWord(state), (r) => r.gw + '-' + r.gl, (r) => (r.gw + r.gl ? r.gw / (r.gw + r.gl) : 0)],
+      ['Diff', (r) => signed(r.gw - r.gl), (r) => r.gw - r.gl],
+    ];
+    if(s.scored) stats.push([scoreLabel(s), (r) => signed(r.sf - r.sa), (r) => r.sf - r.sa]);
+    stats.forEach(([label, text, rate], i) => {
+      const row = mk('div', 'h2h-row');
+      row.style.setProperty('--i', String(i));
+      const a = mk('b', '', A.row ? text(A.row) : '–');
+      const b = mk('b', '', B.row ? text(B.row) : '–');
+      if(rate && A.row && B.row){
+        const d = rate(A.row) - rate(B.row);
+        if(d < 0) a.className = 'dim';
+        if(d > 0) b.className = 'dim';
+      }
+      row.append(a, mk('span', '', label), b);
+      mid.appendChild(row);
+    });
+    box.append(A.el, mid, B.el);
   }
 
   // Load a NECC page with a spinner over it until it arrives. A cross-origin
@@ -1853,7 +2294,7 @@
     neccLoadingText.textContent = 'Loading the ' + BRAND.league.name + ' graphic';
     clearTimeout(neccSlowTimer);
     neccSlowTimer = setTimeout(() => {
-      neccLoadingText.textContent = 'LeagueOS has not responded yet. Check the internet connection, or re-import the match.';
+      neccLoadingText.textContent = 'No response from LeagueOS. Check the connection or re-import the match.';
     }, 12000);
     neccIframe.src = url;
   }
@@ -1872,7 +2313,7 @@
   // browser source loading /overlay?view=<its view>, which pins the page to
   // that view while every other field (titles, countdown, rosters, scores)
   // still updates live.
-  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard', 'stats'];
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard', 'stats', 'standings', 'matchup'];
   // v0.8.0 scene sources point at ?view=smash; keep them working.
   const rawView = params.get('view') === 'smash' ? 'scoreboard' : params.get('view');
   const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
@@ -1883,6 +2324,20 @@
     if(lockedNeccType) document.body.dataset.neccType = lockedNeccType;
   }
 
+  // After an app update OBS still holds this page as the old version served
+  // it. The server says which build it is each time the page connects; if
+  // that isn't the build this page came from, the page reloads itself. It
+  // reloads at most once per build, so a mismatch can never loop.
+  const PAGE_STAMP = (window.APP_STAMP || {}).overlay || '';
+  function staleAgainst(stamp){
+    if(!PAGE_STAMP || !stamp || stamp === PAGE_STAMP) return false;
+    try {
+      if(sessionStorage.getItem('reloaded-for') === stamp) return false;
+      sessionStorage.setItem('reloaded-for', stamp);
+    } catch(e){ return false; }
+    return true;
+  }
+
   // Live updates from the app's local server. Every page gets the same one
   // state; a locked page picks out its own view.
   (function connect(){
@@ -1891,6 +2346,7 @@
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
+        if (msg.type === 'hello' && staleAgainst(msg.stamp)) { location.reload(); return; }
         if (msg.type === 'montages') {
           montageStatus = msg.montages || {};
           if (lastState) {
@@ -1905,6 +2361,11 @@
           renderRlScreens(false);
         }
         if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'goal') showRlGoal(msg.event);
+        if (msg.type === 'league') {
+          leagueData = msg.league && msg.league.standings ? msg.league : { standings: {} };
+          // Records show on the rosters and the matchup row as well.
+          if (lastState) applyState(lastState);
+        }
         if (msg.type === 'state') applyState(msg.data);
       } catch (e) {}
     });

@@ -14,3 +14,8 @@ Stream/
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+
+# Licensed fonts: their licences don't allow passing the files on, so they
+# are not published here. See app/profiles/lote/assets/fonts/README.md.
+app/profiles/lote/assets/fonts/PinkBlue.ttf
+app/profiles/lote/assets/fonts/Zentras.ttf

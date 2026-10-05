@@ -23,7 +23,7 @@ let match;
 function newMatch(n) {
   return {
     guid: 'MOCK' + Date.now().toString(16).toUpperCase() + n,
-    clock: GAME_SECONDS, overtime: false, replayUntil: 0, ended: false,
+    clock: GAME_SECONDS, overtime: false, replayUntil: 0, ended: false, live: false,
     teams: [0, 0], target: 0, nextGoal: Date.now() + (fast ? 6000 : 25000),
     players: NAMES.flatMap((names, team) => names.map((name, i) => ({
       Name: name, Shortcut: team * 3 + i + 1, TeamNum: team, PrimaryId: 'Epic|mock' + team + i + '|0',
@@ -67,7 +67,7 @@ function tick() {
         { Name: 'Blue', TeamNum: 0, Score: match.teams[0], ColorPrimary: '1873FF', ColorSecondary: 'E5E5E5' },
         { Name: 'Orange', TeamNum: 1, Score: match.teams[1], ColorPrimary: 'C26418', ColorSecondary: 'E5E5E5' },
       ],
-      TimeSeconds: match.clock, bOvertime: match.overtime, Ball: { Speed: 900, TeamNum: 0 },
+      TimeSeconds: match.clock, bOvertime: match.overtime, Ball: match.live ? { Speed: 900, TeamNum: 0 } : { Speed: 0, TeamNum: 255 },
       bReplay: replay, bHasWinner: match.ended,
       Winner: match.ended ? (match.teams[0] > match.teams[1] ? 'Blue' : 'Orange') : '',
       Arena: 'Stadium_P', bHasTarget: !match.ended, Target: ref(target),
@@ -101,16 +101,26 @@ function endGame() {
   send('MatchEnded', { WinnerTeamNum: match.teams[0] > match.teams[1] ? 0 : 1 });
   setTimeout(() => send('PodiumStart', {}), 3000);
   setTimeout(() => { send('MatchDestroyed', {}); match = null; }, fast ? 8000 : 15000);
-  setTimeout(() => { match = newMatch(Date.now()); send('MatchCreated', {}); send('MatchInitialized', {}); }, fast ? 12000 : 25000);
+  setTimeout(() => { match = newMatch(Date.now()); startMatch(); }, fast ? 12000 : 25000);
+}
+
+// A match loads, sits for a few seconds, counts down, then plays.
+function startMatch() {
+  const m = match;
+  send('MatchCreated', {});
+  send('ClockUpdatedSeconds', { TimeSeconds: m.clock, bOvertime: false });
+  setTimeout(() => { if (match === m) { send('MatchInitialized', {}); send('CountdownBegin', {}); } }, fast ? 2000 : 6000);
+  setTimeout(() => { if (match === m) { m.live = true; m.nextGoal = Date.now() + (fast ? 6000 : 25000); send('RoundStarted', {}); } }, fast ? 3000 : 9000);
 }
 
 match = newMatch(0);
+setTimeout(startMatch, 500);
 let lastClock = Date.now();
 setInterval(() => {
   if (!match) return;
   const now = Date.now();
   // Clock runs only during live play.
-  if (!match.ended && now >= match.replayUntil && now - lastClock >= (fast ? 100 : 1000)) {
+  if (match.live && !match.ended && now >= match.replayUntil && now - lastClock >= (fast ? 100 : 1000)) {
     lastClock = now;
     if (match.overtime) match.clock++;
     else if (match.clock > 0) match.clock--;
@@ -119,7 +129,7 @@ setInterval(() => {
       if (match.teams[0] === match.teams[1]) match.overtime = true; else endGame();
     }
   }
-  if (!match.ended && now >= match.replayUntil && now >= match.nextGoal) {
+  if (match.live && !match.ended && now >= match.replayUntil && now >= match.nextGoal) {
     match.nextGoal = now + (fast ? 5000 + Math.random() * 6000 : 20000 + Math.random() * 40000);
     goal();
   }

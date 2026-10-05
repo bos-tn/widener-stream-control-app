@@ -3,13 +3,14 @@
 // OBS decides what is on stream. The app builds one OBS scene per overlay,
 // each showing the same live match data, and the operator switches between
 // them in OBS (Studio Mode previews a scene before it goes on air). The app
-// cuts scenes itself only where it should: the Rocket League stats after a
-// game, and back to the Scoreboard when the next one loads.
+// cuts scenes itself only where a game's scoreboard calls for it (the stats
+// after a Rocket League game, and back when the next one loads).
 //
-// Three pages. Match sets a match up step by step: game, teams, details,
-// then building the scenes. Live is for during the match: what is on air,
-// the score, each scene's text and the rosters. Settings holds OBS, the
-// stinger, music, videos, the team library, display and remote control.
+// The pages. Match sets a match up step by step: game, teams, details, then
+// building the scenes. Live is for during the match: what is on air, the
+// score, each scene's text and background, and the rosters. League (a league
+// profile only) keeps each game's standings. Settings holds OBS, the stinger,
+// music, videos, the team library, display and remote control.
 //
 // There is one match state on the server, shown on every scene at once. An
 // edit goes out when a field is finished (Enter, or clicking away), so half
@@ -18,7 +19,7 @@
 //
 // Sections, in order: brand, helpers, state + sending, preferences, file
 // fields, rosters, Match page, Live page (on air, score, Rocket League,
-// scenes), library + team sheet, WebSocket, montages, pages, display,
+// scenes), library + team sheet, League page, WebSocket, montages, pages, display,
 // keyboard, shortcuts, info tips, toasts, OBS, stinger, music, remote
 // control, setup guide, init.
 
@@ -36,12 +37,21 @@ const BRAND = window.BRAND || {
   teamColors: { A: '#0054b8', B: '#f0b310' }, stinger: null, leagueTeams: 0, hasMusicTrack: false,
 };
 const LEAGUE = BRAND.league.name;
+// The league's own scenes (Standings, Head to Head) and the scene
+// backgrounds an operator can pick from. A school's own app has neither.
+const LEAGUE_SCENES = [
+  { key: 'matchup', label: 'Head to Head' },
+  { key: 'standings', label: 'Standings' },
+].filter((s) => (BRAND.leagueScenes || []).includes(s.key));
+const BACKGROUNDS = (BRAND.backgrounds && BRAND.backgrounds.list) || [];
+// The typefaces the scene headlines can be set in, for a league with several.
+const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
 
 function applyBrandText(root) {
   const tokens = {
     name: BRAND.name, short: BRAND.shortName, league: LEAGUE, prefix: BRAND.obsPrefix, appName: BRAND.appName,
     social: BRAND.socialHandle || 'handle', match: BRAND.matchExample,
-    importHint: BRAND.league.importHint || `Paste the ${LEAGUE} match page link`,
+    importHint: BRAND.league.importHint || `${LEAGUE} match page URL`,
   };
   const fill = (t) => t.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in tokens ? tokens[k] : m));
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -139,7 +149,7 @@ function armed(btn, label) {
     return true;
   }
   btn.dataset.armedUntil = String(Date.now() + 3000);
-  btn.textContent = 'Click again to confirm';
+  btn.textContent = 'Confirm';
   setTimeout(() => { if (btn.dataset.armedUntil) { delete btn.dataset.armedUntil; btn.textContent = label; } }, 3000);
   return false;
 }
@@ -177,7 +187,7 @@ function wsOpen() { return ws && ws.readyState === WebSocket.OPEN; }
 function mergeLocal(patch) {
   if (!state) return;
   const next = { ...state, ...patch };
-  ['socials', 'scoreboard'].forEach((k) => { if (patch[k]) next[k] = { ...state[k], ...patch[k] }; });
+  ['socials', 'scoreboard', 'backgrounds'].forEach((k) => { if (patch[k]) next[k] = { ...state[k], ...patch[k] }; });
   if (patch.views) {
     next.views = { ...state.views };
     Object.keys(patch.views).forEach((v) => { next.views[v] = { ...(state.views[v] || {}), ...patch.views[v] }; });
@@ -187,7 +197,7 @@ function mergeLocal(patch) {
 }
 
 function send(patch) {
-  if (!wsOpen()) { toast('Not connected to the app. The change was not saved; try again in a moment.'); return false; }
+  if (!wsOpen()) { toast('App connection lost. Change not saved.'); return false; }
   ws.send(JSON.stringify({ type: 'update', data: patch }));
   mergeLocal(patch);
   return true;
@@ -226,24 +236,28 @@ function afterLocalChange() { renderAll(); }
 // the server: which league graphics get a scene, the game capture, Studio
 // Mode, and whether the setup guide has run.
 
+// In the order their scenes sit in OBS (the server's list): before the
+// match, then during it.
 const NECC_TYPES = [
+  { key: 'matchPreview', label: 'Match Preview' },
+  { key: 'matchRosters', label: 'Match Rosters' },
   { key: 'stageBracket', label: 'Bracket' },
   { key: 'seasonHeader', label: 'Season Header' },
-  { key: 'matchPreview', label: 'Match Preview' },
-  { key: 'matchActivity', label: 'Match Activity' },
   { key: 'matchProgress', label: 'Match Progress' },
-  { key: 'matchRosters', label: 'Match Rosters' },
+  { key: 'matchActivity', label: 'Match Activity' },
 ];
-let prefs = { neccTypes: ['stageBracket', 'matchPreview'], setupDone: false, guideV2: false, gameCapture: true, studioMode: true };
+let prefs = {
+  neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key),
+  setupDone: false, guideV2: false, gameCapture: true, studioMode: true, orderScenes: true,
+};
 let prefsLoaded = false;
 
 function applyPrefs(p) {
   prefs = { ...prefs, ...(p || {}) };
   ['gameCaptureInput', 'wizGameCapture'].forEach((id) => { $id(id).checked = prefs.gameCapture; });
   ['studioModeInput', 'wizStudioMode'].forEach((id) => { $id(id).checked = prefs.studioMode; });
+  $id('orderScenesInput').checked = prefs.orderScenes;
   renderNeccTypeList();
-  // The scene list follows the league graphics picked.
-  refreshObs();
 }
 
 function savePrefs(patch) {
@@ -260,33 +274,39 @@ async function loadPrefs() {
   maybeAutoWizard();
 }
 
-[['gameCaptureInput', 'gameCapture'], ['wizGameCapture', 'gameCapture'], ['studioModeInput', 'studioMode'], ['wizStudioMode', 'studioMode']]
+[['gameCaptureInput', 'gameCapture'], ['wizGameCapture', 'gameCapture'], ['studioModeInput', 'studioMode'], ['wizStudioMode', 'studioMode'], ['orderScenesInput', 'orderScenes']]
   .forEach(([id, key]) => $id(id).addEventListener('change', (e) => savePrefs({ [key]: e.target.checked })));
 
+// The scenes beyond the base ones: the league's own (from the League page),
+// then one per LeagueOS graphic. Ticking one only changes what the next
+// build makes; the build adds it to OBS, or removes it.
 const neccTypeList = $id('neccTypeList');
 function renderNeccTypeList() {
   neccTypeList.innerHTML = '';
   const urls = (state && state.neccUrls) || {};
-  NECC_TYPES.forEach((t) => {
+  const add = (list, pref, t, noteText) => {
     const label = document.createElement('label');
     label.className = 'checkbox';
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.checked = prefs.neccTypes.includes(t.key);
+    input.checked = prefs[pref].includes(t.key);
     const txt = document.createElement('span');
     txt.textContent = t.label;
     const note = document.createElement('small');
     note.className = 'muted-note';
-    note.textContent = urls[t.key] ? 'from the imported match' : (Object.keys(urls).length ? 'not in this match' : '');
+    note.textContent = noteText;
     label.append(input, txt, note);
     input.addEventListener('change', () => {
-      const set = new Set(prefs.neccTypes);
+      const set = new Set(prefs[pref]);
       if (input.checked) set.add(t.key); else set.delete(t.key);
-      savePrefs({ neccTypes: NECC_TYPES.map((x) => x.key).filter((k) => set.has(k)) });
-      toast('Build the scenes again to add or remove that scene in OBS.', 'Build now', () => { setPage('match'); showStep('build'); });
+      savePrefs({ [pref]: list.map((x) => x.key).filter((k) => set.has(k)) });
+      toast('Scene list changed. Rebuild to apply.', 'Build', () => { setPage('match'); showStep('build'); });
     });
     neccTypeList.appendChild(label);
-  });
+  };
+  LEAGUE_SCENES.forEach((t) => add(LEAGUE_SCENES, 'leagueScenes', t, 'league site data'));
+  NECC_TYPES.forEach((t) => add(NECC_TYPES, 'neccTypes', t,
+    urls[t.key] ? `${LEAGUE} graphic, link imported` : (Object.keys(urls).length ? `${LEAGUE} graphic, no link in this match` : `${LEAGUE} graphic`)));
 }
 
 // --- Browse-first file fields (v0.12.0) ----------------------------------------
@@ -357,7 +377,7 @@ function makeFileField(input, opts) {
     file.value = '';
     if (!f) return;
     if (f.path) { warn = ''; linkMode = false; set(f.path); return; }
-    warn = `This window can't see where "${f.name}" is. Use the app window, or Paste a link.`;
+    warn = `File path unavailable in this window for "${f.name}". Use the app window or paste a URL.`;
     render();
   });
   link.addEventListener('click', () => { linkMode = true; warn = ''; render(); input.focus(); });
@@ -488,7 +508,7 @@ function buildRosterEditor(L) {
   });
   els.save.addEventListener('click', async () => {
     const team = rosterPayload(rosters[L]);
-    if (!team.name.trim()) { flashText(els.save, 'Needs a name', 'Save to library'); return; }
+    if (!team.name.trim()) { flashText(els.save, 'Name required', 'Save to library'); return; }
     try {
       const res = await fetch('/api/library/teams', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(team) });
       if (!res.ok) throw new Error();
@@ -562,7 +582,7 @@ function renderRosterSummary(L) {
   els.box.classList.toggle('collapsed', !open);
   els.toggle.textContent = open ? 'Done' : 'Edit';
   els.box.style.setProperty('--team', toHex6(team.color) || DEFAULT_COLORS[L]);
-  els.sumName.textContent = team.name || 'Not set yet';
+  els.sumName.textContent = team.name || 'Not set';
   const n = rosterPayload(team).players.length;
   els.sumMeta.textContent = [team.tag, `${n} player${n === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
   if (team.logoUrl) { els.sumLogo.src = mediaUrl(team.logoUrl); els.sumLogo.hidden = false; }
@@ -632,7 +652,6 @@ function useLibraryTeam(L, t) {
   renderRosterEditor(L);
   sendTeam(L);
   autoSubtitle();
-  toast(`${t.name} is now Team ${L}.`);
 }
 
 // The Starting Soon subtitle follows the matchup ("A vs B", or "vs B" on a
@@ -717,12 +736,12 @@ function renderGameGrid() {
     b.addEventListener('click', () => pickGame(id));
     gameGrid.appendChild(b);
   };
+  // Every game reads the same way here: how its series is counted.
   games.forEach((g) => {
     const sb = g.scoreboard || {};
-    const sub = sb.style === 'rl' ? 'Live scoreboard and stats' : sb.showStocks ? 'Crew battle stocks' : `Best of ${sb.bestOf || 3}, by ${String(sb.unit || 'game').toLowerCase()}`;
-    add(g.id, g.name, sub);
+    add(g.id, g.name, `Best of ${sb.bestOf || 3}, by ${String(sb.unit || 'game').toLowerCase()}`);
   });
-  add('', 'Another game', 'Scores by hand');
+  add('', 'Other', 'Custom name');
 }
 
 function pickGame(id) {
@@ -731,6 +750,10 @@ function pickGame(id) {
   if (g) {
     patch.team = g.name;
     patch.scoreboard = { ...defaultScoreboardConfig(), ...(g.scoreboard || {}), ...(importedBestOf ? { bestOf: importedBestOf } : {}) };
+  } else {
+    // A game without a preset keeps the series settings, but not another
+    // game's own scoreboard (and so not its stats scene).
+    patch.scoreboard = { style: 'standard' };
   }
   send(patch);
   afterLocalChange();
@@ -776,7 +799,7 @@ function renderMatchup() {
     slot.style.setProperty('--team', t.name ? color : 'var(--panel-border)');
     slot.innerHTML = t.name
       ? `${logo}<span class="slot-text"><small>Team ${L}</small><b>${esc(t.name)}</b><em>${t.players.length} player${t.players.length === 1 ? '' : 's'}</em></span>`
-      : `<span class="slot-empty">Team ${L}<small>not picked yet</small></span>`;
+      : `<span class="slot-empty">Team ${L}<small>empty</small></span>`;
   });
 }
 
@@ -789,7 +812,7 @@ function renderSchoolGrid() {
   const nameB = rosterPayload(rosters.B).name.toLowerCase();
   const list = library.teams.filter((t) => !q || `${t.name} ${t.tag}`.toLowerCase().includes(q));
   if (!list.length) {
-    schoolGrid.innerHTML = `<div class="lib-empty">${library.teams.length ? 'No team matches that search.' : `No saved teams yet. Import a ${esc(LEAGUE)} match, or type the teams in.`}</div>`;
+    schoolGrid.innerHTML = `<div class="lib-empty">${library.teams.length ? 'No match.' : `Library empty. Import a ${esc(LEAGUE)} match or enter the teams manually.`}</div>`;
     return;
   }
   list.forEach((t) => {
@@ -849,12 +872,11 @@ neccFetchBtn.addEventListener('click', async () => {
     send(patch);
     autoSubtitle();
     const urlCount = Object.keys(data.overlayUrls || {}).length;
-    neccStatus.textContent = `Loaded ${data.game || 'the match'}${data.eventName ? `, ${data.eventName}` : ''}${data.bestOf ? `, best of ${data.bestOf}` : ''}`
-      + `${data.scheduledAt ? `, starting ${clockTime(new Date(data.scheduledAt))}` : ''}`
-      + `${urlCount ? ` (${urlCount} ${LEAGUE} graphics ready)` : ` (no ${LEAGUE} graphics were found for this match)`}. Both teams were saved to the team library.`;
+    neccStatus.textContent = `Imported: ${data.game || 'match'}${data.eventName ? `, ${data.eventName}` : ''}${data.bestOf ? `, best of ${data.bestOf}` : ''}`
+      + `${data.scheduledAt ? `, start ${clockTime(new Date(data.scheduledAt))}` : ''}. ${LEAGUE} graphic links: ${urlCount}.`;
     afterLocalChange();
   } catch (err) {
-    neccStatus.textContent = err.message || 'Failed to import match';
+    neccStatus.textContent = err.message || 'Import failed';
     neccStatus.classList.add('error');
   } finally {
     neccFetchBtn.disabled = false;
@@ -895,7 +917,7 @@ onCommit(durationInput, (el) => {
 });
 $id('restartCountdownBtn').addEventListener('click', (e) => {
   send({ countdownMode: 'duration', durationSec: parseDuration(durationInput.value) || 600, restartCountdown: true });
-  flashText(e.target, 'Started', 'Start the countdown now');
+  flashText(e.target, 'Restarted', 'Restart countdown');
 });
 
 function renderCountdown() {
@@ -909,8 +931,8 @@ function renderCountdown() {
   setVal(durationInput, formatDuration(state.durationSec));
   const end = new Date(state.end);
   countdownNote.textContent = isNaN(end) ? ''
-    : end < Date.now() ? `The countdown finished at ${clockTime(end)}.`
-      : `Starting Soon counts down to ${clockTime(end)}${end.toDateString() !== new Date().toDateString() ? ` on ${end.toLocaleDateString()}` : ''}.`;
+    : end < Date.now() ? `Countdown ended ${clockTime(end)}.`
+      : `Countdown target: ${clockTime(end)}${end.toDateString() !== new Date().toDateString() ? `, ${end.toLocaleDateString()}` : ''}.`;
 }
 
 const sbBestOfInput = $id('sbBestOfInput');
@@ -946,14 +968,19 @@ function renderChecklist() {
   const g = games.find((x) => x.id === state.game);
   const end = new Date(state.end);
   const items = [
-    [obsStatus && obsStatus.connected, obsStatus && obsStatus.connected ? 'OBS is connected' : 'OBS is not connected', obsStatus && obsStatus.connected ? '' : 'connect'],
-    [!!(g || state.team), g ? g.name : (state.team || 'No game picked'), g || state.team ? '' : 'game'],
-    [!!(a && b), a && b ? `${a} vs ${b}` : 'The teams are not both picked', a && b ? '' : 'teams'],
-    [!isNaN(end) && end > Date.now(), !isNaN(end) && end > Date.now() ? `Starting at ${clockTime(end)}` : 'No start time ahead', !isNaN(end) && end > Date.now() ? '' : 'details', true],
+    [obsStatus && obsStatus.connected, obsStatus && obsStatus.connected ? 'OBS connected' : 'OBS not connected', obsStatus && obsStatus.connected ? '' : 'connect'],
+    [!!(g || state.team), g ? g.name : (state.team || 'No game selected'), g || state.team ? '' : 'game'],
+    [!!(a && b), a && b ? `${a} vs ${b}` : 'Teams incomplete', a && b ? '' : 'teams'],
+    [!isNaN(end) && end > Date.now(), !isNaN(end) && end > Date.now() ? `Start: ${clockTime(end)}` : 'Start time not set or in the past', !isNaN(end) && end > Date.now() ? '' : 'details', true],
   ];
   if (BRAND.stinger) {
     const ok = stingerState && stingerState.found;
-    items.push([ok, ok ? `The ${BRAND.stinger.name} transition is in OBS` : `The ${BRAND.stinger.name} transition isn't in OBS yet`, ok ? '' : 'stinger', true]);
+    items.push([ok, ok ? `Transition present: ${BRAND.stinger.name}` : `Transition not found in OBS: ${BRAND.stinger.name}`, ok ? '' : 'stinger', true]);
+  }
+  // Said before it happens: a build takes out the app's scenes this match
+  // doesn't use (another game's stats scene, an unticked extra scene).
+  if (obsStatus && obsStatus.connected && sceneStale.length) {
+    items.push([false, `Build will remove unused scenes: ${listText(sceneStale.map(shortScene))}`, '', true]);
   }
   ul.innerHTML = '';
   items.forEach(([ok, text, fix, optional]) => {
@@ -965,7 +992,7 @@ function renderChecklist() {
     if (fix) {
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'btn-secondary';
-      btn.textContent = { connect: 'Connect', game: 'Pick the game', teams: 'Pick the teams', details: 'Set the start time', stinger: 'How to add it' }[fix];
+      btn.textContent = { connect: 'Connect', game: 'Select game', teams: 'Select teams', details: 'Set start time', stinger: 'Stinger setup' }[fix];
       btn.addEventListener('click', () => {
         if (fix === 'connect') openObsSettings();
         else if (fix === 'stinger') { setPage('settings'); openSection('set-stinger'); scrollToSection('set-stinger'); }
@@ -986,20 +1013,20 @@ $id('goLiveBtn').addEventListener('click', () => setPage('live'));
 // Builds the scenes and reports what happened, wherever it was asked from.
 async function runBuild(btn, statusEl, resultEl) {
   statusEl.classList.remove('error');
-  statusEl.textContent = 'Building the scenes in OBS…';
+  statusEl.textContent = 'Building scenes…';
   btn.disabled = true;
   let res;
-  try { res = await postJson('/api/obs/build-scenes'); } catch (e) { res = { error: 'Could not reach the app' }; }
+  try { res = await postJson('/api/obs/build-scenes'); } catch (e) { res = { error: 'App not reachable' }; }
   btn.disabled = false;
   if (res.error) {
-    statusEl.textContent = `Could not build the scenes: ${res.error}`;
+    statusEl.textContent = `Build failed: ${res.error}`;
     statusEl.classList.add('error');
     if (resultEl) resultEl.hidden = true;
     return res;
   }
   lastBuild = res;
   const scenes = (res.built || []).filter((s) => !/: Music$/.test(s)).length;
-  statusEl.textContent = `Done: ${scenes} scenes in the ${res.collectionName} scene collection${res.collection === 'created' ? ' (new)' : ''}.`;
+  statusEl.textContent = `${scenes} scenes in scene collection "${res.collectionName}"${res.collection === 'created' ? ' (created)' : ''}.`;
   if (resultEl) { resultEl.hidden = false; resultEl.innerHTML = buildResultHtml(res); }
   await refreshObs(true);
   if (res.stinger) { stingerState = { ...(stingerState || {}), found: !!res.stinger.found, current: !!res.stinger.configured }; renderStingerGuides(); }
@@ -1009,17 +1036,34 @@ async function runBuild(btn, statusEl, resultEl) {
 function buildResultHtml(res) {
   const prefix = BRAND.obsPrefix;
   const lines = [];
-  if (res.gameCapture === 'created') lines.push(`<li class="ok">Added a game capture, <b>${esc(prefix)}-game-capture</b>, under the scoreboard. It captures any fullscreen game; in OBS you can point it at one window instead.</li>`);
-  else if (res.gameCapture === 'exists') lines.push('<li class="ok">The Scoreboard scene already has its game capture.</li>');
-  else if (res.gameCapture === 'manual') lines.push(`<li class="warn">This OBS can't make a Game Capture, so add the game yourself:
-    <ol><li>In OBS, click the <b>${esc(prefix)}: Scoreboard</b> scene.</li>
-    <li>Under <b>Sources</b>, click <b>+</b> and pick <b>Window Capture</b> (or <b>Display Capture</b>), choose the game and click OK.</li>
-    <li>Drag it below <b>${esc(prefix)}-src-scoreboard</b>, so the scoreboard stays on top.</li></ol></li>`);
-  if (res.stinger) {
-    if (res.stinger.configured) lines.push(`<li class="ok">The <b>${esc(res.stinger.name)}</b> transition is set up and selected in OBS.</li>`);
-    else if (res.stinger.found === false && !res.stinger.none) lines.push(`<li class="warn">The <b>${esc(res.stinger.name)}</b> transition isn't in OBS yet. See Settings, Stinger transition.</li>`);
+  if (res.gameCapture === 'created') lines.push(`<li class="ok">Game capture added: <b>${esc(prefix)}-game-capture</b> (mode: any fullscreen application).</li>`);
+  else if (res.gameCapture === 'exists') lines.push('<li class="ok">Game capture present.</li>');
+  else if (res.gameCapture === 'manual') lines.push(`<li class="warn">Game Capture is unavailable in this OBS. Add the game manually:
+    <ol><li>Select the <b>${esc(prefix)}: Scoreboard</b> scene.</li>
+    <li><b>Sources</b> &gt; <b>+</b> &gt; <b>Window Capture</b> or <b>Display Capture</b>. Select the game.</li>
+    <li>Place it below <b>${esc(prefix)}-src-scoreboard</b>.</li></ol></li>`);
+  if ((res.removed || []).length) {
+    lines.push(`<li class="ok">Removed unused scenes: ${esc(listText(res.removed.map(shortScene)))}.</li>`);
   }
-  if (prefs.studioMode) lines.push('<li class="ok">Studio Mode is on in OBS: pick a scene on the left to check it, then click <b>Transition</b> to put it on air.</li>');
+  if (res.reloaded) {
+    lines.push(`<li class="ok">Browser sources reloaded: ${res.reloaded}.</li>`);
+  }
+  // The scene list in OBS, top to bottom, in the order a stream uses it.
+  const n = (res.moved || []).length;
+  if (res.ordering === 'moved' && n) {
+    lines.push(`<li class="ok">Scene order: moved ${n === 1 ? esc(shortScene(res.moved[0])) : `${n} scenes`}.</li>`);
+  } else if (res.ordering === 'live') {
+    lines.push('<li class="warn">Scene order not changed: OBS is streaming or recording.</li>');
+  } else if (res.ordering === 'custom') {
+    lines.push('<li class="warn">Scene order not changed: a scene contains a group or is nested in another scene.</li>');
+  } else if (res.ordering === 'failed') {
+    lines.push('<li class="warn">Scene order: interrupted by OBS. Rebuild to retry.</li>');
+  }
+  if (res.stinger) {
+    if (res.stinger.configured) lines.push(`<li class="ok">Transition <b>${esc(res.stinger.name)}</b>: configured and selected.</li>`);
+    else if (res.stinger.found === false && !res.stinger.none) lines.push(`<li class="warn">Transition <b>${esc(res.stinger.name)}</b>: not found in OBS. See Settings &gt; Stinger transition.</li>`);
+  }
+  if (prefs.studioMode) lines.push('<li class="ok">Studio Mode: enabled.</li>');
   return lines.length ? `<ul class="checklist">${lines.join('')}</ul>` : '';
 }
 
@@ -1042,7 +1086,7 @@ function matchData() {
 $id('matchSaveBtn').addEventListener('click', async (e) => {
   const btn = e.target;
   const name = matchNameInput.value.trim() || matchupText();
-  if (!name || !state) { flashText(btn, 'Name it first', 'Save'); return; }
+  if (!name || !state) { flashText(btn, 'Name required', 'Save'); return; }
   try {
     const res = await fetch('/api/library/matches', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, data: matchData() }) });
     const out = await res.json();
@@ -1068,13 +1112,13 @@ $id('matchLoadBtn').addEventListener('click', () => {
   send(d);
   ['A', 'B'].forEach((L) => { rosters[L] = stateTeam(L); renderRosterEditor(L); });
   afterLocalChange();
-  toast(`Loaded the saved match: ${m.name}`);
+  toast(`Loaded: ${m.name}`);
 });
 $id('matchDeleteBtn').addEventListener('click', async () => {
   const m = library.matches.find((x) => x.id === matchSelect.value);
   if (!m) return;
   await fetch(`/api/library/matches/${encodeURIComponent(m.id)}`, { method: 'DELETE' }).catch(() => {});
-  toast(`Deleted the saved match "${m.name}".`, 'Undo', () => {
+  toast(`Deleted: ${m.name}`, 'Undo', () => {
     fetch('/api/library/matches', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, name: m.name, data: m.data }) }).catch(() => {});
   });
 });
@@ -1088,21 +1132,27 @@ let onAir = { key: '', view: '', necc: '', scene: '' };
 const SHOT_KEY = 'stream-onair-shot';
 const shotInput = $id('shotInput');
 
+// "LotE: Standings" -> "Standings".
+function shortScene(name) { return String(name).replace(/^[^:]+:\s*/, ''); }
+// "A", "A and B", "A, B and C".
+function listText(items) {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
 function sceneLabel(key) {
   const s = sceneList.find((x) => x.key === key);
-  if (s) return s.scene.replace(/^[^:]+:\s*/, '');
+  if (s) return shortScene(s.scene);
   return key;
 }
 
 function renderOnAir() {
   const connected = !!(obsStatus && obsStatus.connected);
-  const name = !connected ? 'OBS is not connected' : onAir.scene || 'Nothing yet';
+  const name = !connected ? 'OBS not connected' : onAir.scene || 'None';
   $id('onairName').textContent = onAir.key ? sceneLabel(onAir.key) : name;
   $id('onairCard').classList.toggle('off', !connected);
   let sub = '';
-  if (connected && onAir.scene && !onAir.key) sub = `“${onAir.scene}” is a scene of your own, not one the app built.`;
-  else if (connected && onAir.key === 'stats') sub = rlScreen.screen === 'series' ? 'Showing the series overview.' : 'Showing a game\'s stats.';
-  else if (connected && onAir.key === 'post-match') sub = 'Its countdown started when it went on air.';
+  if (connected && onAir.scene && !onAir.key) sub = 'Not an app scene.';
+  else if (connected && onAir.key === 'stats') sub = rlScreen.screen === 'series' ? 'Series overview' : 'Game stats';
+  else if (connected && onAir.key === 'post-match') sub = 'Countdown started on air.';
   $id('onairSub').textContent = sub;
   document.querySelectorAll('.scene-row').forEach((r) => {
     const on = r.dataset.key === onAir.key && connected;
@@ -1153,7 +1203,7 @@ function buildScoreSide(t) {
     <div class="sb-score-row">
       <span class="lbl" id="sbWonLbl${t}">Games won</span>
       <button class="btn-secondary sb-step" type="button" data-sb="score-" data-team="${t}" aria-label="Remove a point" title="Remove a point">&minus;</button>
-      <button class="btn-secondary sb-step" type="button" data-sb="score+" data-team="${t}" aria-label="Add a point" title="Add a point (stocks stay as they are)">+</button>
+      <button class="btn-secondary sb-step" type="button" data-sb="score+" data-team="${t}" aria-label="Add a point" title="+1 (stocks unchanged)">+</button>
     </div>
     <div class="sb-side-stock sb-stock-only"><span id="sbStock${t}"></span></div>
     <div class="sb-side-onstage sb-stock-only" id="sbOn${t}"></div>
@@ -1176,6 +1226,9 @@ function renderScorePanel() {
   $id('sbRlFields').style.display = isRl ? '' : 'none';
   $id('sbShowStocksField').style.display = isRl ? 'none' : '';
   $id('sbPositionField').style.visibility = isRl ? 'hidden' : '';
+  // Only a game with a live scoreboard of its own offers the choice.
+  const preset = (games.find((g) => g.id === (state && state.game)) || {}).scoreboard || {};
+  $id('sbStyleField').style.display = isRl || (preset.style && preset.style !== 'standard') ? '' : 'none';
   const need = Math.ceil(clampInt(s.bestOf, 1, 9, 3) / 2);
   $id('scoreHint').textContent = `${s.round ? s.round + ' · ' : ''}Best of ${s.bestOf || 3}, first to ${need}`;
   ['A', 'B'].forEach((t) => {
@@ -1229,7 +1282,7 @@ function renderScorePanel() {
   .forEach(([id, key]) => onCommit($id(id), (el) => ({ scoreboard: { [key]: el.checked } })));
 
 function sendScore(counters) {
-  if (!wsOpen()) { toast('Not connected to the app. The score was not changed.'); return; }
+  if (!wsOpen()) { toast('App connection lost. Score not changed.'); return; }
   ws.send(JSON.stringify({ type: 'score', scoreboard: counters }));
   mergeLocal({ scoreboard: counters });
   renderScorePanel();
@@ -1330,24 +1383,24 @@ function renderRlStatus() {
     dot = 'connected';
     const [blue, orange] = rlSnap.teams;
     text = `In a match: Blue ${blue ? blue.score : 0} - ${orange ? orange.score : 0} Orange, ${fmtClock(rlSnap.clock, rlSnap.overtime)}`;
-    if (!rlSnap.target) sub = 'No player is being followed, so the boost meter is hidden. Spectate a player to show it.';
+    if (!rlSnap.target) sub = 'No spectated player: boost meter hidden.';
   } else if (connected) {
     dot = 'connected';
-    text = 'Connected to Rocket League';
-    sub = 'Waiting for a match. Join or spectate one and the board fills in.';
+    text = 'Rocket League: connected';
+    sub = 'No active match.';
   } else {
     dot = 'warn';
-    text = 'Waiting for Rocket League';
+    text = 'Rocket League: waiting';
     refreshRlConfig();
     if (rlConfig && !rlConfig.path) {
-      sub = 'Rocket League\'s settings folder was not found on this PC. Launch the game once, then check again.';
+      sub = 'Rocket League settings folder not found. Launch the game once.';
     } else if (rlConfig && !rlConfig.enabled) {
       dot = '';
-      text = 'Rocket League is not set up to share match data yet';
-      sub = 'Click Connect to Rocket League, then restart the game. It only reads this setting when it starts.';
+      text = 'Rocket League: Stats API not enabled';
+      sub = 'Click Connect to Rocket League, then restart the game. The setting is read at launch.';
       canEnable = true;
     } else {
-      sub = 'Start Rocket League and it connects by itself. If the game was already running when it was set up, restart it.';
+      sub = 'Stats API enabled. Start or restart Rocket League.';
     }
   }
   if (rlNote) sub = rlNote;
@@ -1379,9 +1432,9 @@ rlEnableBtn.addEventListener('click', () => {
     .then((res) => {
       if (res.error) { showRlNote(res.error); return; }
       rlConfig = res.config;
-      showRlNote('Done. Fully close Rocket League and start it again, and it will connect.');
+      showRlNote('Stats API enabled. Restart Rocket League.');
     })
-    .catch(() => showRlNote('Could not reach the app.'))
+    .catch(() => showRlNote('App not reachable.'))
     .finally(() => { rlEnableBtn.disabled = false; });
 });
 rlSwapHintBtn.addEventListener('click', () => scoreAction('swap'));
@@ -1425,8 +1478,9 @@ $id('rlBackBtn').addEventListener('click', () => switchScene('scoreboard'));
 // the scene on air is marked. "Put on air" cuts OBS to it with the current
 // transition (the stinger once set up); otherwise OBS is where scenes change.
 
-let sceneList = [];      // [{ key, scene }] from the server
+let sceneList = [];      // [{ key, scene }] from the server: the scenes this match uses
 let sceneExists = {};    // key -> in OBS right now
+let sceneStale = [];     // the app's scenes still in OBS that this match doesn't use
 const SCENE_OPEN_KEY = 'stream-scene-open';
 let sceneOpen = { 'starting-soon': true };
 try { sceneOpen = JSON.parse(lsGet(SCENE_OPEN_KEY)) || sceneOpen; } catch (e) {}
@@ -1435,19 +1489,65 @@ const SCENE_TEXT = {
   'starting-soon': [['title', 'Title', 'Stream Starting Soon'], ['subtitle', 'Subtitle', 'Team A vs Team B'], ['status', 'Badge', 'Starting Soon']],
   'post-match': [['title', 'Title', 'Thanks for Watching'], ['subtitle', 'Subtitle', 'Optional'], ['status', 'Badge', 'Stream Ending Soon']],
   brb: [['title', 'Title', 'Be Right Back'], ['subtitle', 'Subtitle', 'Thanks for waiting']],
+  standings: [['title', 'Heading', 'Standings']],
+  matchup: [['title', 'Heading', 'Head to Head']],
 };
 
+// The view a scene's background is kept under: every league graphic shares
+// one, and the Scoreboard has none (the game shows through it).
+function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' ? '' : key; }
+function bgValue(view) {
+  const ok = (id) => BACKGROUNDS.some((b) => b.id === id);
+  const picked = ((state && state.backgrounds) || {})[view];
+  if (ok(picked)) return picked;
+  const dflt = ((BRAND.backgrounds && BRAND.backgrounds.defaults) || {})[view];
+  return ok(dflt) ? dflt : (BACKGROUNDS[0] || {}).id || '';
+}
+
+// The headline typeface in use: the one picked, else the league's default.
+function headFontValue() {
+  const ok = (id) => HEAD_FONTS.some((f) => f.id === id);
+  const picked = state && state.headlineFont;
+  if (ok(picked)) return picked;
+  const dflt = (BRAND.headlineFonts || {}).default;
+  return ok(dflt) ? dflt : (HEAD_FONTS[0] || {}).id || '';
+}
+// One button per typeface, its name set in that typeface.
+function buildHeadFontPicker() {
+  const seg = $id('headFontSeg');
+  $id('headFontField').hidden = HEAD_FONTS.length < 2;
+  if (HEAD_FONTS.length < 2) return;
+  HEAD_FONTS.forEach((f) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'seg-btn'; b.dataset.font = f.id;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-label', f.name);
+    b.title = f.name;
+    b.textContent = f.name;
+    b.style.fontFamily = `'${f.family}', system-ui, sans-serif`;
+    b.addEventListener('click', () => {
+      if (headFontValue() === f.id) return;
+      send({ headlineFont: f.id });
+      afterLocalChange();
+    });
+    seg.appendChild(b);
+  });
+}
+buildHeadFontPicker();
+
 function sceneNote(key) {
-  if (key === 'roster') return 'Shows both teams from Rosters below.';
-  if (key === 'scoreboard') return sb().style === 'rl' ? 'Rocket League board over the game capture. Score above.' : 'Score above, over the game capture.';
-  if (key === 'stats') return 'Rocket League stats. The app cuts here after each game.';
+  if (key === 'roster') return 'Source: Rosters card.';
+  if (key === 'scoreboard') return sb().style === 'rl' ? 'Live game data over the game capture.' : 'Manual score over the game capture.';
+  if (key === 'stats') return 'Auto-cut after each game. Returns to Scoreboard at the next kickoff countdown.';
+  if (key === 'standings') return `Source: ${league.site || 'league site'}.`;
+  if (key === 'matchup') return `Source: ${league.site || 'league site'} standings.`;
   if (key === 'starting-soon') {
     const end = state && new Date(state.end);
-    return end && !isNaN(end) ? `Counts down to ${clockTime(end)}. Change it in Match, Details.` : '';
+    return end && !isNaN(end) ? `Countdown target: ${clockTime(end)}.` : '';
   }
   if (key.startsWith('necc:')) {
     const t = key.slice(5);
-    return state && (state.neccUrls || {})[t] ? 'From the imported match.' : `No link yet: import a ${LEAGUE} match.`;
+    return state && (state.neccUrls || {})[t] ? 'Link imported.' : `No link. Import a ${LEAGUE} match.`;
   }
   return '';
 }
@@ -1455,19 +1555,20 @@ function sceneNote(key) {
 function buildSceneList() {
   const box = $id('sceneList');
   box.innerHTML = '';
-  if (!sceneList.length) { box.innerHTML = '<div class="lib-empty">No scenes yet.</div>'; return; }
+  if (!sceneList.length) { box.innerHTML = '<div class="lib-empty">No scenes.</div>'; return; }
   sceneList.forEach((s) => {
     const row = document.createElement('div');
     row.className = 'scene-row';
     row.dataset.key = s.key;
     const fields = SCENE_TEXT[s.key] || [];
     const extra = s.key === 'post-match';
-    const expandable = fields.length || extra;
+    const hasBg = BACKGROUNDS.length > 1 && !!bgView(s.key);
+    const expandable = fields.length || extra || hasBg;
     row.innerHTML = `
       <div class="scene-head">
         <span class="scene-tally" aria-hidden="true"></span>
         <button type="button" class="scene-name"${expandable ? '' : ' disabled'}><b>${esc(s.scene.replace(/^[^:]+:\s*/, ''))}</b>${expandable ? '<i class="chev"></i>' : ''}</button>
-        <span class="scene-missing" hidden>Not in OBS yet</span>
+        <span class="scene-missing" hidden>Not in OBS</span>
         <button type="button" class="btn-secondary scene-go">Put on air</button>
       </div>
       <div class="scene-note"></div>
@@ -1485,7 +1586,7 @@ function buildSceneList() {
     });
     if (s.key === 'post-match') {
       const l = document.createElement('label');
-      l.innerHTML = '<span class="lbl">Countdown length (minutes:seconds)</span>';
+      l.innerHTML = '<span class="lbl">Countdown length (mm:ss)</span>';
       const input = document.createElement('input');
       input.type = 'text'; input.id = 'postMatchInput'; input.placeholder = '2:00';
       l.appendChild(input);
@@ -1499,6 +1600,17 @@ function buildSceneList() {
       l2.appendChild(sel);
       body.appendChild(l2);
       onCommit(sel, (el) => ({ layout: el.value }));
+    }
+    // The scene's background, for a league with several.
+    if (hasBg) {
+      const l = document.createElement('label');
+      l.innerHTML = `<span class="lbl">Background${s.key.startsWith('necc:') ? ` (all ${esc(LEAGUE)} graphics)` : ''}</span>`;
+      const sel = document.createElement('select');
+      sel.dataset.bg = bgView(s.key);
+      BACKGROUNDS.forEach((b) => { const o = document.createElement('option'); o.value = b.id; o.textContent = b.name; sel.appendChild(o); });
+      l.appendChild(sel);
+      body.appendChild(l);
+      onCommit(sel, (el) => ({ backgrounds: { [el.dataset.bg]: el.value } }));
     }
     row.querySelector('.scene-name').addEventListener('click', () => {
       sceneOpen[s.key] = !row.classList.contains('open');
@@ -1522,21 +1634,41 @@ function renderSceneList() {
       const v = ((state && state.views) || {})[input.dataset.view] || {};
       setVal(input, v[input.dataset.field] || '');
     });
+    row.querySelectorAll('select[data-bg]').forEach((sel) => setVal(sel, bgValue(sel.dataset.bg)));
   });
   if (state) {
     setVal($id('postMatchInput'), formatDuration(state.postMatchSec || 120));
     setVal($id('layoutInput'), state.layout || 'right');
     setVal($id('neccBgInput'), state.neccBg !== false);
+    const font = headFontValue();
+    document.querySelectorAll('#headFontSeg .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.font === font);
+      b.setAttribute('aria-checked', b.dataset.font === font ? 'true' : 'false');
+    });
   }
   $id('neccBgField').hidden = !sceneList.some((s) => s.key.startsWith('necc:'));
+  // OBS only changes on a build. Until then, say what differs: scenes this
+  // match uses that OBS lacks, and the app's scenes it no longer uses.
+  const connected = !!(obsStatus && obsStatus.connected);
+  const missing = sceneList.filter((s) => sceneExists[s.key] === false).map((s) => shortScene(s.scene));
+  const parts = [];
+  if (missing.length) parts.push(`Missing in OBS: ${listText(missing)}`);
+  if (sceneStale.length) parts.push(`Unused in OBS: ${listText(sceneStale.map(shortScene))}`);
+  $id('sceneSync').hidden = !connected || !parts.length;
+  $id('sceneSyncText').textContent = parts.length ? `${parts.join('. ')}.` : '';
 }
+$id('sceneSyncBtn').addEventListener('click', async (e) => {
+  const res = await runBuild(e.target, document.createElement('span'), null);
+  if (res.error) toast(`Build failed: ${res.error}`);
+  else toast(`Scenes built${(res.removed || []).length ? `. Removed: ${listText(res.removed.map(shortScene))}` : ''}.`);
+});
 onCommit($id('neccBgInput'), (el) => ({ neccBg: el.checked }));
 
 async function switchScene(key) {
   try {
     const r = await postJson('/api/obs/switch', { key });
-    if (!r.switched) toast(r.error ? `OBS did not switch: ${r.error}` : 'OBS did not switch.');
-  } catch (e) { toast('Could not reach the app.'); }
+    if (!r.switched) toast(r.error ? `Scene switch failed: ${r.error}` : 'Scene switch failed.');
+  } catch (e) { toast('App not reachable.'); }
 }
 
 // --- Library and the team sheet -----------------------------------------------------
@@ -1556,7 +1688,7 @@ function renderLibrary() {
 
   ['A', 'B'].forEach((L) => {
     const sel = rosterEls[L].lib;
-    sel.innerHTML = `<option value="">${library.teams.length ? 'Load a saved team…' : 'No saved teams yet'}</option>`;
+    sel.innerHTML = `<option value="">${library.teams.length ? 'Load team…' : 'Library empty'}</option>`;
     library.teams.forEach((t) => {
       const o = document.createElement('option');
       o.value = t.id;
@@ -1576,11 +1708,11 @@ function renderTeamCards() {
   const q = libManageSearch.value.trim().toLowerCase();
   libTeamList.innerHTML = '';
   if (!library.teams.length) {
-    libTeamList.innerHTML = `<div class="lib-empty">No saved teams yet. Import a ${esc(LEAGUE)} match, or use Save to library on a team.</div>`;
+    libTeamList.innerHTML = '<div class="lib-empty">Library empty.</div>';
     return;
   }
   const list = library.teams.filter((t) => !q || `${t.name} ${t.tag}`.toLowerCase().includes(q));
-  if (!list.length) { libTeamList.innerHTML = '<div class="lib-empty">No saved team matches that search.</div>'; return; }
+  if (!list.length) { libTeamList.innerHTML = '<div class="lib-empty">No match.</div>'; return; }
   list.forEach((t) => {
     const card = document.createElement('div');
     card.className = 'team-card';
@@ -1609,7 +1741,7 @@ libManageSearch.addEventListener('input', renderTeamCards);
 
 async function deleteTeam(t) {
   await fetch(`/api/library/teams/${encodeURIComponent(t.id)}`, { method: 'DELETE' }).catch(() => {});
-  toast(`Deleted ${t.name} from the team library.`, 'Undo', () => {
+  toast(`Deleted: ${t.name}`, 'Undo', () => {
     fetch('/api/library/teams', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t) }).catch(() => {});
   });
 }
@@ -1696,6 +1828,106 @@ $id('teamSheetCancel').addEventListener('click', closeTeamSheet);
 $id('teamSheetClose').addEventListener('click', closeTeamSheet);
 teamSheetBackdrop.addEventListener('click', closeTeamSheet);
 
+// --- League (v2.0.0) -------------------------------------------------------------
+// Each game's standings, read by the server from the league's site
+// (league.json) and sent to every page. Read-only here: the table, the
+// season it came from and when it was read. A row is { name, tag, rank, w, l,
+// gw, gl, sf, sa, color, colorAlt, logoUrl }.
+
+let league = { standings: {}, site: '' };
+const lgGame = $id('lgGame');
+const lgTable = $id('lgTable');
+// Until a game is picked here, the page shows the match's game.
+let lgGameChosen = false;
+let lgBusy = false;
+
+function norm(s) { return String(s || '').trim().toLowerCase(); }
+// The standings row of a match team: by name, else by short name when only
+// one row has it. (The overlay matches the same way.)
+function rowIndex(rows, team) {
+  const n = norm(team && team.name);
+  if (!n) return -1;
+  const starts = (a, b) => a === b || (a.startsWith(b) && /^[^a-z0-9]/.test(a.slice(b.length)));
+  const byName = rows.findIndex((r) => { const rn = norm(r.name); return !!rn && (starts(n, rn) || starts(rn, n)); });
+  if (byName >= 0) return byName;
+  const tag = norm(team.tag);
+  const byTag = tag ? rows.filter((r) => norm(r.tag) === tag) : [];
+  return byTag.length === 1 ? rows.indexOf(byTag[0]) : -1;
+}
+function matchGameKey() { return (state && state.game) || 'other'; }
+// The word for one game of a series in this game: "Map", "Game", "Set".
+function lgUnit(key) {
+  const g = games.find((x) => x.id === key);
+  if (g && g.scoreboard && g.scoreboard.unit) return g.scoreboard.unit;
+  return key === matchGameKey() ? (sb().unit || 'Game') : 'Game';
+}
+function signed(n) { return (n > 0 ? '+' : '') + n; }
+
+async function lgRefresh(key) {
+  if (lgBusy || !key) return;
+  lgBusy = true;
+  renderLeague();
+  try {
+    const res = await fetch('/api/league/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: key }) });
+    const out = await res.json();
+    if (res.ok && out.standings) league = out;
+  } catch (e) { /* the status line reports the last read */ }
+  lgBusy = false;
+  renderLeague();
+}
+
+function renderLeague() {
+  if (!LEAGUE_SCENES.length) return;
+  const want = lgGameChosen && lgGame.value ? lgGame.value : matchGameKey();
+  const list = games.map((g) => [g.id, g.name]);
+  const sig = JSON.stringify(list);
+  if (lgGame.dataset.sig !== sig) {
+    lgGame.dataset.sig = sig;
+    lgGame.innerHTML = '';
+    list.forEach(([id, name]) => { const o = document.createElement('option'); o.value = id; o.textContent = name; lgGame.appendChild(o); });
+  }
+  if (document.activeElement !== lgGame) lgGame.value = list.some(([id]) => id === want) ? want : (list[0] || [''])[0];
+  const key = lgGame.value;
+  const s = league.standings[key] || { rows: [] };
+  $id('lgSource').textContent = league.site || '';
+  const status = $id('lgStatus');
+  const at = (iso) => clockTime(new Date(iso));
+  status.classList.toggle('error', !!s.error);
+  if (lgBusy) status.textContent = `Reading ${league.site || 'the league site'}…`;
+  else if (s.error) status.textContent = `Read failed: ${s.error}.${s.updatedAt ? ` Table from ${at(s.updatedAt)}.` : ''}`;
+  else if (s.updatedAt) status.textContent = `${s.seasonName || 'Season'} · read ${at(s.updatedAt)}`;
+  else status.textContent = 'Not read.';
+  $id('lgRefresh').disabled = lgBusy || !key;
+  $id('lgShow').disabled = !(obsStatus && obsStatus.connected) || sceneExists.standings === false || !sceneList.some((x) => x.key === 'standings') || key !== matchGameKey();
+
+  const rows = s.rows || [];
+  if (!rows.length) {
+    lgTable.innerHTML = `<div class="lib-empty">${s.error || !s.updatedAt ? 'No table.' : 'No confirmed teams in this season.'}</div>`;
+    return;
+  }
+  const unit = lgUnit(key);
+  const here = key === matchGameKey();
+  const playing = here ? [rowIndex(rows, rosterPayload(rosters.A)), rowIndex(rows, rosterPayload(rosters.B))] : [];
+  const scoreHead = s.scored ? `<span>${esc(s.scoreName || 'Score')} diff</span>` : '';
+  let html = `<div class="st-view-row st-view-head${s.scored ? ' scored' : ''}"><span>#</span><span></span><span class="l">School</span><span>Record</span><span>${esc(unit)}s</span><span>Diff</span>${scoreHead}</div>`;
+  rows.forEach((r, i) => {
+    const { color, logo } = teamTile(r);
+    html += `<div class="st-view-row${s.scored ? ' scored' : ''}${playing.includes(i) ? ' playing' : ''}" style="--team:${color}">
+      <b class="st-view-rank">${s.played ? r.rank : '–'}</b>${logo}<span class="st-view-name">${esc(r.name)}</span>
+      <b>${r.w}-${r.l}</b><span>${r.gw}-${r.gl}</span><span>${signed(r.gw - r.gl)}</span>${s.scored ? `<span>${signed(r.sf - r.sa)}</span>` : ''}</div>`;
+  });
+  lgTable.innerHTML = html;
+}
+
+lgGame.addEventListener('change', () => {
+  lgGameChosen = lgGame.value !== matchGameKey();
+  renderLeague();
+  // A game not read yet is read when it is picked.
+  if (!league.standings[lgGame.value]) lgRefresh(lgGame.value);
+});
+$id('lgRefresh').addEventListener('click', () => lgRefresh(lgGame.value));
+$id('lgShow').addEventListener('click', () => switchScene('standings'));
+
 // --- WebSocket -------------------------------------------------------------------------
 
 function setConnStatus(connected) {
@@ -1717,6 +1949,16 @@ function connect() {
   ws.addEventListener('message', (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    // A panel left open across an app update (an OBS dock) is the old
+    // version's page: reload it, once per build.
+    if (msg.type === 'hello') {
+      const mine = (window.APP_STAMP || {}).panel || '';
+      if (mine && msg.stamp && msg.stamp !== mine) {
+        let done = false;
+        try { done = sessionStorage.getItem('reloaded-for') === msg.stamp; sessionStorage.setItem('reloaded-for', msg.stamp); } catch (e) { done = true; }
+        if (!done) { location.reload(); return; }
+      }
+    }
     if (msg.type === 'state') {
       state = msg.data;
       ['A', 'B'].forEach(syncRoster);
@@ -1728,6 +1970,16 @@ function connect() {
       }
     }
     if (msg.type === 'onair') { onAir = msg.onAir || onAir; renderOnAir(); renderSceneList(); }
+    // The scenes this match uses changed (another game, an extra scene
+    // ticked): redraw the list and ask OBS what it has.
+    if (msg.type === 'scenes' && Array.isArray(msg.scenes)) {
+      sceneList = msg.scenes;
+      buildSceneList();
+      renderRemoteList();
+      renderRlStatus();
+      refreshObs(true);
+    }
+    if (msg.type === 'league') { league = msg.league && msg.league.standings ? msg.league : { standings: {}, site: '' }; renderLeague(); }
     if (msg.type === 'rl') {
       const was = rlSnap;
       rlSnap = msg.rl;
@@ -1749,12 +2001,13 @@ function connect() {
       const name = rosterPayload(rosters[t]).name || `Team ${t}`;
       const side = $id('sbSide' + t);
       side.classList.remove('flash'); void side.offsetWidth; side.classList.add('flash');
-      showRlNote(`Game over: ${name} won, and the series score was updated. Use + or − to correct it.`);
+      showRlNote(`Game over: ${name}. Series score updated.`);
     }
     if (msg.type === 'montages') { montageStatus = msg.montages || {}; renderMontages(); }
     if (msg.type === 'library') {
       library = msg.library || { teams: [], matches: [] };
       renderLibrary();
+      renderLeague();
       if (!libraryLoaded) { libraryLoaded = true; maybeAutoWizard(); }
     }
   });
@@ -1772,6 +2025,7 @@ function renderAll() {
   renderScorePanel();
   renderSceneList();
   renderMontages();
+  renderLeague();
   setVal($id('logoInput'), state.logo || '');
   ['twitch', 'twitter', 'instagram', 'youtube'].forEach((k) => setVal($id(k + 'Input'), (state.socials || {})[k] || ''));
   refreshFileFields();
@@ -1793,7 +2047,7 @@ function fmtGB(bytes) { return (bytes / 1e9).toFixed(2) + ' GB'; }
 function montageText(m) {
   if (m.have) return 'Ready';
   if (m.downloading) return `Downloading ${Math.floor(100 * m.received / m.bytes)}% of ${fmtGB(m.bytes)}`;
-  if (m.queued) return 'Waiting to download';
+  if (m.queued) return 'Queued';
   if (m.error) return 'Failed: ' + m.error;
   if (m.received > 0) return `Paused at ${Math.floor(100 * m.received / m.bytes)}%`;
   return `Not downloaded (${fmtGB(m.bytes)})`;
@@ -1805,7 +2059,7 @@ function renderMontages() {
   const m = montageStatus[game];
   const line = $id('gameMontageStatus');
   if (!game || !m) line.textContent = '';
-  else line.textContent = (state.clip ? 'Highlight video: replaced by the video picked in Details.' : 'Highlight video: ' + montageText(m));
+  else line.textContent = (state.clip ? 'Highlight video: overridden by the Details video.' : 'Highlight video: ' + montageText(m));
   line.classList.toggle('error', !!(m && m.error && !m.have));
 
   montageList.innerHTML = '';
@@ -1830,7 +2084,7 @@ function renderMontages() {
     }
     montageList.appendChild(row);
   });
-  $id('montageTotal').textContent = total ? `${have} of ${total} on this PC` : '';
+  $id('montageTotal').textContent = total ? `${have}/${total} downloaded` : '';
   $id('montageAllBtn').disabled = have === total;
   $id('videosCard').hidden = total === 0;
   if (!$id('wizard').hidden) renderWizVideos();
@@ -1840,7 +2094,8 @@ $id('montageAllBtn').addEventListener('click', () => requestMontage(''));
 // --- Pages and collapsible cards ----------------------------------------------------
 
 const PAGE_KEY = 'stream-page';
-const PAGES = ['match', 'live', 'settings'];
+const PAGES = ['match', 'live', ...(LEAGUE_SCENES.length ? ['league'] : []), 'settings'];
+$id('leaguePageBtn').hidden = !LEAGUE_SCENES.length;
 // ?page=live opens on that page, e.g. for an OBS dock that only keeps score.
 const START_PAGE = [new URLSearchParams(location.search).get('page'), lsGet(PAGE_KEY)].find((p) => PAGES.includes(p)) || '';
 let currentPage = 'live';
@@ -2061,8 +2316,8 @@ function renderObsStatus(st) {
   $id('obsConnText').textContent = connected ? 'OBS' : reconnecting ? 'OBS reconnecting…' : 'OBS offline';
   $id('obsBanner').hidden = connected || !obsChecked || !$id('wizard').hidden;
   $id('obsBannerText').textContent = reconnecting
-    ? 'Lost the connection to OBS. Trying again every few seconds.'
-    : 'OBS is not connected, so the scenes can\'t change and the app can\'t cut to the stats.';
+    ? 'OBS connection lost. Retrying.'
+    : 'OBS not connected. Scene builds and switches are unavailable.';
   $id('obsBannerBtn').hidden = reconnecting;
   if (st && Array.isArray(st.scenes) && JSON.stringify(st.scenes) !== JSON.stringify(sceneList)) {
     sceneList = st.scenes;
@@ -2075,7 +2330,7 @@ function renderObsStatus(st) {
   }
   if (!connected) {
     if (reconnecting) {
-      obsStatusEl.textContent = `Lost the connection to OBS. Trying again every few seconds${st.error ? ` (${st.error})` : ''}.`;
+      obsStatusEl.textContent = `Connection lost. Retrying${st.error ? ` (${st.error})` : ''}.`;
       obsStatusEl.classList.add('error');
     } else {
       obsStatusEl.textContent = (st && st.error) ? `Not connected. ${st.error}` : 'Not connected';
@@ -2098,6 +2353,8 @@ async function refreshObs(inspect) {
     const st = await getJson(inspect ? '/api/obs/inspect' : '/api/obs/status');
     obsChecked = true;
     if (st.exists) sceneExists = st.exists;
+    if (Array.isArray(st.stale)) sceneStale = st.stale;
+    if (!st.connected) sceneStale = [];
     if (st.stinger) { stingerState = { ...(stingerState || {}), ...st.stinger }; renderStingerGuides(); }
     if (st.onAirNow) onAir = st.onAirNow;
     renderObsStatus(st);
@@ -2191,51 +2448,48 @@ function renderStingerGuides() {
   const current = !!(stingerState && stingerState.current);
   document.querySelectorAll('[data-stinger-guide]').forEach((box) => {
     box.innerHTML = `
-      <p class="card-text">A stinger is the animated ${esc(BRAND.shortName)} wipe OBS plays when it switches scenes, hiding the cut.
-        OBS doesn't let apps create transitions, so add it once and the app sets it up:</p>
+      <p class="card-text">obs-websocket cannot create transitions. Create the Stinger in OBS once; the app then configures and selects it.</p>
       <ol class="wiz-list">
-        <li>In OBS, make sure the <b>${esc((obsStatus && obsStatus.collection) || BRAND.shortName + ' Stream')}</b> scene collection is open
-          (the <b>Scene Collection</b> menu). Each scene collection has its own transitions.</li>
-        <li>Find the <b>Scene Transitions</b> dock. If it's hidden, open the <b>Docks</b> menu and tick <b>Scene Transitions</b>.</li>
-        <li>Click its <b>+</b> button and pick <b>Stinger</b>.</li>
-        <li>Name it exactly <code>${esc(st.name)}</code> <button type="button" class="btn-secondary mini" data-copy="${esc(st.name)}">Copy</button> and click <b>OK</b>.</li>
-        <li>When its settings open, just click <b>OK</b>. The app fills them in.</li>
-        <li>Back here, click <b>Set up the stinger</b>.</li>
+        <li>OBS: <b>Scene Collection</b> &gt; <b>${esc((obsStatus && obsStatus.collection) || BRAND.shortName + ' Stream')}</b>. Transitions are stored per scene collection.</li>
+        <li><b>Scene Transitions</b> dock (<b>Docks</b> &gt; <b>Scene Transitions</b> if hidden) &gt; <b>+</b> &gt; <b>Stinger</b>.</li>
+        <li>Name: <code>${esc(st.name)}</code> <button type="button" class="btn-secondary mini" data-copy="${esc(st.name)}">Copy</button>. Click <b>OK</b>.</li>
+        <li>Close the properties dialog with <b>OK</b>. No values are needed.</li>
+        <li>Click <b>Configure stinger</b> below.</li>
       </ol>
-      <div class="push-row"><button type="button" class="btn-accent stinger-go">Set up the stinger</button></div>
+      <div class="push-row"><button type="button" class="btn-accent stinger-go">Configure stinger</button></div>
       <div class="status-line stinger-status"></div>
       <details class="help" style="margin-top:12px">
-        <summary>The settings the app uses</summary>
+        <summary>Applied settings</summary>
         <div class="help-body">
-          <p>To check them in OBS, double-click <b>${esc(st.name)}</b> in the transition list (or click the gear in the Scene Transitions dock, then Properties).</p>
-          <p><b>Video file:</b> <code class="path">${esc(f.path || 'copied into the app\'s data folder when you click Set up')}</code>
+          <p>OBS: Scene Transitions dock &gt; gear &gt; Properties.</p>
+          <p><b>Video file:</b> <code class="path">${esc(f.path || 'copied to the app data folder on setup')}</code>
             ${f.path ? `<button type="button" class="btn-secondary mini" data-copy="${esc(f.path)}">Copy</button>` : ''}</p>
           <p><b>Transition point type:</b> Time (milliseconds). <b>Transition point:</b> ${st.transitionPoint} ms</p>
           <p><b>Track matte:</b> ${st.trackMatte
             ? 'on: tick <b>Use a track matte</b>, layout <b>Same file, side-by-side (stinger on left, track matte on right)</b>.'
-            : 'off. The video has its own transparency.'}</p>
-          <p><b>Audio:</b> the video is silent, so any audio setting is fine.</p>
+            : 'off. The video has an alpha channel.'}</p>
+          <p><b>Audio:</b> none. The video has no audio track.</p>
         </div>
       </details>`;
     const status = box.querySelector('.stinger-status');
     if (stingerMsg && connected) { status.textContent = stingerMsg.text; status.classList.toggle('error', stingerMsg.error); }
-    else if (!connected) status.textContent = 'Connect to OBS first.';
-    else if (found && current) { status.textContent = `${st.name} is in OBS and is the current transition.`; }
-    else if (found) status.textContent = `${st.name} is in OBS. Click Set up the stinger to point it at the video and select it.`;
-    else status.textContent = `${st.name} isn't in OBS yet.`;
+    else if (!connected) status.textContent = 'OBS not connected.';
+    else if (found && current) { status.textContent = `${st.name}: present, current transition.`; }
+    else if (found) status.textContent = `${st.name}: present, not configured.`;
+    else status.textContent = `${st.name}: not found in OBS.`;
     box.querySelector('.stinger-go').disabled = !connected;
     box.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy, b)));
     box.querySelector('.stinger-go').addEventListener('click', async (e) => {
       const btn = e.target;
       btn.disabled = true;
       status.classList.remove('error');
-      status.textContent = 'Setting up the stinger…';
+      status.textContent = 'Configuring…';
       let r;
-      try { r = await postJson('/api/obs/stinger'); } catch (err) { r = { error: 'Could not reach the app' }; }
+      try { r = await postJson('/api/obs/stinger'); } catch (err) { r = { error: 'App not reachable' }; }
       if (r.file) stingerFile = r.file;
       if (r.error) stingerMsg = { text: r.error, error: true };
-      else if (!r.found) stingerMsg = { text: `OBS has no transition named “${r.name}”. Check the name (capitals and spaces count), then try again.`, error: true };
-      else stingerMsg = { text: `Done. ${r.name} plays the ${BRAND.shortName} stinger and is OBS's transition now. Switch scenes in OBS to see it.`, error: false };
+      else if (!r.found) stingerMsg = { text: `No transition named "${r.name}" in OBS. The name is case-sensitive.`, error: true };
+      else stingerMsg = { text: `${r.name}: configured and selected.`, error: false };
       if (!r.error) stingerState = { found: !!r.found, current: !!r.configured, name: r.name };
       renderStingerGuides();
       if (currentStep === 'build') renderChecklist();
@@ -2263,7 +2517,7 @@ function renderMusic(m) {
   const dl = m.download || {};
   const hasTrack = m.hasTrack !== false;
   const usingTrack = hasTrack && (!m.file || m.customMissing);
-  musicFileText.value = m.file ? fileLabel(m.file) : (hasTrack ? 'Included track' : 'No file picked');
+  musicFileText.value = m.file ? fileLabel(m.file) : (hasTrack ? 'Default track' : 'No file');
   musicFileText.title = m.path || '';
   if (document.activeElement !== musicVolume) musicVolume.value = String(m.volume);
   musicVolumeText.textContent = musicVolText(Number(musicVolume.value));
@@ -2272,18 +2526,18 @@ function renderMusic(m) {
   musicDownloadBtn.hidden = !usingTrack || dl.have || dl.downloading || dl.queued;
   let text;
   let error = false;
-  if (!hasTrack && !m.file) text = 'Pick an audio file to play between games.';
-  else if (!hasTrack && m.customMissing) { text = 'The music file is missing. Pick it again.'; error = true; }
-  else if (usingTrack && dl.downloading) text = `Downloading the included track: ${Math.floor(100 * dl.received / dl.bytes)}%`;
-  else if (usingTrack && dl.queued) text = 'The included track is waiting to download.';
+  if (!hasTrack && !m.file) text = 'No audio file selected.';
+  else if (!hasTrack && m.customMissing) { text = 'Audio file missing.'; error = true; }
+  else if (usingTrack && dl.downloading) text = `Downloading default track: ${Math.floor(100 * dl.received / dl.bytes)}%`;
+  else if (usingTrack && dl.queued) text = 'Default track: queued.';
   else if (usingTrack && !dl.have) {
-    text = dl.error ? `Download failed: ${dl.error}` : 'The included track is not downloaded yet.';
-    if (m.customMissing) text = 'The custom file is missing. ' + text;
+    text = dl.error ? `Download failed: ${dl.error}` : 'Default track: not downloaded.';
+    if (m.customMissing) text = 'Custom file missing. ' + text;
     error = !!dl.error || m.customMissing;
-  } else if (m.customMissing) text = 'The custom file is missing, so the included track is used.';
-  else if (!m.enabled) text = 'Music is off.';
-  else if (!m.obsConnected) text = 'No music is playing, because OBS is not connected.';
-  else text = m.playing ? 'Playing now (no gameplay on air).' : 'Faded out: gameplay is on air.';
+  } else if (m.customMissing) text = 'Custom file missing. Using the default track.';
+  else if (!m.enabled) text = 'Off.';
+  else if (!m.obsConnected) text = 'OBS not connected.';
+  else text = m.playing ? 'Playing.' : 'Faded out (gameplay scene on air).';
   musicStatusEl.textContent = text;
   musicStatusEl.classList.toggle('error', error || (!!m.customMissing && !usingTrack));
 }
@@ -2316,12 +2570,12 @@ musicDownloadBtn.addEventListener('click', () => { postJson('/api/music/download
 // /api/remote routes in server.js), each with a Copy button.
 
 const REMOTE_LABELS = {
-  'stats/game': 'Stats: the last game', 'stats/series': 'Stats: series overview',
-  'score/a/win': 'Team A won a game', 'score/b/win': 'Team B won a game',
+  'stats/game': 'Stats: last game', 'stats/series': 'Stats: series overview',
+  'score/a/win': 'Team A +1 series win', 'score/b/win': 'Team B +1 series win',
   'score/a/point': 'Team A +1 point', 'score/a/unpoint': 'Team A −1 point',
   'score/b/point': 'Team B +1 point', 'score/b/unpoint': 'Team B −1 point',
-  'score/a/stock': 'Team A lost a stock', 'score/b/stock': 'Team B lost a stock',
-  'score/a/unstock': 'Team A undo stock', 'score/b/unstock': 'Team B undo stock',
+  'score/a/stock': 'Team A −1 stock', 'score/b/stock': 'Team B −1 stock',
+  'score/a/unstock': 'Team A +1 stock', 'score/b/unstock': 'Team B +1 stock',
   'score/swap': 'Swap sides',
 };
 function renderRemoteList() {
@@ -2398,7 +2652,7 @@ wizard.addEventListener('click', (e) => {
   const i = order.indexOf(wizStep);
   if (b.dataset.wiz === 'next') showWizStep(order[Math.min(order.length - 1, i + 1)]);
   if (b.dataset.wiz === 'back') showWizStep(order[Math.max(0, i - 1)]);
-  if (b.dataset.wiz === 'skip') { closeWizard(); toast('Setup skipped. Run it any time from Settings.'); }
+  if (b.dataset.wiz === 'skip') { closeWizard(); toast('Setup skipped. Available under Settings.'); }
   if (b.dataset.wiz === 'finish') { closeWizard(); setPage('match'); showStep('game'); }
 });
 
@@ -2408,13 +2662,13 @@ function renderWizConnect(res) {
   const connected = !!(s && s.connected);
   $id('wizConnectNext').disabled = !connected;
   st.classList.remove('error');
-  if (connected) st.textContent = res ? 'Connected to OBS.' : 'Already connected to OBS.';
+  if (connected) st.textContent = res ? 'Connected.' : 'Already connected.';
   else if (res) {
     const err = String(res.error || '');
-    const why = /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/.test(err) ? 'OBS is not answering. Check that OBS is open and its WebSocket server is turned on.'
-      : /auth|password/i.test(err) ? 'OBS turned down the password. Copy it again from Show Connect Info.'
-        : `${err ? err + '. ' : ''}Check that OBS is open, the WebSocket server is on, and the password is right.`;
-    st.textContent = `Could not connect. ${why}`;
+    const why = /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/.test(err) ? 'No response. Check that OBS is running and its WebSocket server is enabled.'
+      : /auth|password/i.test(err) ? 'Authentication failed. Copy the password from Show Connect Info.'
+        : `${err ? err + '. ' : ''}Check that OBS is running, the WebSocket server is enabled and the password is correct.`;
+    st.textContent = `Connection failed. ${why}`;
     st.classList.add('error');
   } else st.textContent = '';
 }
@@ -2432,15 +2686,15 @@ function renderWizVideos() {
   const have = list.filter((m) => m.have).length;
   const missing = list.reduce((sum, m) => sum + (m.have ? 0 : Math.max(0, m.bytes - (m.received || 0))), 0);
   $id('wizVideoSize').textContent = missing > 0
-    ? `${total - have} of ${total} still need downloading, about ${fmtGB(missing)}.`
-    : 'They are all on this PC already.';
+    ? `${total - have} of ${total} not downloaded (${fmtGB(missing)}).`
+    : 'All downloaded.';
   $id('wizDownloadBtn').disabled = missing <= 0;
   const dl = list.find((m) => m.downloading);
   $id('wizVideoStatus').textContent = dl
-    ? `Downloading, ${have} of ${total} done. It carries on in the background, so you can continue.`
-    : `${have} of ${total} on this PC.`;
+    ? `Downloading: ${have}/${total}. Continues in the background.`
+    : `${have}/${total} downloaded.`;
 }
-$id('wizDownloadBtn').addEventListener('click', () => { requestMontage(''); $id('wizVideoStatus').textContent = 'Starting the downloads…'; });
+$id('wizDownloadBtn').addEventListener('click', () => { requestMontage(''); $id('wizVideoStatus').textContent = 'Starting…'; });
 
 // Opens by itself the first time v2 runs on this PC, for new installs and
 // upgrades alike: v1 users need the new scene collection and stinger too.
@@ -2454,8 +2708,8 @@ $id('wizardOpenBtn').addEventListener('click', () => openWizard());
 // --- Init -----------------------------------------------------------------------------------------------
 
 if (!BRAND.stinger) $id('stingerCard').hidden = true;
-if (!BRAND.hasMusicTrack) $id('musicTrackHelp').firstChild.textContent = 'Pick any audio file on this PC to play between games. ';
-makeFileField(clipInput, { accept: 'video/*', emptyText: "The game's highlight video" });
+if (!BRAND.hasMusicTrack) $id('musicTrackHelp').firstChild.textContent = 'No default track. Select a local audio file. ';
+makeFileField(clipInput, { accept: 'video/*', emptyText: 'Game highlight video' });
 makeFileField($id('logoInput'), { accept: 'image/*', emptyText: `Default ${BRAND.shortName} logo` });
 tsLogoField = makeFileField(tsLogo, { accept: 'image/*', emptyText: 'No logo' });
 buildRosterEditor('A');

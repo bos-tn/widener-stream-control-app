@@ -11,6 +11,27 @@ const fs = require('fs');
 const path = require('path');
 
 const PROFILES_DIR = path.join(__dirname, 'profiles');
+const LEAGUE_SCENES = ['standings', 'matchup'];
+
+const FONT_FORMATS = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' };
+
+// Headline typefaces the operator can pick between (v2.0.0, optional):
+// { list: [{ id, name, family, file }], default }. A typeface whose file is
+// not in assets/ (a licensed one, kept out of the repository) is left out of
+// the choice and named in `missing`. /brand.css declares the faces; the
+// theme gives each its sizes and letter case.
+function headlineFonts(raw, assetsDir) {
+  const listed = ((raw && raw.list) || []).filter((f) => f && /^[a-z0-9-]+$/.test(f.id || '') && /^[A-Za-z0-9 _-]+$/.test(f.family || '')
+    && /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.(ttf|otf|woff2?)$/i.test(f.file || ''));
+  const have = (f) => fs.existsSync(path.join(assetsDir, f.file));
+  const list = listed.filter(have).map((f) => ({ id: f.id, name: f.name || f.family, family: f.family, file: f.file }));
+  const wanted = raw && raw.default;
+  return {
+    list,
+    default: list.some((f) => f.id === wanted) ? wanted : (list[0] || {}).id || '',
+    missing: listed.filter((f) => !have(f)).map((f) => f.file),
+  };
+}
 
 function profileId() {
   const arg = process.argv.find((a) => a.startsWith('--profile='));
@@ -65,6 +86,19 @@ function loadProfile(id) {
     assets,
     stinger,
     teams,
+    // The league's own scenes (v2.0.0): 'standings' and 'matchup' (Head to
+    // Head), drawn from the standings kept on the panel's League page. A
+    // school's own app (Widener) has none.
+    leagueScenes: (Array.isArray(raw.leagueScenes) ? raw.leagueScenes : []).filter((s) => LEAGUE_SCENES.includes(s)),
+    // Scene backgrounds the operator can pick per scene (v2.0.0, optional):
+    // { list: [{ id, name }], defaults: { <view>: <id> } }. The theme draws
+    // them (theme.css, and themeScript builds their layers).
+    backgrounds: {
+      list: ((raw.backgrounds && raw.backgrounds.list) || []).filter((b) => b && /^[a-z0-9-]+$/.test(b.id || '')).map((b) => ({ id: b.id, name: b.name || b.id })),
+      defaults: { ...((raw.backgrounds && raw.backgrounds.defaults) || {}) },
+    },
+    headlineFonts: headlineFonts(raw.headlineFonts, assetsDir),
+    themeScript: raw.themeScript && fs.existsSync(path.join(dir, raw.themeScript)) ? path.join(dir, raw.themeScript) : '',
     music: raw.music && raw.music.driveId ? raw.music : null,
     defaults: raw.defaults || {},
     theme: raw.theme && fs.existsSync(path.join(dir, raw.theme)) ? path.join(dir, raw.theme) : '',
@@ -99,13 +133,17 @@ function clientBrand(p) {
     watermark: url(p.assets.watermark) || url(p.assets.logo),
     stinger: p.stinger ? { name: `${p.shortName} Stinger`, transitionPoint: p.stinger.transitionPoint, trackMatte: p.stinger.trackMatte } : null,
     leagueTeams: p.teams.length,
+    leagueScenes: p.leagueScenes,
+    backgrounds: p.backgrounds,
+    headlineFonts: { list: p.headlineFonts.list.map(({ id, name, family }) => ({ id, name, family })), default: p.headlineFonts.default },
     hasMusicTrack: !!p.music,
   };
 }
 
-// The profile's colours as CSS custom properties (/brand.css). The overlay
-// and the control panel keep their own fallbacks, so a missing value just
-// means the Widener default.
+// The profile's colours as CSS custom properties (/brand.css), and its
+// headline typefaces as @font-face rules. The overlay and the control panel
+// keep their own fallbacks, so a missing value just means the Widener
+// default.
 function brandCss(p) {
   const c = p.colors || {};
   const ui = c.ui || {};
@@ -149,7 +187,11 @@ function brandCss(p) {
     const n = parseInt(glow[1], 16);
     lines.push(`  --brand-accent-glow:rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},.55);`);
   }
-  return `/* ${p.name}: generated from profiles/${p.id}/profile.json */\n:root{\n${lines.join('\n')}\n}\n`;
+  const faces = p.headlineFonts.list.map((f) => {
+    const url = `/brand/${f.file.split('/').map(encodeURIComponent).join('/')}`;
+    return `@font-face{ font-family:'${f.family}'; font-weight:400; font-style:normal; font-display:block; src:local('${f.family}'), url(${url}) format('${FONT_FORMATS[f.file.split('.').pop().toLowerCase()]}'); }\n`;
+  });
+  return `/* ${p.name}: generated from profiles/${p.id}/profile.json */\n:root{\n${lines.join('\n')}\n}\n${faces.join('')}`;
 }
 
 module.exports = { PROFILES_DIR, profileId, listProfiles, loadProfile, clientBrand, brandCss };
