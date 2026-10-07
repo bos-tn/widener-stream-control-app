@@ -1737,8 +1737,9 @@ other matches that week or live pop up updates from matches the same night,
 scenes and pop ups for a crowd camera, and a comp room camera, and much much
 more."
 
-Nothing here is released. It is one local commit on the branch, not pushed,
-and no installer was built. `master` is v2.1.0.
+Nothing here is released. It lives on the branch only, pushed to GitHub on
+2026-10-07 at the user's request ("push this as a branch, dont change main
+yet"). No installer was built. `master` is v2.1.0 and was not touched.
 
 ### Shape
 
