@@ -1717,6 +1717,13 @@ names never read high.
   channel (`latest`, then `lote`), and prints what `checkForUpdates()` finds.
   That is the installed app's own code path: GitHub's release feed, the
   channel's `.yml`, the version comparison.
+- **Result for v2.1.0** (published 2026-10-07 04:09 UTC, marked Latest): all
+  six uploads matched the local files by size and sha256 before the draft was
+  published. Run as 2.0.0 and as 0.11.0, both channels report
+  `update-available` with 2.1.0, the right installer name, size and sha512;
+  run as 2.1.0, both report `update-not-available`. The 2.0.0 `.blockmap`
+  files are still on the v2.0.0 release, so the download can be differential.
+  **Not done:** an actual download and install from an installed copy.
 
 ## State shape (server.js `DEFAULT_STATE`)
 
