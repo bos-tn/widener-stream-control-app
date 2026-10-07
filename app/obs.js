@@ -44,11 +44,22 @@ const LEAGUE_VIEWS = [
   { view: 'standings', label: 'Standings', src: 'standings' },
 ];
 
+// The broadcast package's own scenes (a profile's `broadcast` block): the
+// week's matches and the matchup. Its camera scenes are named by the profile.
+const BROADCAST_VIEWS = [
+  { view: 'schedule', label: 'This Week' },
+  { view: 'versus', label: 'Matchup' },
+];
+// The kind of input a camera is, by platform, and the setting that holds
+// its device.
+const CAMERA_KINDS = ['dshow_input', 'av_capture_input_v2', 'av_capture_input', 'v4l2_input'];
+const CAMERA_DEVICE_PROP = { dshow_input: 'video_device_id', av_capture_input_v2: 'device', av_capture_input: 'device', v4l2_input: 'device_id' };
+
 // The scenes this match uses, in the order a stream runs through them, which
 // is the order they sit in OBS from top to bottom (and in the panel's list):
-// the countdown, the pre-game scenes (rosters, the league's comparison and
-// table, the league graphics), the game and its stats, the break card, and
-// the sign-off at the bottom.
+// the countdown, the pre-game scenes (the week, the matchup, rosters, the
+// league's comparison and table, the league graphics), the game and its
+// stats, the cameras, the break card, and the sign-off at the bottom.
 function sceneEntries(prefix, opts) {
   const base = (view) => {
     const v = BASE_VIEWS[view];
@@ -58,7 +69,11 @@ function sceneEntries(prefix, opts) {
       legacy: v.legacy ? { scene: `${prefix}: ${v.legacy}`, input: `${prefix}-src-${v.legacySrc}` } : null,
     };
   };
-  const list = [base('starting-soon'), base('roster')];
+  const list = [base('starting-soon')];
+  BROADCAST_VIEWS.filter((v) => (opts.broadcastScenes || []).includes(v.view)).forEach((v) => {
+    list.push({ key: v.view, view: v.view, scene: `${prefix}: ${v.label}`, input: `${prefix}-src-${v.view}` });
+  });
+  list.push(base('roster'));
   LEAGUE_VIEWS.filter((v) => (opts.leagueScenes || []).includes(v.view)).forEach((v) => {
     list.push({ key: v.view, view: v.view, scene: `${prefix}: ${v.label}`, input: `${prefix}-src-${v.src}` });
   });
@@ -72,6 +87,10 @@ function sceneEntries(prefix, opts) {
   if (opts.includeStats) {
     list.push({ key: 'stats', view: 'stats', scene: `${prefix}: ${STATS_VIEW.label}`, input: `${prefix}-src-stats` });
   }
+  // A camera scene: the camera under a transparent overlay page.
+  (opts.cameras || []).forEach((c) => {
+    list.push({ key: `cam-${c.id}`, view: `cam-${c.id}`, camera: c.id, scene: `${prefix}: ${c.label}`, input: `${prefix}-src-cam-${c.id}` });
+  });
   list.push(base('brb'), base('post-match'));
   return list;
 }
@@ -103,6 +122,7 @@ function createObs(opts = {}) {
   const stingerName = opts.stingerName || `${prefix} Stinger`;
   const musicInput = `${prefix}: Music`;
   const captureInput = `${prefix}-game-capture`;
+  const cameraInput = (id) => `${prefix}-cam-${id}`;
   const obs = new OBSWebSocket();
 
   // The scenes this match uses (the server's build options), and every scene
@@ -110,6 +130,7 @@ function createObs(opts = {}) {
   let scenes = sceneEntries(prefix, { includeStats: false, neccTypes: [] });
   const everyScene = () => sceneEntries(prefix, {
     includeStats: true, leagueScenes: LEAGUE_VIEWS.map((v) => v.view), neccTypes: opts.allNeccTypes || [],
+    broadcastScenes: BROADCAST_VIEWS.map((v) => v.view), cameras: opts.allCameras || [],
   });
   function staleEntries() {
     const wanted = new Set(scenes.map((s) => s.key));
@@ -338,6 +359,120 @@ function createObs(opts = {}) {
     return made;
   }
 
+  // --- Cameras (broadcast package) -----------------------------------------------
+  // One Video Capture Device input per camera of the profile, used twice: at
+  // full size in its own scene, under that scene's overlay page, and as a
+  // window over the game in the Scoreboard scene, off until the panel pops it
+  // up. The operator picks the device once (the panel lists them, or in OBS).
+
+  // A scene item scaled to cover a rectangle of the canvas, cut off at its
+  // edges. cropToBounds is newer than the rest of the transform, so it is
+  // sent on its own: an OBS without it still places the item.
+  async function coverItem(sceneName, sceneItemId, r) {
+    await obs.call('SetSceneItemTransform', {
+      sceneName, sceneItemId,
+      sceneItemTransform: {
+        positionX: r.x, positionY: r.y, alignment: 5,
+        boundsType: 'OBS_BOUNDS_SCALE_OUTER', boundsAlignment: 0, boundsWidth: r.w, boundsHeight: r.h,
+      },
+    });
+    try { await obs.call('SetSceneItemTransform', { sceneName, sceneItemId, sceneItemTransform: { cropToBounds: true } }); } catch (e) { /* older OBS */ }
+  }
+
+  async function cameraKind() {
+    const kinds = (await obs.call('GetInputKindList', { unversioned: true }).catch(() => ({ inputKinds: [] }))).inputKinds || [];
+    return CAMERA_KINDS.find((k) => kinds.includes(k)) || '';
+  }
+
+  // The camera input, at the bottom of its own scene. 'created', 'exists',
+  // or 'manual' when this OBS has no camera input kind.
+  async function ensureCamera(t, base, existingInputs) {
+    const input = cameraInput(t.camera);
+    let sceneItemId;
+    let made = 'exists';
+    if (!existingInputs.has(input)) {
+      const kind = await cameraKind();
+      if (!kind) return 'manual';
+      ({ sceneItemId } = await obs.call('CreateInput', { sceneName: t.scene, inputName: input, inputKind: kind, inputSettings: {}, sceneItemEnabled: true }));
+      existingInputs.add(input);
+      made = 'created';
+    } else {
+      try {
+        ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: input }));
+      } catch (e) {
+        ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: input, sceneItemEnabled: true }));
+      }
+    }
+    await coverItem(t.scene, sceneItemId, { x: 0, y: 0, w: base.w, h: base.h }).catch(() => {});
+    try { await obs.call('SetSceneItemIndex', { sceneName: t.scene, sceneItemId, sceneItemIndex: 0 }); } catch (e) { /* non-fatal */ }
+    return made;
+  }
+
+  // The camera's window in the Scoreboard scene: a second scene item of the
+  // same input, hidden, just under the scoreboard page. One that is already
+  // there is left as the operator has it.
+  async function ensureCameraWindow(sb, id, existingInputs) {
+    const input = cameraInput(id);
+    if (!existingInputs.has(input)) return false;
+    try { await obs.call('GetSceneItemId', { sceneName: sb.scene, sourceName: input }); return true; } catch (e) { /* not there yet */ }
+    const { sceneItemId } = await obs.call('CreateSceneItem', { sceneName: sb.scene, sourceName: input, sceneItemEnabled: false });
+    try {
+      const items = (await obs.call('GetSceneItemList', { sceneName: sb.scene })).sceneItems || [];
+      const page = items.find((it) => it.sourceName === sb.input);
+      if (page) await obs.call('SetSceneItemIndex', { sceneName: sb.scene, sceneItemId, sceneItemIndex: page.sceneItemIndex });
+    } catch (e) { /* non-fatal */ }
+    return true;
+  }
+
+  // Shows or hides a camera's window over the game. `rect` is in 1920x1080
+  // stage pixels (the overlay draws its frame at the same place).
+  async function setCameraWindow(id, on, rect) {
+    if (!connected) return false;
+    const sb = entryForKey('scoreboard');
+    let sceneItemId;
+    try { ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: sb.scene, sourceName: cameraInput(id) })); } catch (e) { return false; }
+    if (on && rect) {
+      const base = await videoBase();
+      const kx = base.w / 1920;
+      const ky = base.h / 1080;
+      await coverItem(sb.scene, sceneItemId, { x: rect.x * kx, y: rect.y * ky, w: rect.w * kx, h: rect.h * ky }).catch(() => {});
+    }
+    try { await obs.call('SetSceneItemEnabled', { sceneName: sb.scene, sceneItemId, sceneItemEnabled: !!on }); } catch (e) { return false; }
+    return true;
+  }
+
+  // Each camera as OBS has it: whether its input exists, the device it is
+  // set to and the devices this PC offers.
+  async function cameraStatus(cameras) {
+    const out = [];
+    for (const c of cameras || []) {
+      const input = cameraInput(c.id);
+      const row = { id: c.id, label: c.label, input, exists: false, device: '', devices: [], window: false };
+      if (connected) {
+        try {
+          const s = await obs.call('GetInputSettings', { inputName: input });
+          const prop = CAMERA_DEVICE_PROP[String(s.inputKind || '').replace(/_v\d+$/, '')] || CAMERA_DEVICE_PROP[s.inputKind] || 'video_device_id';
+          row.exists = true;
+          row.device = String((s.inputSettings || {})[prop] || '');
+          const list = await obs.call('GetInputPropertiesListPropertyItems', { inputName: input, propertyName: prop }).catch(() => ({ propertyItems: [] }));
+          row.devices = (list.propertyItems || []).filter((it) => it.itemEnabled !== false && it.itemValue)
+            .map((it) => ({ name: String(it.itemName || it.itemValue), value: String(it.itemValue) }));
+          try { await obs.call('GetSceneItemId', { sceneName: entryForKey('scoreboard').scene, sourceName: input }); row.window = true; } catch (e) { /* no window yet */ }
+        } catch (e) { /* the input isn't built yet */ }
+      }
+      out.push(row);
+    }
+    return out;
+  }
+  async function setCameraDevice(id, device) {
+    if (!connected) throw softError('Not connected to OBS');
+    const input = cameraInput(id);
+    const s = await obs.call('GetInputSettings', { inputName: input });
+    const prop = CAMERA_DEVICE_PROP[String(s.inputKind || '').replace(/_v\d+$/, '')] || CAMERA_DEVICE_PROP[s.inputKind] || 'video_device_id';
+    await obs.call('SetInputSettings', { inputName: input, inputSettings: { [prop]: String(device || '') }, overlay: true });
+    return true;
+  }
+
   // --- Scene order ------------------------------------------------------------
   // OBS lists the app's scenes in stream order, top to bottom (sceneEntries).
   // obs-websocket has no request that moves a scene in the list: a new scene
@@ -508,6 +643,13 @@ function createObs(opts = {}) {
       gameCapture = await ensureGameCapture(sb.scene, existingInputs).catch(() => 'manual');
     }
 
+    // Each camera: its input in its own scene, and its window over the game.
+    const cameras = {};
+    for (const t of scenes.filter((s) => s.camera)) {
+      cameras[t.camera] = await ensureCamera(t, base, existingInputs).catch(() => 'manual');
+      if (cameras[t.camera] !== 'manual') await ensureCameraWindow(entryForKey('scoreboard'), t.camera, existingInputs).catch(() => {});
+    }
+
     // The shared music source, in every app scene. Created silent;
     // applyMusic() then fades it to wherever it should be.
     if (music.file) {
@@ -558,7 +700,7 @@ function createObs(opts = {}) {
       try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
     }
     await refreshProgram();
-    return { built, removed, reloaded, ordering, moved, gameCapture, collection, collectionName };
+    return { built, removed, reloaded, ordering, moved, gameCapture, cameras, collection, collectionName };
   }
 
   // The league's stinger. obs-websocket can't create a transition, so the
@@ -709,6 +851,7 @@ function createObs(opts = {}) {
   return {
     connect, disconnect, status, inspect, buildScenes, setupStinger, stingerStatus,
     switchTo, programShot, setMusic, setLayout,
+    setCameraWindow, cameraStatus, setCameraDevice,
     isConnected: () => connected,
   };
 }

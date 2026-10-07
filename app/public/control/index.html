@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stream Control</title>
 <link rel="stylesheet" href="control.css">
+<link rel="stylesheet" href="broadcast.css">
 <!-- The league's brand (v1.0.0): colours, then window.BRAND for control.js. -->
 <link rel="stylesheet" href="/brand.css">
 <script src="/brand.js"></script>
@@ -19,6 +20,7 @@
     <nav class="pages" role="tablist" aria-label="Pages">
       <button class="page-btn" type="button" role="tab" data-page="match" title="Match setup">Match</button>
       <button class="page-btn" type="button" role="tab" data-page="live" title="Score, scenes, rosters">Live</button>
+      <button class="page-btn" type="button" role="tab" data-page="broadcast" id="bxPageBtn" title="Matches this week, ticker, pop-ups, lower third, cameras" hidden>Broadcast</button>
       <button class="page-btn" type="button" role="tab" data-page="league" id="leaguePageBtn" title="Standings" hidden>League</button>
       <button class="page-btn" type="button" role="tab" data-page="settings" title="OBS, stinger, music, display">Settings</button>
     </nav>
@@ -325,6 +327,143 @@
           <div class="card-body">
             <div class="roster-slot" data-roster-slot="live"></div>
           </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ========================== BROADCAST ========================= -->
+    <!-- Profiles with a broadcast block: this week's other matches, the
+         ticker, pop-ups, the lower third and the cameras. -->
+    <div class="page page-live" data-page="broadcast" hidden>
+      <div class="live-col">
+        <section class="card" id="bxMatchCard">
+          <div class="card-head">
+            <h2>Matches this week</h2>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Source for the ticker, the This Week scene, the other-matches cards and score pop-ups. The match on stream is excluded from pop-ups.">i</span>
+            <span class="card-hint" id="bxWeek"></span>
+          </div>
+          <div class="bx-list" id="bxMatchList"></div>
+          <div class="push-row" style="margin-top:10px">
+            <button class="btn-secondary" type="button" id="bxAddBtn">Add match</button>
+            <button class="btn-secondary" type="button" id="bxRefreshBtn">Refresh league feed</button>
+            <button class="btn-secondary" type="button" id="bxRestoreBtn" hidden>Restore removed</button>
+          </div>
+
+          <div class="bx-form" id="bxForm" hidden>
+            <div class="sub-head first" id="bxFormTitle">New match</div>
+            <div class="field-row">
+              <label class="grow"><span class="lbl">Game</span><input type="text" id="bxfGame" list="bxGameList" placeholder="Game"><datalist id="bxGameList"></datalist></label>
+              <label style="flex:0 0 120px"><span class="lbl">League</span><input type="text" id="bxfLeague" placeholder="{{league}}"></label>
+              <label style="flex:0 0 130px"><span class="lbl">Round</span><input type="text" id="bxfRound" placeholder="Week 3"></label>
+            </div>
+            <div class="field-row">
+              <label class="grow"><span class="lbl">Team A</span><input type="text" id="bxfA" list="bxTeamList" placeholder="Team name"></label>
+              <label class="grow"><span class="lbl">Team B</span><input type="text" id="bxfB" list="bxTeamList" placeholder="Team name"><datalist id="bxTeamList"></datalist></label>
+            </div>
+            <div class="field-row">
+              <label class="grow"><span class="lbl">Start</span><input type="datetime-local" id="bxfStart"></label>
+              <div class="push-row">
+                <button class="btn-accent" type="button" id="bxfSave">Save</button>
+                <button class="btn-secondary" type="button" id="bxfCancel">Cancel</button>
+              </div>
+            </div>
+            <div class="status-line" id="bxfStatus"></div>
+          </div>
+
+          <div class="sub-head">League feed
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="LeagueOS seasons read for this week's matches. A league home page follows every running season; a season or match link follows one. An imported match's season is followed automatically. Read every 90 seconds while a match is due or in progress, otherwise every 15 minutes.">i</span>
+          </div>
+          <div class="bx-list" id="bxFollowList"></div>
+          <div class="input-row" style="margin-top:8px">
+            <input type="text" id="bxFollowUrl" placeholder="https://league.v1.leagueos.gg/...">
+            <button class="btn-secondary" type="button" id="bxFollowBtn">Follow</button>
+          </div>
+          <div class="status-line" id="bxFollowStatus"></div>
+          <div class="field-row" style="margin-top:10px">
+            <label style="flex:0 0 260px"><span class="lbl">Feed scope</span>
+              <select id="bxScope"><option value="all">Every match in followed seasons</option><option value="home">{{short}} matches only</option></select>
+            </label>
+          </div>
+        </section>
+
+        <section class="card" id="bxTickerCard">
+          <div class="card-head"><h2>Ticker</h2></div>
+          <label class="checkbox"><input type="checkbox" id="bxTickerOn"> Ticker on full-screen scenes
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Off, or no matches and no lines: the rail shows the social handles.">i</span></label>
+          <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="bxTickerCams"> Ticker on camera scenes</label>
+          <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="bxTickerGame"> Ticker over gameplay</label>
+          <div class="field" style="margin-top:12px">
+            <label for="bxTickerMsgs"><span class="lbl">Lines <span class="muted-note">one per line, after the matches</span></span></label>
+            <textarea id="bxTickerMsgs" rows="3" placeholder="Follow /{{social}} on Twitch"></textarea>
+          </div>
+        </section>
+      </div>
+
+      <div class="live-col">
+        <section class="card" id="bxLowerCard">
+          <div class="card-head">
+            <h2>Lower third</h2>
+            <span class="card-hint" id="bxLowerState"></span>
+          </div>
+          <div class="field-row">
+            <label class="grow"><span class="lbl">Name</span><input type="text" id="bxlTitle" placeholder="Name"></label>
+            <label style="flex:0 0 170px"><span class="lbl">Label</span><input type="text" id="bxlKicker" list="bxKickerList" placeholder="Caster"><datalist id="bxKickerList">
+              <option value="Caster"><option value="Analyst"><option value="Player spotlight"><option value="MVP"><option value="Coach"><option value="Interview"></datalist></label>
+          </div>
+          <div class="field-row">
+            <label class="grow"><span class="lbl">Second line</span><input type="text" id="bxlSub" placeholder="Optional"></label>
+            <label style="flex:0 0 130px"><span class="lbl">Mark</span>
+              <select id="bxlTeam"><option value="">{{short}}</option><option value="A">Team A</option><option value="B">Team B</option></select></label>
+            <label style="flex:0 0 110px"><span class="lbl">Seconds
+              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="0: stays until Hide.">i</span></span>
+              <input type="number" id="bxlSeconds" min="0" max="120" step="1" value="10"></label>
+          </div>
+          <div class="push-row">
+            <button class="btn-accent" type="button" id="bxlShow">Show</button>
+            <button class="btn-secondary" type="button" id="bxlHide">Hide</button>
+          </div>
+          <div class="sub-head">Players</div>
+          <div class="bx-chips" id="bxlPlayers"></div>
+        </section>
+
+        <section class="card" id="bxPopCard">
+          <div class="card-head"><h2>Pop-ups</h2></div>
+          <label class="checkbox"><input type="checkbox" id="bxAlertAuto"> Pop up league feed changes
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="A followed match going live, changing score or finishing.">i</span></label>
+          <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="bxAlertEdit"> Pop up score changes made on this page
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Sent 2.5 seconds after the last change to a match.">i</span></label>
+          <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="bxAlertSeries"> Pop up the result when the series on stream is decided</label>
+          <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="bxAlertGame"> Pop-ups over gameplay</label>
+          <div class="field-row" style="margin-top:12px">
+            <label class="grow"><span class="lbl">Position over gameplay</span>
+              <select id="bxAlertPos"><option value="top-right">Top right</option><option value="top-left">Top left</option><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option></select></label>
+            <label style="flex:0 0 110px"><span class="lbl">Seconds</span><input type="number" id="bxAlertSeconds" min="4" max="30" step="1" value="9"></label>
+          </div>
+          <div class="sub-head">Message pop-up</div>
+          <div class="field-row">
+            <label style="flex:0 0 150px"><span class="lbl">Label</span><input type="text" id="bxnKicker" placeholder="Update"></label>
+            <label class="grow"><span class="lbl">Headline</span><input type="text" id="bxnTitle" placeholder="Headline"></label>
+          </div>
+          <div class="input-row">
+            <input type="text" id="bxnBody" placeholder="Second line (optional)">
+            <button class="btn-secondary" type="button" id="bxnShow">Show</button>
+          </div>
+        </section>
+
+        <section class="card" id="bxCamCard">
+          <div class="card-head">
+            <h2>Cameras</h2>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="One OBS Video Capture Device per camera, used by its own scene and by its window in the Scoreboard scene. Created by a scene build.">i</span>
+          </div>
+          <div class="bx-list" id="bxCamList"></div>
+          <div class="field-row" style="margin-top:12px">
+            <label class="grow"><span class="lbl">Window position</span>
+              <select id="bxPipPos"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option></select></label>
+            <label class="grow"><span class="lbl">Window size</span>
+              <select id="bxPipSize"><option value="s">Small (384 x 216)</option><option value="m">Medium (480 x 270)</option><option value="l">Large (640 x 360)</option></select></label>
+            <button class="btn-secondary" type="button" id="bxCamRefresh">Refresh devices</button>
+          </div>
+          <div class="status-line" id="bxCamStatus"></div>
         </section>
       </div>
     </div>
@@ -666,5 +805,7 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="control.js"></script>
+  <!-- The Broadcast page (a profile with a broadcast block). -->
+  <script src="broadcast.js"></script>
 </body>
 </html>

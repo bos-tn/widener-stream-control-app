@@ -15,6 +15,20 @@ const LEAGUE_SCENES = ['standings', 'matchup'];
 
 const FONT_FORMATS = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' };
 
+// The broadcast package (test branch, optional). A profile with a `broadcast`
+// block gets the redesigned scenes, the match centre, the ticker, pop-ups and
+// the lower third, plus these extras: its own scenes ('schedule', the week's
+// matches; 'versus', the matchup) and one scene and one pop-up window per
+// camera: { id, label, title, subtitle }.
+const BROADCAST_SCENES = ['schedule', 'versus'];
+function broadcastOptions(raw) {
+  if (!raw || typeof raw !== 'object') return { enabled: false, scenes: [], cameras: [] };
+  const cameras = (Array.isArray(raw.cameras) ? raw.cameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '')).slice(0, 4)
+    .map((c) => ({ id: c.id, label: String(c.label || c.id), title: String(c.title || c.label || c.id), subtitle: String(c.subtitle || '') }));
+  const scenes = (Array.isArray(raw.scenes) ? raw.scenes : BROADCAST_SCENES).filter((x) => BROADCAST_SCENES.includes(x));
+  return { enabled: true, scenes, cameras };
+}
+
 // Headline typefaces the operator can pick between (v2.0.0, optional):
 // { list: [{ id, name, family, file }], default }. A typeface whose file is
 // not in assets/ (a licensed one, kept out of the repository) is left out of
@@ -98,6 +112,7 @@ function loadProfile(id) {
       defaults: { ...((raw.backgrounds && raw.backgrounds.defaults) || {}) },
     },
     headlineFonts: headlineFonts(raw.headlineFonts, assetsDir),
+    broadcast: broadcastOptions(raw.broadcast),
     themeScript: raw.themeScript && fs.existsSync(path.join(dir, raw.themeScript)) ? path.join(dir, raw.themeScript) : '',
     music: raw.music && raw.music.driveId ? raw.music : null,
     defaults: raw.defaults || {},
@@ -137,6 +152,7 @@ function clientBrand(p) {
     backgrounds: p.backgrounds,
     headlineFonts: { list: p.headlineFonts.list.map(({ id, name, family }) => ({ id, name, family })), default: p.headlineFonts.default },
     hasMusicTrack: !!p.music,
+    broadcast: p.broadcast.enabled ? { scenes: p.broadcast.scenes, cameras: p.broadcast.cameras } : null,
   };
 }
 

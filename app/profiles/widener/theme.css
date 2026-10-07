@@ -27,7 +27,40 @@ body[data-bg="varsity-stripes"] .bg-varsity-stripes,
 body[data-bg="shutters"] .bg-shutters,
 body[data-bg="w-shine"] .bg-w-shine,
 body[data-bg="pride-lions"] .bg-pride-lions,
-body[data-bg="pride-tape"] .bg-pride-tape{ display:block; }
+body[data-bg="pride-tape"] .bg-pride-tape,
+body[data-bg="floodlights"] .bg-floodlights,
+body[data-bg="speed-lines"] .bg-speed-lines{ display:block; }
+
+/* Floodlights: three beams of blue light from the top of the stage, swaying
+   slowly over a dot grid, with gold specks rising through them. Made for the
+   broadcast package's scenes: light at the top and the centre, calm where
+   their panels sit. */
+.bg-floodlights .grid{ inset:0; opacity:.55;
+  background-image:radial-gradient(rgba(120,170,255,.26) 1.5px, rgba(0,0,0,0) 1.7px); background-size:36px 36px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 38%, #000 0%, rgba(0,0,0,0) 74%); mask-image:radial-gradient(ellipse at 50% 38%, #000 0%, rgba(0,0,0,0) 74%); }
+.bg-floodlights .beam{ top:-220px; width:560px; height:1750px; transform-origin:50% 0; mix-blend-mode:screen;
+  background:linear-gradient(180deg, rgba(20,120,255,.6) 0%, rgba(0,84,184,.2) 46%, rgba(0,84,184,0) 86%);
+  -webkit-mask-image:linear-gradient(90deg, rgba(0,0,0,0) 0%, #000 50%, rgba(0,0,0,0) 100%); mask-image:linear-gradient(90deg, rgba(0,0,0,0) 0%, #000 50%, rgba(0,0,0,0) 100%); }
+.bg-floodlights .b1{ left:80px; animation:wid-beam1 17s ease-in-out infinite alternate; }
+.bg-floodlights .b2{ left:690px; width:440px; opacity:.7; animation:wid-beam2 23s ease-in-out infinite alternate; }
+.bg-floodlights .b3{ left:1290px; animation:wid-beam3 19s ease-in-out infinite alternate; }
+@keyframes wid-beam1{ from{ transform:rotate(-36deg) } to{ transform:rotate(-15deg) } }
+@keyframes wid-beam2{ from{ transform:rotate(9deg) } to{ transform:rotate(-11deg) } }
+@keyframes wid-beam3{ from{ transform:rotate(37deg) } to{ transform:rotate(16deg) } }
+.bg-floodlights .specks{ position:absolute; inset:0; }
+.bg-floodlights .sp{ left:calc(var(--x) * 1%); bottom:-24px; width:calc(var(--s) * 1px); height:calc(var(--s) * 1px); background:rgba(240,179,16,.6);
+  animation:wid-speck calc(var(--t) * 1s) linear infinite; animation-delay:calc(var(--o) * -.3s); }
+@keyframes wid-speck{ 0%{ transform:translateY(0) rotate(45deg); opacity:0 } 12%{ opacity:.85 } 88%{ opacity:.45 } 100%{ transform:translateY(-1160px) rotate(225deg); opacity:0 } }
+
+/* Speed Lines: streaks of light racing across on the house angle, blue with
+   the odd gold one, over a glow in the middle of the stage. */
+.bg-speed-lines .glow{ inset:0; background:radial-gradient(1200px 720px at 50% 55%, rgba(0,84,184,.36), rgba(0,84,184,0) 70%); }
+.bg-speed-lines .rush{ position:absolute; inset:-320px -420px; transform:rotate(-12deg); }
+.bg-speed-lines .sk{ left:0; top:calc(var(--y) * 1%); width:calc(var(--w) * 1px); height:3px; opacity:.55;
+  background:linear-gradient(90deg, rgba(0,84,184,0), rgba(70,150,255,.85));
+  animation:wid-rush calc(var(--t) * 1s) linear infinite; animation-delay:calc(var(--o) * -.1s); }
+.bg-speed-lines .sk.g{ height:2px; background:linear-gradient(90deg, rgba(240,179,16,0), rgba(240,179,16,.9)); }
+@keyframes wid-rush{ from{ transform:translateX(-720px) } to{ transform:translateX(2960px) } }
 
 /* The Rocket League stats screens sit on the scene's background too, held
    back to half strength so the tables stay easy to read. */

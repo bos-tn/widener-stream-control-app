@@ -133,16 +133,89 @@ Scoreboard has none. Changes apply immediately.
 
 | Profile | Backgrounds | Defaults |
 | --- | --- | --- |
-| Widener | Moving Stripes, Varsity Stripes, Shutters, W Shine, Pride Lions, Pride Tape | Starting Soon: Varsity Stripes. Rosters: Shutters. Be Right Back: W Shine. Post-Match: Pride Tape. League graphics: Pride Lions. Rocket League Stats: Moving Stripes |
+| Widener | Moving Stripes, Varsity Stripes, Shutters, W Shine, Pride Lions, Pride Tape, Floodlights, Speed Lines | Starting Soon: Varsity Stripes. This Week and Be Right Back: Floodlights. Matchup: Speed Lines. Rosters: Shutters. Post-Match: Pride Tape. League graphics: Pride Lions. Rocket League Stats: Moving Stripes |
 | LotE | Mark Shine, Word Rows, Mark Pattern, Curtains | Starting Soon and league graphics: Mark Shine. Be Right Back and Standings: Curtains. Rosters and Rocket League Stats: Mark Pattern. Post-Match and Head to Head: Word Rows |
 
 Widener draws the Rocket League Stats background at 50% opacity.
+
+## Broadcast package (Widener, test branch)
+
+Branch `test/widener-broadcast`, version `2.2.0-design.1`. Not released. A
+profile with a `broadcast` block in `profile.json` gets a second overlay
+layer (`public/overlay-assets/bx.js`, `bx.css`) that redraws the full-screen
+scenes and adds scenes, a ticker, pop-ups, a lower third and cameras. LotE has
+no `broadcast` block and is unchanged.
+
+### Scenes
+
+| Scene | Content |
+| --- | --- |
+| Starting Soon | Badge, headline, matchup strip, countdown, highlight video, three other matches (turning every 8 s) |
+| This Week (new) | The week's matches, seven per page, turning every 11 s. More than seven: the home team's matches first, then the rest by game |
+| Matchup (new) | Both teams (logo, name, short name, players), game, round, series length, countdown |
+| Rosters | Numbered player rows per team. Row height follows the longer roster |
+| Scoreboard | Same boards. Added: team colour wash, "Match point" when a team is one win from the series |
+| Rocket League Stats | Same screens. Rows enter in turn |
+| Crowd Cam, Comp Room (new) | Transparent page over the camera: title on entry, label, badge, location line, series score |
+| Be Right Back | Headline, series score, mascot, three other matches |
+| Post-Match | With a series score: result with the winner marked, game scores for a Rocket League series, sign-off, countdown, video. Without: the Starting Soon layout |
+
+Full-screen scenes carry a masthead (brand, game, round, time of day) and a
+rail (ticker, or the social handles). Entrances start at the stinger's cut
+point after a scene goes on air. Added backgrounds: Floodlights, Speed Lines.
+The new scenes are listed under Match, Details, Optional scenes; a build adds
+or removes them.
+
+### Broadcast page
+
+- **Matches this week**: Monday to Sunday. Rows come from followed LeagueOS
+  seasons and from **Add match**. Per row: score steppers, Upcoming / Live /
+  Final, a note, **Pop up**, **Remove**. A changed league row is marked
+  Corrected until the league's own score changes; **Use league score**
+  discards the change.
+- **League feed**: paste a LeagueOS link and **Follow**. A league home page
+  follows every running season; a season or match link follows one. An
+  imported match's season is followed automatically. Read every 90 s while a
+  match is due or in progress, otherwise every 15 min. Scope: every match, or
+  the home team's only.
+- **Ticker**: on full-screen scenes, camera scenes, gameplay. Lines are
+  appended after the matches.
+- **Pop-ups**: league feed changes, score changes made on the page (sent 2.5 s
+  after the last change), the result when the series on stream is decided,
+  and a typed message. Position and duration apply over gameplay; on
+  full-screen and camera scenes pop-ups use the top right.
+- **Lower third**: name, label, second line, mark (profile or a team),
+  seconds (0: until **Hide**). A player chip fills the fields.
+- **Cameras**: device per camera, **Show window** (camera over the game on
+  the Scoreboard scene), **Put scene on air**, window position and size.
+
+### Cameras in OBS
+
+A build creates one Video Capture Device source per camera (`WU-cam-crowd`,
+`WU-cam-room`), places it under the overlay page in its own scene, and adds a
+hidden copy to the Scoreboard scene under the scoreboard page. Select the
+device on the Broadcast page or in the source's properties. **Show window**
+enables the copy at the window's position; the overlay draws the frame.
+
+### Review without OBS
+
+```bash
+cd app
+npm run design          # demo data, http://localhost:4313/showcase
+npm run test:broadcast  # 55 checks against a mock OBS
+```
+
+The showcase page shows every scene as a live tile, with buttons for pop-ups,
+the lower third, camera windows and demo matches. It uses its own data folder
+(`app/data/design`).
+
+Not yet run against a real OBS, a real camera or a live league score change.
 
 ## Profiles
 
 | | Widener | LotE |
 | --- | --- | --- |
-| Scene layout | Base layout | Own layout (`theme.css`): masthead, left text column, matchup row with records |
+| Scene layout | Broadcast package (test branch); base layout without it | Own layout (`theme.css`): masthead, left text column, matchup row with records |
 | League scenes | None | Standings, Head to Head |
 | Standings source | None | `lote.v1.leagueos.gg` |
 | Headline font | Kanit | Zentras (default) or Pink Blue |
@@ -285,8 +358,9 @@ needs keyboard focus first.
 `POST http://localhost:4310/api/remote/<action>` from a Stream Deck (web
 request plugin), Bitfocus Companion or a script. `GET /api/remote` lists the
 actions; Settings, Stream Deck and remote control lists them with Copy
-buttons: scene cuts, stats screens, score actions. Requests with an `Origin`
-other than the app's own are rejected.
+buttons: scene cuts, stats screens, score actions, and with the broadcast
+package `cam/<id>/on|off|toggle` (camera window) and `lower/hide`. Requests
+with an `Origin` other than the app's own are rejected.
 
 ## OBS dock
 
@@ -310,6 +384,9 @@ OBS: Docks > Custom Browser Docks, URL `http://localhost:4310/control`.
 | Match import fails | LeagueOS changed or is unreachable. Enter teams manually or load a saved match. |
 | League graphic scene is empty | Import the match. The graphic links come from the import. |
 | Rocket League: waiting | Score card > Connect to Rocket League, then restart the game. |
+| Camera scene or window is black | Broadcast > Cameras: select a device. "Source missing" means the scenes need a build. |
+| Camera window shows a frame with no picture | OBS is not connected, or the Scoreboard scene has no copy of the camera source: **Build scenes**. |
+| League feed row: Read failed | LeagueOS changed or is unreachable. The last matches read stay in the list; add or correct matches by hand. |
 | Rocket League boost shows a dash | Boost is only sent while spectating. |
 | Panel unreachable from another computer | By design. The server accepts local connections only. |
 
@@ -328,6 +405,8 @@ npm run dist          # every profile's installer
 npm run dist:lote     # one profile's installer
 npm run icons         # app icons from profiles/<id>/icon-source.png
 npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
+npm run design        # test branch: demo server, http://localhost:4313/showcase
+npm run test:broadcast    # test branch: checks against a mock OBS
 ```
 
 ### Profile files
@@ -336,7 +415,7 @@ npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
 
 | File | Contents |
 | --- | --- |
-| `profile.json` | Names, port, OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), defaults, installer identity (app id, package name, artifact name, update channel) |
+| `profile.json` | Names, port, OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (test branch: `scenes`, `cameras` with id, label, title, subtitle), defaults, installer identity (app id, package name, artifact name, update channel) |
 | `games.json` | Games: id, name, scoreboard preset, highlight video, `leagueActivity` (LeagueOS activity ids), `scoreName` |
 | `teams.json` | Optional member schools (id, name, short name, colours, logo), preloaded into the team library |
 | `assets/` | Logo, panel logo, mascot, watermark, stinger video, `teams/` logos, `fonts/` |

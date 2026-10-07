@@ -44,6 +44,13 @@ const LEAGUE_SCENES = [
   { key: 'standings', label: 'Standings' },
 ].filter((s) => (BRAND.leagueScenes || []).includes(s.key));
 const BACKGROUNDS = (BRAND.backgrounds && BRAND.backgrounds.list) || [];
+// The broadcast package's own scenes (a profile with a broadcast block): the
+// week's matches, the matchup, and one per camera.
+const BX = BRAND.broadcast || null;
+const BX_SCENES = BX ? [
+  { key: 'schedule', label: 'This Week', note: 'matches this week' },
+  { key: 'versus', label: 'Matchup', note: 'both teams, before the match' },
+].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' }))) : [];
 // The typefaces the scene headlines can be set in, for a league with several.
 const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
 
@@ -247,7 +254,7 @@ const NECC_TYPES = [
   { key: 'matchActivity', label: 'Match Activity' },
 ];
 let prefs = {
-  neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key),
+  neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
   setupDone: false, guideV2: false, gameCapture: true, studioMode: true, orderScenes: true,
 };
 let prefsLoaded = false;
@@ -304,6 +311,7 @@ function renderNeccTypeList() {
     });
     neccTypeList.appendChild(label);
   };
+  BX_SCENES.forEach((t) => add(BX_SCENES, 'bxScenes', t, t.note));
   LEAGUE_SCENES.forEach((t) => add(LEAGUE_SCENES, 'leagueScenes', t, 'league site data'));
   NECC_TYPES.forEach((t) => add(NECC_TYPES, 'neccTypes', t,
     urls[t.key] ? `${LEAGUE} graphic, link imported` : (Object.keys(urls).length ? `${LEAGUE} graphic, no link in this match` : `${LEAGUE} graphic`)));
@@ -1042,6 +1050,12 @@ function buildResultHtml(res) {
     <ol><li>Select the <b>${esc(prefix)}: Scoreboard</b> scene.</li>
     <li><b>Sources</b> &gt; <b>+</b> &gt; <b>Window Capture</b> or <b>Display Capture</b>. Select the game.</li>
     <li>Place it below <b>${esc(prefix)}-src-scoreboard</b>.</li></ol></li>`);
+  Object.keys(res.cameras || {}).forEach((id) => {
+    const input = `${prefix}-cam-${id}`;
+    if (res.cameras[id] === 'created') lines.push(`<li class="warn">Camera source added: <b>${esc(input)}</b>. No device selected: Broadcast &gt; Cameras.</li>`);
+    else if (res.cameras[id] === 'exists') lines.push(`<li class="ok">Camera source present: <b>${esc(input)}</b>.</li>`);
+    else lines.push(`<li class="warn">No Video Capture Device source type in this OBS. Add a camera source named <b>${esc(input)}</b> manually.</li>`);
+  });
   if ((res.removed || []).length) {
     lines.push(`<li class="ok">Removed unused scenes: ${esc(listText(res.removed.map(shortScene)))}.</li>`);
   }
@@ -1496,10 +1510,16 @@ const SCENE_TEXT = {
   standings: [['title', 'Heading', 'Standings']],
   matchup: [['title', 'Heading', 'Head to Head']],
 };
+if (BX) {
+  SCENE_TEXT.roster = [['title', 'Heading', 'Starting Lineups']];
+  SCENE_TEXT.schedule = [['title', 'Heading', 'This Week']];
+  SCENE_TEXT.versus = [['title', 'Badge', 'Tonight']];
+  BX.cameras.forEach((c) => { SCENE_TEXT[`cam-${c.id}`] = [['title', 'Label', c.title], ['subtitle', 'Location', c.subtitle || 'Optional'], ['status', 'Badge', 'Live']]; });
+}
 
 // The view a scene's background is kept under: every league graphic shares
 // one, and the Scoreboard has none (the game shows through it).
-function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' ? '' : key; }
+function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') ? '' : key; }
 function bgValue(view) {
   const ok = (id) => BACKGROUNDS.some((b) => b.id === id);
   const picked = ((state && state.backgrounds) || {})[view];
@@ -1541,6 +1561,9 @@ buildHeadFontPicker();
 
 function sceneNote(key) {
   if (key === 'roster') return 'Source: Rosters card.';
+  if (key === 'schedule') return 'Source: Broadcast, Matches this week.';
+  if (key === 'versus') return 'Both teams with logos, players and the countdown.';
+  if (key.startsWith('cam-')) return 'Camera under a transparent frame. Device: Broadcast, Cameras.';
   if (key === 'scoreboard') return sb().style === 'rl' ? 'Live game data over the game capture.' : 'Manual score over the game capture.';
   if (key === 'stats') return 'Auto-cut after each game. Returns to Scoreboard at the next kickoff countdown.';
   if (key === 'standings') return `Source: ${league.site || 'league site'}.`;
@@ -2008,6 +2031,7 @@ function connect() {
       showRlNote(`Game over: ${name}. Series score updated.`);
     }
     if (msg.type === 'montages') { montageStatus = msg.montages || {}; renderMontages(); }
+    if (window.bxPanel) window.bxPanel.onMessage(msg);
     if (msg.type === 'library') {
       library = msg.library || { teams: [], matches: [] };
       renderLibrary();
@@ -2030,6 +2054,7 @@ function renderAll() {
   renderSceneList();
   renderMontages();
   renderLeague();
+  if (window.bxPanel) window.bxPanel.render();
   setVal($id('logoInput'), state.logo || '');
   ['twitch', 'twitter', 'instagram', 'youtube'].forEach((k) => setVal($id(k + 'Input'), (state.socials || {})[k] || ''));
   refreshFileFields();
@@ -2098,7 +2123,8 @@ $id('montageAllBtn').addEventListener('click', () => requestMontage(''));
 // --- Pages and collapsible cards ----------------------------------------------------
 
 const PAGE_KEY = 'stream-page';
-const PAGES = ['match', 'live', ...(LEAGUE_SCENES.length ? ['league'] : []), 'settings'];
+const PAGES = ['match', 'live', ...(BX ? ['broadcast'] : []), ...(LEAGUE_SCENES.length ? ['league'] : []), 'settings'];
+$id('bxPageBtn').hidden = !BX;
 $id('leaguePageBtn').hidden = !LEAGUE_SCENES.length;
 // ?page=live opens on that page, e.g. for an OBS dock that only keeps score.
 const START_PAGE = [new URLSearchParams(location.search).get('page'), lsGet(PAGE_KEY)].find((p) => PAGES.includes(p)) || '';
@@ -2582,6 +2608,10 @@ const REMOTE_LABELS = {
   'score/a/unstock': 'Team A +1 stock', 'score/b/unstock': 'Team B +1 stock',
   'score/swap': 'Swap sides',
 };
+if (BX) {
+  BX.cameras.forEach((c) => { REMOTE_LABELS[`cam/${c.id}/toggle`] = `${c.label} window: toggle`; });
+  REMOTE_LABELS['lower/hide'] = 'Lower third: hide';
+}
 function renderRemoteList() {
   const list = $id('remoteList');
   const base = `${location.origin}/api/remote/`;

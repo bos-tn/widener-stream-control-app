@@ -52,6 +52,23 @@
   // 14 Pride Lions: a halo, the lions, and a glint along the mane.
   layer('pride-lions', '<i class="halo"></i><i class="ln art"></i><i class="ln shine"></i>');
 
+  // Floodlights (made for the broadcast package's scenes): three beams from
+  // the top of the stage swaying over a dot grid, gold specks rising. Each
+  // speck takes its place, size, pace and start from its number.
+  var specks = '';
+  for (var s = 0; s < 26; s++) {
+    specks += '<i class="sp" style="--x:' + ((s * 73) % 100) + ';--s:' + (4 + ((s * 7) % 7)) + ';--t:' + (14 + ((s * 5) % 16)) + ';--o:' + ((s * 37) % 100) + '"></i>';
+  }
+  layer('floodlights', '<i class="grid"></i><i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i><div class="specks">' + specks + '</div>');
+
+  // Speed Lines (made for the Matchup scene): streaks of light on the house
+  // angle, every fifth one gold.
+  var streaks = '';
+  for (var k = 0; k < 20; k++) {
+    streaks += '<i class="sk' + (k % 5 === 0 ? ' g' : '') + '" style="--y:' + ((k * 61) % 100) + ';--w:' + (180 + ((k * 97) % 520)) + ';--t:' + (5 + ((k * 3) % 7)) + ';--o:' + ((k * 41) % 100) + '"></i>';
+  }
+  layer('speed-lines', '<i class="glow"></i><div class="rush">' + streaks + '</div>');
+
   // 27 Pride Tape: three bands of words. [top, seconds per loop, direction, gold]
   var unit = 'Go Pride<i></i>Blue &amp; Gold<i></i>' + esc(brand.name || 'Widener Esports') + '<i></i>';
   var half = unit + unit + unit + unit + unit;

@@ -1,7 +1,9 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.1.0**. If you're starting a new chat, read the
+updated through **v2.1.0**, plus the unreleased broadcast package on the
+`test/widener-broadcast` branch (its own section, near the end). If you're
+starting a new chat, read the
 v2.0.0 section first: it changed the app's whole model (OBS first, one state,
 no Push Live), so much of the history below describes things that are gone.
 The later sections are a history: each one records why something is the way
@@ -1725,6 +1727,167 @@ names never read high.
   files are still on the v2.0.0 release, so the download can be differential.
   **Not done:** an actual download and install from an installed copy.
 
+## v2.2.0-design.1: broadcast package (test branch `test/widener-broadcast`)
+
+The user, 2026-10-07: "I want to start a test branch for testing design
+concepts of the widener app only. I want you to completely upgrade and
+improve all of the scenes. I want a wow factor for the design, thought,
+animation, looks, that rival professional broadcast, im talking updates from
+other matches that week or live pop up updates from matches the same night,
+scenes and pop ups for a crowd camera, and a comp room camera, and much much
+more."
+
+Nothing here is released. It is one local commit on the branch, not pushed,
+and no installer was built. `master` is v2.1.0.
+
+### Shape
+
+- **A profile switch.** `profile.json` `broadcast: { scenes, cameras }`
+  (`profile.js` `broadcastOptions`, `BRAND.broadcast` on the pages). Widener
+  has it; LotE does not, and a scratch check confirmed LotE serves the same
+  scene list, state, prefs and remote routes as before and renders its own
+  look. Everything below is off without the block.
+- **A second overlay layer, not a restyle.** `public/overlay-assets/bx.js`
+  builds `#bx-root` (its own 1920 x 1080 stage, z-index 55) and `bx.css`
+  styles it. `overlay.html` loads both for every profile; bx.js returns at
+  once without `BRAND.broadcast`. With it, `html.bx` hides `#widener-frame`
+  and `#brb-view`, and the page calls `BX.init(api)`, `BX.onState`,
+  `BX.onMessage`, `BX.onEnter`, `BX.onBoard`, `BX.fit` (search `BX` in
+  overlay.html: eight small hooks). I chose a new layer over theme overrides
+  because the frame scenes needed new markup (word-by-word headlines, digit
+  tiles, result bands); the in-game boards and the Rocket League stats
+  screens keep the page's own markup and fitting code, and bx.css only adds
+  to them under `html.bx`.
+- **One server module**, `broadcast.js` (in `build.files`), created in
+  `server.js` as `bx` when the profile has the package. State in
+  `<data>/broadcast.json`. Every page gets `{type:'bx', bx}` on subscribe
+  and on change, and `{type:'bxEvent', event}` for a pop-up. Routes under
+  `/api/bx/*`, remote routes `/api/remote/cam/<id>/<on|off|toggle>` and
+  `/api/remote/lower/hide`.
+- **Panel**: a Broadcast page (`public/control/broadcast.js`,
+  `broadcast.css`, markup in `index.html`), loaded after control.js and
+  sharing its globals. control.js gained `BX`, `BX_SCENES`, the package's
+  scenes in Optional scenes (`prefs.bxScenes`), scene text fields for the
+  new scenes, and two calls into `window.bxPanel`.
+
+### Scenes (bx.js)
+
+Views `schedule`, `versus`, `cam-<id>` are new (`BX.views` extends
+`VIEW_MODES`); `starting-soon`, `post-match`, `roster`, `brb` are redrawn.
+OBS names: `WU: This Week`, `WU: Matchup`, `WU: Crowd Cam`, `WU: Comp Room`.
+Stream order (obs.js `sceneEntries`): Starting Soon, This Week, Matchup,
+Rosters, league graphics, Scoreboard, Rocket League Stats, the cameras, Be
+Right Back, Post-Match.
+
+- Chrome on full-screen scenes: masthead (brand plate, game, round and
+  series length, time of day, gold rule with a glint) and the rail (ticker,
+  or the social handles when the ticker is off or empty).
+- Headlines are split into words that rise in turn (`setTitle`), stepped
+  down until they fit their lines. The last word is gold.
+- Countdown: one tile per digit, only a changed digit rolls. At zero
+  Starting Soon says "Starting shortly"; Post-Match and Matchup hide it. Last
+  ten seconds: red edge.
+- Post-Match shows the result band once the series has any score
+  (`has-result`): winner tag and rays when decided, game-by-game chips from
+  `rl-series.json` for a Rocket League series.
+- The video panel is the page's own `#montage` element moved into the bx
+  frame, so `applyClip` and the montage download logic are unchanged.
+  `clipWanted()` in overlay.html stops the other scenes' pages from loading
+  the video at all.
+- Entrances use `data-in` + `--d` under `body.enter` (the existing
+  mechanism). `body.enter` now stays 6.5 s with the package (a camera
+  scene's title sting runs 2.3 s before the rest arrives).
+- Two backgrounds were added to the Widener theme for these scenes:
+  Floodlights and Speed Lines. Defaults changed: Be Right Back and This Week
+  use Floodlights, Matchup uses Speed Lines.
+- `state.layout` (panel: Post-Match, Layout) still swaps the two columns.
+
+### Match centre, ticker, pop-ups (broadcast.js)
+
+- `matches()`: this week (Monday to Sunday, the PC's zone) from two
+  sources. **Typed in** (`store.manual`), and **followed LeagueOS seasons**
+  (`store.follows`, `necc.js` `resolveLeagueLink` + `seasonMatches`, the
+  calls the league's schedule page makes). A league home link follows every
+  running season; a season, stage or match link follows one; an imported
+  match's season is followed automatically (`followImported`).
+- Polling: 90 s for a season with a match due or under way tonight, 15 min
+  otherwise. Season, stages and stage rosters are cached 30 min; only the
+  stage's match list is re-read. Logos go through `cacheLogo`.
+- A score or state change on a followed match between two reads becomes a
+  pop-up (`alerts.auto`), never on the first read of a season, never for the
+  match on stream (`onStream`: both team names equal the state's).
+- The operator can correct a league match's score (`store.overrides`); the
+  correction is dropped once the league's own numbers move.
+- Score edits in the panel pop up once, 2.5 s after the last click
+  (`alerts.onEdit`). The win that decides the series on stream pops up on
+  every scene (`alertSeriesFinal`, from `applyScore`), except Post-Match.
+- LeagueOS only knows a game result when a team reports it, so "live" from
+  the feed is as fresh as the teams' reporting. Verified against the real
+  LotE site on 2026-10-07 (4 seasons, 18 matches in range); **no score
+  change was observed live**, so the diff-to-pop-up path is tested only in
+  dev/test-broadcast.js for typed-in matches and by reading the code for
+  league ones.
+
+### Cameras
+
+- obs.js: one `dshow_input` (or the platform's kind) per camera,
+  `WU-cam-<id>`, used twice: bottom of its own scene (cover the canvas,
+  `OBS_BOUNDS_SCALE_OUTER`, `cropToBounds` sent separately so an older OBS
+  still places it), and a hidden second scene item in the Scoreboard scene,
+  just under the scoreboard page.
+- A camera window ("Show window"): `bx.setPip` tells the pages first; the
+  overlay draws a closed frame; 450 ms later OBS enables the scene item at
+  the rectangle `pipRects()` computed (stage pixels, scaled to the canvas);
+  at 760 ms the frame's shutters open. Closing runs the other way. The
+  rectangle comes from the server because OBS and the overlay must agree:
+  corner and size from settings, offset by what the scoreboard already uses
+  in that corner (`reserved()`).
+- Devices: the panel lists them through `GetInputPropertiesListPropertyItems`
+  and sets `video_device_id`.
+- Unticking a camera scene removes the scene on the next build and keeps
+  the camera input (so the device choice survives).
+
+### Dev tools (dev/, not in the installer)
+
+- `npm run design` (`dev/design-server.js`, launch config
+  `stream-app-design`, port 4313): the server with demo data in
+  `app/data/design` (`--fresh` reseeds). `/showcase` shows every scene as a
+  live tile with buttons for pop-ups, the lower third, camera windows and
+  demo matches (`/api/dev/demo/<rl|val|smash|long|blank>`, only with
+  `STREAM_DEMO=1`). `STREAM_DATA_DIR` points any dev run at another folder.
+- `dev/shot.js` + `dev/shots.js`: full-size PNGs of overlay pages at given
+  times after load, drawn off screen by Electron (animations run at full
+  rate, unlike a hidden window). `node dev/shots.js <out> --times 1500,6500
+  versus roster`.
+- `dev/mock-obs.js`: an obs-websocket v5 stand-in (msgpack and JSON).
+- `npm run test:broadcast` (`dev/test-broadcast.js`): 55 checks against the
+  mock: build order, cameras, window timing and placement, devices, rebuilds,
+  match centre, pop-ups, series result, lower third, settings.
+
+### Traps found on the way
+
+- **Class names.** The page's base CSS has global `.wrap` and `.st` rules.
+  A bx element given class `wrap` took the frame's padding; a background
+  streak given `st` took the standings grid's offsets. Keep bx classes
+  prefixed, and state classes compound (`.bx-x.on`).
+- **npx and `&`.** `npx electron script.js "http://...?a=1&b=2"` goes through
+  cmd.exe, which splits on `&`. dev/shots.js spawns Electron directly.
+- **spawnSync in a process that is also the server** deadlocks: the child's
+  page can never load.
+- The working tree is CRLF (autocrlf); multi-line patterns in a patch script
+  must be normalised first.
+
+### Not verified
+
+- **A real OBS**: the camera input kind and its `video_device_id` property,
+  `cropToBounds`, a second scene item of one camera input, and the 450 ms
+  gap between the frame and the camera all come from the docs and the mock.
+- **A real camera.**
+- **OBS's own CEF**: the pages were checked in Electron 31 and the preview
+  browser. bx.css uses `color-mix` only inside `@supports`.
+- **A live score change on the league site** (see above).
+- A packaged build. `broadcast.js` is in `build.files`; nothing was built.
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
@@ -1740,6 +1903,7 @@ names never read high.
   headlineFont: '',                                     // the headline typeface for every scene (v2.0.0); '' = the profile's default
   views: {                                              // per-overlay text (v0.7.2); everything else is global
     'starting-soon'|'post-match'|'roster'|'brb'|'necc'|'scoreboard'|'standings'|'matchup': { title, subtitle, status },
+    // with the broadcast package (test branch): 'schedule', 'versus', 'cam-<id>'
   },
   socials: { twitch, twitter, instagram, youtube },     // default to "wideneresports" for all four
   teamA, teamB: { name, tag, color, colorAlt, logoUrl, players: [{name, gamertag}] },
@@ -1761,6 +1925,10 @@ new state fields.
 
 - Dev server: `node app/server.js` (or the `stream-app-dev` launch.json
   config, port 4311) - fastest iteration loop, no packaging needed.
+- Design review (test branch): `npm run design` in `app/` (launch config
+  `stream-app-design`, port 4313), then `/showcase`. Demo data, its own
+  data folder. `npm run test:broadcast` runs the package's checks against
+  a mock OBS. See the broadcast package section.
 - Full app dev run: `npm start` in `app/` (runs `electron .`).
 - Package: `npm run dist` in `app/` (runs `electron-builder --win --publish never`) →
   `app/dist/Widener-Esports-Stream-Control-Setup-{version}.exe` plus `.blockmap`

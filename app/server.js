@@ -9,6 +9,7 @@ const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
 const { profileId, loadProfile, clientBrand, brandCss } = require('./profile');
+const { createBroadcast } = require('./broadcast');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
@@ -33,10 +34,17 @@ function pageStamp(files) {
   return h.digest('hex').slice(0, 12);
 }
 const PROFILE_FILE = path.join(PROFILE.dir, 'profile.json');
+const OVERLAY_ASSETS_DIR = path.join(__dirname, 'public', 'overlay-assets');
 const PAGE_STAMPS = {
-  overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), PROFILE.theme, PROFILE.themeScript, PROFILE_FILE]),
-  panel: pageStamp(['index.html', 'control.js', 'control.css'].map((f) => path.join(CONTROL_DIR, f)).concat(PROFILE_FILE)),
+  overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), path.join(OVERLAY_ASSETS_DIR, 'bx.js'), path.join(OVERLAY_ASSETS_DIR, 'bx.css'),
+    PROFILE.theme, PROFILE.themeScript, PROFILE_FILE]),
+  panel: pageStamp(['index.html', 'control.js', 'control.css', 'broadcast.js', 'broadcast.css'].map((f) => path.join(CONTROL_DIR, f)).concat(PROFILE_FILE)),
 };
+
+// The broadcast package (see broadcast.js): on for a profile with a
+// `broadcast` block.
+const BX_ON = PROFILE.broadcast.enabled;
+const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`));
 
 function emptyTeam() {
   return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] };
@@ -50,7 +58,7 @@ function emptyTeam() {
 // Everything else (socials, logo, montage, rosters, countdown) stays global -
 // only these three vary per view.
 function defaultViewText() {
-  return {
+  const out = {
     'starting-soon': { title: 'Stream Starting Soon', subtitle: '', status: 'Starting Soon' },
     'post-match': { title: 'Thanks for Watching', subtitle: '', status: 'Stream Ending Soon' },
     'roster': { title: '', subtitle: '', status: '' },
@@ -62,6 +70,14 @@ function defaultViewText() {
     'standings': { title: 'Standings', subtitle: '', status: '' },
     'matchup': { title: 'Head to Head', subtitle: '', status: '' },
   };
+  // The broadcast package's scenes: the week's matches, the matchup, and one
+  // per camera (its label, the place, the badge).
+  if (BX_ON) {
+    out.schedule = { title: 'This Week', subtitle: '', status: '' };
+    out.versus = { title: 'Tonight', subtitle: '', status: 'Matchup' };
+    PROFILE.broadcast.cameras.forEach((c) => { out[`cam-${c.id}`] = { title: c.title, subtitle: c.subtitle, status: 'Live' }; });
+  }
+  return out;
 }
 
 // Match scoreboard (v0.9.0; was the Smash-only `smash` object in v0.8.0).
@@ -249,7 +265,8 @@ function readJsonSafe(file) {
 // app's own install directory lives inside a read-only asar archive.
 function createServer(port, opts = {}) {
   // In dev, each league other than Widener keeps its own app/data/<id>.
-  const dataDir = opts.dataDir || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
+  // STREAM_DATA_DIR points a dev run at another folder (the design demo).
+  const dataDir = opts.dataDir || process.env.STREAM_DATA_DIR || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
   const stateFile = path.join(dataDir, 'state.json');
   const libraryFile = path.join(dataDir, 'library.json');
   const logosDir = path.join(dataDir, 'logos');
@@ -338,8 +355,15 @@ function createServer(port, opts = {}) {
     if (!sb || typeof sb !== 'object') return;
     const picked = {};
     COUNTERS.forEach((k) => { if (sb[k] !== undefined) picked[k] = sb[k]; });
+    const decided = (s) => {
+      const need = Math.ceil((Number(s.bestOf) || 3) / 2);
+      return (Number(s.scoreA) || 0) >= need || (Number(s.scoreB) || 0) >= need;
+    };
+    const was = decided(state.scoreboard);
     state = { ...state, scoreboard: { ...state.scoreboard, ...picked } };
     savePersisted();
+    // The win that decides the series is announced on every scene.
+    if (bx && !was && decided(state.scoreboard)) bx.alertSeriesFinal();
   }
 
   // --- Team + match library (v0.9.0) --------------------------------------
@@ -525,6 +549,7 @@ function createServer(port, opts = {}) {
     collection: PROFILE.obs.collection || `${PROFILE.shortName} Stream`,
     stingerName: `${PROFILE.shortName} Stinger`,
     allNeccTypes: NECC_TYPES,
+    allCameras: PROFILE.broadcast.cameras,
     onProgram: (p) => {
       if (p.key !== 'stats') autoStatsUp = false;
       onAir = { key: p.key, view: p.view, necc: p.necc, scene: p.scene };
@@ -542,6 +567,14 @@ function createServer(port, opts = {}) {
       updateMusic();
     },
   });
+
+  // --- Broadcast package ------------------------------------------------------
+  // The match centre, ticker, pop-ups, lower third and camera windows (see
+  // broadcast.js). Null for a profile without a `broadcast` block.
+  const bx = BX_ON ? createBroadcast({
+    dataDir, profile: PROFILE, readJson: readJsonSafe, writeJson: writeJsonSafe,
+    sendAll: (msg) => sendToAll(msg), cacheLogo, getState: () => state, obs,
+  }) : null;
 
   // --- Background music (v0.11.0) -------------------------------------------
   // Played by OBS through one shared media source (see obs.js). The app's job
@@ -571,6 +604,8 @@ function createServer(port, opts = {}) {
       studioMode: p.studioMode !== false,
       // A build puts the app's scenes in stream order in OBS's list.
       orderScenes: p.orderScenes !== false,
+      // The broadcast package's scenes: all of them until one is unticked.
+      bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k)) : BX_SCENE_KEYS.slice(),
     };
   }
   function savePanelPrefs(patch) {
@@ -578,6 +613,7 @@ function createServer(port, opts = {}) {
     PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
+    if (Array.isArray(patch.bxScenes)) next.bxScenes = BX_SCENE_KEYS.filter((k) => patch.bxScenes.includes(k));
     appSettings = { ...appSettings, panel: next };
     writeJsonSafe(settingsFile, appSettings);
     sendToPanels({ type: 'prefs', prefs: next });
@@ -595,6 +631,8 @@ function createServer(port, opts = {}) {
       neccTypes: NECC_TYPES.filter((t) => prefs.neccTypes.includes(t.key)),
       includeStats: state.scoreboard.style === 'rl',
       leagueScenes: prefs.leagueScenes,
+      broadcastScenes: PROFILE.broadcast.scenes.filter((k) => prefs.bxScenes.includes(k)),
+      cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`)),
       gameCapture: prefs.gameCapture,
       studioMode: prefs.studioMode,
       orderScenes: prefs.orderScenes,
@@ -605,7 +643,7 @@ function createServer(port, opts = {}) {
   let layoutKey = '';
   function syncLayout(quiet) {
     const o = buildOptions();
-    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key)]);
+    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id)]);
     if (key === layoutKey) return;
     layoutKey = key;
     obs.setLayout(o);
@@ -886,6 +924,25 @@ function createServer(port, opts = {}) {
     res.sendFile(path.join(TEMPLATES_DIR, 'overlay.html'));
   });
 
+  // Every scene and pop-up on one page, for reviewing the designs without
+  // OBS (broadcast package).
+  app.use('/showcase', express.static(path.join(__dirname, 'public', 'showcase')));
+  // Design review (dev only, STREAM_DEMO=1, see dev/design-server.js): the
+  // showcase can swap the match on stream between demo games.
+  if (process.env.STREAM_DEMO === '1') {
+    try {
+      require('./dev/demo').attach({
+        app,
+        setMatch: (patch) => {
+          updateState({ ...patch, restartCountdown: true });
+          updateRlActive(); syncLayout(); broadcastState();
+          if (bx) bx.onState();
+        },
+        setSeries: (series) => { rlSeries = series; writeJsonSafe(rlSeriesFile, rlSeries); setRlScreen('game', -1); },
+      });
+    } catch (e) { /* dev/ is not in the installer */ }
+  }
+
   app.get('/api/state', (req, res) => {
     res.json(state);
   });
@@ -935,6 +992,8 @@ function createServer(port, opts = {}) {
         if (upsertTeam({ ...t, players: (t.players || []).filter((p) => p.position >= 0) })) changed = true;
       });
       if (changed) { saveLibrary(); broadcastLibrary(); }
+      // The season this match belongs to joins the match centre's feed.
+      if (bx) bx.followImported(data);
       // A match from this league's own site names the season its game's
       // standings come from.
       if (LEAGUE_ON && data.hostname === LEAGUE_HOST && data.seasonId) {
@@ -1041,6 +1100,45 @@ function createServer(port, opts = {}) {
   app.get('/api/prefs', (req, res) => res.json({ prefs: panelPrefs(), saved: !!appSettings.panel }));
   app.post('/api/prefs', (req, res) => res.json({ prefs: savePanelPrefs(req.body || {}), saved: true }));
 
+  // --- Broadcast routes ---
+  // The panel's Broadcast page. Every change is sent to every page as a
+  // `bx` message; a pop-up goes out as a `bxEvent`.
+  if (bx) {
+    const reply = (res, out) => (out && out.error ? res.status(400).json(out) : res.json({ ok: true, ...(out || {}) }));
+    app.get('/api/bx', (req, res) => res.json(bx.snapshot()));
+    app.put('/api/bx/matches', (req, res) => reply(res, bx.upsertManual(req.body || {})));
+    app.delete('/api/bx/matches/:id', (req, res) => reply(res, bx.removeMatch(req.params.id)));
+    app.post('/api/bx/matches/restore', (req, res) => reply(res, bx.restoreHidden()));
+    app.post('/api/bx/matches/:id/score', (req, res) => reply(res, bx.setScore(req.params.id, req.body || {})));
+    app.post('/api/bx/matches/:id/uncorrect', (req, res) => reply(res, bx.clearCorrection(req.params.id)));
+    // A pop-up: { matchId, kind } for a match, or { title, body, kicker }.
+    app.post('/api/bx/alert', (req, res) => {
+      const b = req.body || {};
+      if (b.matchId) return reply(res, bx.alertMatch(String(b.matchId), b.kind) ? {} : { error: 'No such match' });
+      const title = String(b.title || '').trim().slice(0, 80);
+      if (!title) return reply(res, { error: 'A pop-up needs a title' });
+      bx.alert({ kind: 'note', kicker: String(b.kicker || '').trim().slice(0, 40), title, body: String(b.body || '').trim().slice(0, 140) });
+      reply(res, {});
+    });
+    app.post('/api/bx/lower', (req, res) => reply(res, bx.setLower(req.body || {})));
+    app.post('/api/bx/settings', (req, res) => reply(res, bx.setSettings(req.body || {})));
+    app.post('/api/bx/follows', async (req, res) => {
+      try { reply(res, await bx.follow(String((req.body || {}).url || ''), (req.body || {}).league)); }
+      catch (err) { res.status(502).json({ error: err.message || 'Could not read that link' }); }
+    });
+    app.delete('/api/bx/follows/:id', (req, res) => reply(res, bx.unfollow(req.params.id)));
+    app.post('/api/bx/refresh', async (req, res) => { res.json(await bx.refresh()); });
+    // Cameras: a window over the game, and the device each one uses.
+    app.post('/api/bx/cam', (req, res) => reply(res, bx.setPip(String((req.body || {}).id || ''), (req.body || {}).pip)));
+    app.get('/api/bx/cameras', async (req, res) => {
+      res.json({ connected: obs.isConnected(), cameras: await obs.cameraStatus(bx.cameras).catch(() => []) });
+    });
+    app.post('/api/bx/cameras/:id/device', async (req, res) => {
+      try { await obs.setCameraDevice(req.params.id, String((req.body || {}).device || '')); res.json({ ok: true }); }
+      catch (err) { res.status(502).json({ error: err.message || 'OBS did not accept the device' }); }
+    });
+  }
+
   // --- Remote control routes (v0.12.0, v2.0.0) ---
   // A Stream Deck (through a web-request plugin or Bitfocus Companion), a
   // macro pad, or a script on this PC can keep score, cut OBS to one of the
@@ -1122,6 +1220,7 @@ function createServer(port, opts = {}) {
         ...(scenes.includes('stats') ? [`${base}/stats/game`, `${base}/stats/series`] : []),
         `${base}/score/a/win`, `${base}/score/b/win`, `${base}/score/a/point`, `${base}/score/a/unpoint`,
         `${base}/score/a/stock`, `${base}/score/a/unstock`, `${base}/score/swap`,
+        ...(bx ? bx.cameras.map((c) => `${base}/cam/${c.id}/toggle`).concat(`${base}/lower/hide`) : []),
       ],
     });
   });
@@ -1134,6 +1233,16 @@ function createServer(port, opts = {}) {
     const r = await showRlStats(screen, -1, true);
     remoteReply(res, r.switched ? { screen } : { error: r.error || 'OBS did not switch' });
   });
+  // Broadcast package: a camera window over the game (on, off, toggle), and
+  // the lower third taken down.
+  if (bx) {
+    app.post('/api/remote/cam/:id/:action', (req, res) => {
+      const a = String(req.params.action);
+      if (!['on', 'off', 'toggle'].includes(a)) return remoteReply(res, { error: 'Use on, off or toggle' });
+      remoteReply(res, bx.setPip(String(req.params.id), a === 'toggle' ? 'toggle' : a === 'on'));
+    });
+    app.post('/api/remote/lower/hide', (req, res) => { bx.setLower({ on: false }); remoteReply(res, {}); });
+  }
   app.post('/api/remote/score/swap', (req, res) => remoteReply(res, remoteScore('', 'swap')));
   app.post('/api/remote/score/:team/:action', (req, res) => remoteReply(res, remoteScore(String(req.params.team).toLowerCase(), String(req.params.action))));
 
@@ -1300,6 +1409,7 @@ function createServer(port, opts = {}) {
         ws.send(JSON.stringify({ type: 'rl', rl: rl.snapshot() }));
         ws.send(JSON.stringify(rlSeriesMessage()));
         ws.send(JSON.stringify(leagueMessage()));
+        if (bx) ws.send(JSON.stringify(bx.message()));
         if (ws.role === 'panel') {
           ws.send(JSON.stringify({ type: 'library', library }));
           ws.send(JSON.stringify({ type: 'music', music: musicStatus() }));
@@ -1321,6 +1431,7 @@ function createServer(port, opts = {}) {
         updateRlActive();
         syncLayout();
         broadcastState();
+        if (bx) bx.onState();
         return;
       }
 
@@ -1352,6 +1463,7 @@ function createServer(port, opts = {}) {
   updateMusic();
   wantMusicTrack(false);
   // The current game's standings now, then every few minutes.
+  if (bx) bx.start();
   if (LEAGUE_ON) {
     refreshStandings(state.game).catch(() => {});
     setInterval(() => { refreshStandings(state.game, true).catch(() => {}); }, STANDINGS_EVERY).unref();

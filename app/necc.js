@@ -280,4 +280,131 @@ async function seasonStandings(hostname, leagueId, seasonId) {
   };
 }
 
-module.exports = { importMatch, parseMatchUrl, listSeasons, pickSeason, seasonStandings };
+// --- Season schedule (broadcast package) --------------------------------------
+// The matches of a season, for the match centre's league feed: what the
+// league's schedule page shows. A link to a league site names the league; a
+// season, stage or match link names one season of it.
+
+const LINK_ID = /^[a-z0-9]{12,40}$/i;
+const LINK_KIND = { matches: 'match', seasons: 'season', stages: 'stage' };
+// LeagueOS season and stage states: 0 draft, 1 upcoming, 2 in progress,
+// 3 complete, 4 disabled.
+const STATE_DRAFT = 0;
+const STATE_RUNNING = [1, 2];
+const STATE_DISABLED = 4;
+
+// { hostname, leagueId, seasons: [{ id, name, activity, start, end }] } for a
+// LeagueOS link. A league home page gives every season that is upcoming or
+// running; a season, stage or match link gives that one season.
+async function resolveLeagueLink(input) {
+  let u;
+  try { u = new URL(String(input).trim()); } catch (e) { throw new Error('That does not look like a valid URL.'); }
+  if (!/(^|\.)leagueos\.gg$/i.test(u.hostname)) throw new Error('Not a LeagueOS link.');
+  const segs = u.pathname.split('/').filter(Boolean);
+  const ids = {};
+  let hostname = u.hostname;
+  if (hostname === 'overlays.leagueos.gg' && segs[0] === 'o') {
+    ['league', 'season', 'stage', 'match'].forEach((k, i) => { if (LINK_ID.test(segs[i + 2] || '')) ids[k] = segs[i + 2]; });
+  } else {
+    for (let i = 0; i < segs.length - 1; i++) {
+      const k = LINK_KIND[segs[i]];
+      if (k && !ids[k] && LINK_ID.test(segs[i + 1])) ids[k] = segs[i + 1];
+    }
+  }
+  let leagueId = ids.league || '';
+  let seasonId = ids.season || '';
+  if (ids.match && (!leagueId || !seasonId)) {
+    const m = (await fetchJSON(`${API}/los/matches/${ids.match}`, buildHeaders(hostname))).data || {};
+    leagueId = leagueId || m.leagueId || '';
+    seasonId = seasonId || m.seasonId || m.eventId || '';
+    if (!ids.stage && m.stageId) ids.stage = m.stageId;
+  }
+  if (!leagueId) {
+    const d = (await fetchJSON(`${API}/los/domains?hostname=${encodeURIComponent(hostname)}`, buildHeaders(hostname))).data || {};
+    leagueId = d.leagueId || '';
+  }
+  if (!leagueId) throw new Error(`No LeagueOS league found for ${hostname}.`);
+  if (!seasonId && ids.stage) {
+    const s = (await fetchJSON(`${API}/league/stages/${ids.stage}`, buildHeaders(hostname, leagueId))).data || {};
+    seasonId = s.seasonId || '';
+  }
+  // An overlay link has no league host of its own; the season's pages do.
+  const seasons = await fetchPaged('/league/seasons', hostname, leagueId);
+  const row = (s) => ({
+    id: s.id, name: s.name || '', activity: String(s.stdAct || '').toLowerCase(),
+    start: (Number(s.dateStart) || 0) * 1000, end: (Number(s.dateEnd) || 0) * 1000,
+  });
+  const picked = seasonId ? seasons.filter((s) => s.id === seasonId) : seasons.filter((s) => STATE_RUNNING.includes(s.state));
+  if (!picked.length) throw new Error(seasonId ? 'That season is not listed by the league.' : 'The league has no season that is upcoming or running.');
+  return { hostname, leagueId, seasons: picked.map(row) };
+}
+
+// A team as the match centre shows it, from a stage roster.
+function scheduleTeam(r) {
+  if (!r) return { id: '', name: 'TBD', tag: '', org: '', color: '', colorAlt: '', logoUrl: '' };
+  return {
+    id: r.sourceId || r.id || '', name: r.name || '', tag: r.clanTag || '', org: r.parent ? r.parent.name || '' : '',
+    color: r.color || '', colorAlt: r.colorAlt || '', logoUrl: logoUrl(r),
+  };
+}
+
+// One season's matches between two times (ms): { seasonId, seasonName,
+// activity, matches }. A match is { id, round, start (ms), state, teams: [a,
+// b], wins: [a, b], games, link }. `state` is LeagueOS's own word
+// (scheduled, checkingIn, inProgress, verifying, finished, cancelled, ...);
+// `wins` counts the games each team has won so far. `cache` keeps what
+// rarely changes (the season, its stages and their teams) between calls.
+const SCHEDULE_CACHE_MS = 30 * 60 * 1000;
+async function seasonMatches(hostname, leagueId, seasonId, range, cache) {
+  const c = cache || {};
+  const now = Date.now();
+  const headers = () => buildHeaders(hostname, leagueId);
+  if (!c.season || now - (c.at || 0) > SCHEDULE_CACHE_MS) {
+    c.season = (await fetchJSON(`${API}/league/seasons/${seasonId}`, headers())).data || {};
+    const stages = (await fetchJSON(`${API}/league/seasons/${seasonId}/stages`, headers())).data || [];
+    c.stages = (Array.isArray(stages) ? stages : []).filter((s) => s.state !== STATE_DRAFT && s.state !== STATE_DISABLED);
+    c.rosters = {};
+    c.at = now;
+  }
+  const from = (range && range.from) || 0;
+  const to = (range && range.to) || Infinity;
+  const out = [];
+  for (const s of c.stages) {
+    // A stage that ended before the range, or starts after it, has nothing.
+    const sStart = (Number(s.dateStart) || 0) * 1000;
+    const sEnd = (Number(s.dateEnd) || 0) * 1000;
+    if ((sEnd && sEnd < from) || (sStart && sStart > to)) continue;
+    if (!c.rosters[s.id]) {
+      const rosters = (await fetchJSON(`${API}/league/stages/${s.id}/rosters`, headers())).data || [];
+      c.rosters[s.id] = new Map((Array.isArray(rosters) ? rosters : []).map((r) => [r.sourceId || r.id, r]));
+    }
+    const byId = c.rosters[s.id];
+    const rows = await fetchPaged(`/league/stages/${s.id}/matches`, hostname, leagueId);
+    rows.forEach((m) => {
+      const start = (Number(m.date) || 0) * 1000;
+      if (!start || start < from || start > to) return;
+      const ids = Array.isArray(m.teamIds) ? m.teamIds : [];
+      if (ids.length !== 2) return;
+      const wins = {};
+      let games = 0;
+      (m.games || []).forEach((g) => {
+        const won = g.winnerIds || [];
+        if (won.length || Object.keys(g.scores || {}).length) games++;
+        won.forEach((id) => { wins[id] = (wins[id] || 0) + 1; });
+      });
+      out.push({
+        id: m.id, round: m.roundName || '', stage: s.name || '', start, state: String(m.state || ''),
+        teams: ids.map((id) => scheduleTeam(byId.get(id))),
+        wins: ids.map((id) => wins[id] || 0), games,
+        bestOf: m.matchFormat === 'bestOf' ? Number(m.matchGameCount) || 0 : 0,
+        link: m.urlV1 || `https://${hostname}/league/matches/${m.id}`,
+      });
+    });
+  }
+  out.sort((a, b) => a.start - b.start);
+  return {
+    seasonId, seasonName: c.season.name || '', activity: String(c.season.stdAct || '').toLowerCase(), matches: out,
+  };
+}
+
+module.exports = { importMatch, parseMatchUrl, listSeasons, pickSeason, seasonStandings, resolveLeagueLink, seasonMatches };

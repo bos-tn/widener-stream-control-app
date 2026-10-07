@@ -71,16 +71,27 @@
       {"id": "shutters", "name": "Shutters"},
       {"id": "w-shine", "name": "W Shine"},
       {"id": "pride-lions", "name": "Pride Lions"},
-      {"id": "pride-tape", "name": "Pride Tape"}
+      {"id": "pride-tape", "name": "Pride Tape"},
+      {"id": "floodlights", "name": "Floodlights"},
+      {"id": "speed-lines", "name": "Speed Lines"}
     ],
     "defaults": {
       "starting-soon": "varsity-stripes",
       "roster": "shutters",
-      "brb": "w-shine",
+      "brb": "floodlights",
       "post-match": "pride-tape",
       "necc": "pride-lions",
-      "stats": "stripes"
+      "stats": "stripes",
+      "schedule": "floodlights",
+      "versus": "speed-lines"
     }
+  },
+  "broadcast": {
+    "scenes": ["schedule", "versus"],
+    "cameras": [
+      {"id": "crowd", "label": "Crowd Cam", "title": "Crowd Cam", "subtitle": "Widener Esports Arena"},
+      {"id": "room", "label": "Comp Room", "title": "Comp Room", "subtitle": "Widener Esports Arena"}
+    ]
   },
   "defaults": {
     "montage": true

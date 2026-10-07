@@ -5,6 +5,10 @@
 <title>Stream Overlay</title>
 <!-- The league's brand (v1.0.0): window.BRAND, from the app's profile. -->
 <script src="/brand.js"></script>
+<!-- The broadcast package (a profile with a `broadcast` block): its own layer
+     of scenes, ticker and pop-ups, styled by bx.css and built by bx.js. The
+     class is set before the first paint, so the older frame never shows. -->
+<script>if (window.BRAND && window.BRAND.broadcast) document.documentElement.classList.add('bx');</script>
 <style>
   /* Fonts ship with the app (v0.9.0). They used to load from Google Fonts,
      so a slow or dropped campus connection swapped in a fallback font on
@@ -791,6 +795,7 @@
   .h2h-row b.dim{ font-weight:600; color:var(--muted); }
   .h2h-row span{ text-align:center; font-weight:700; font-size:14px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
 </style>
+<link rel="stylesheet" href="/overlay-assets/bx.css">
 <link rel="stylesheet" href="/brand.css">
 <link rel="stylesheet" href="/brand-theme.css">
 </head>
@@ -1008,8 +1013,12 @@
 
 <!-- The league theme's own script (it builds its scene backgrounds). -->
 <script src="/brand-theme.js"></script>
+<!-- The broadcast package's layer. It defines window.BX only for a profile
+     that has it; this page then hands it every state and message. -->
+<script src="/overlay-assets/bx.js"></script>
 <script>
   const $ = sel => document.querySelector(sel);
+  const BX = window.BX || null;
 
   // The league's brand (/brand.js, from the app's profile): name, logo,
   // mascot and team colours. Served from this app, not the
@@ -1111,6 +1120,11 @@
     return m && m.have ? '/montages/' + encodeURIComponent(m.file) : '';
   }
 
+  // With the broadcast package only the two scenes with a video panel play
+  // the video. Every other scene's page leaves it alone, so OBS isn't
+  // decoding it behind a scene that never shows it.
+  function clipWanted(state){ return !BX || ['starting-soon', 'post-match'].includes(lockedView || state.mode); }
+
   // While a montage downloads, a page opened outside OBS (?backdrop=1) says
   // so. On stream the placeholder keeps its usual wording.
   function placeholderNote(state){
@@ -1203,6 +1217,7 @@
       widenerFrame.style.transform = brbStage.style.transform;
       brandBg.style.transform = brbStage.style.transform;
     }
+    if(BX) BX.fit(brbStage.style.transform);
   }
   window.addEventListener('resize', fitBrbStage);
   fitBrbStage();
@@ -1279,13 +1294,15 @@
   let enterTimer = 0;
   function endEntranceLater(){
     clearTimeout(enterTimer);
-    enterTimer = setTimeout(() => document.body.classList.remove('enter'), stingerPoint + 3500);
+    // The broadcast package's entrances run longer (a camera scene's title).
+    enterTimer = setTimeout(() => document.body.classList.remove('enter'), stingerPoint + (BX ? 6500 : 3500));
   }
   function replayEntrance(){
     document.body.classList.remove('enter');
     void document.body.offsetWidth; // reflow, so the animations restart
     document.body.classList.add('enter');
     endEntranceLater();
+    if(BX) BX.onEnter();
   }
   endEntranceLater();
   window.addEventListener('obsSourceActiveChanged', (e) => { if(e.detail && e.detail.active) replayEntrance(); });
@@ -1473,7 +1490,7 @@
     // Before the Rocket League board takes over: a corner box left showing
     // from the game before would sit on top of it.
     sbView.classList.toggle('compact', !isRl && position !== 'top');
-    if(isRl){ renderRlBoard(state); return; }
+    if(isRl){ renderRlBoard(state); if(BX) BX.onBoard(state); return; }
     const colA = safeColor(t.A.team.color, BRAND.teamColors.A);
     const colB = safeColor(t.B.team.color, BRAND.teamColors.B);
     [$('#sb'), $('#sbc')].forEach((box) => {
@@ -1546,6 +1563,8 @@
     $('#sbc-bo').textContent = 'Best of ' + bestOf;
     $('#sb-round').textContent = sm.round || '';
     $('#sbc-round').textContent = sm.round || '';
+    // The broadcast package marks a team one win from the series.
+    if(BX) BX.onBoard(state);
   }
 
   // --- Rocket League live data (v0.11.0) ------------------------------------
@@ -1871,9 +1890,15 @@
     R.players.forEach((p) => grid.appendChild(head(p, R.col)));
     RL_STATS.forEach(([k, label], r) => {
       const pos = (r === 0 ? ' first' : '') + (r === RL_STATS.length - 1 ? ' last' : '');
-      const cell = (p, col) => colour(mk('div', 'rls-cell' + pos + (p === mvp ? ' mvp' : ''), String(Number(p[k]) || 0)), col);
+      // --r is the row, for a theme that brings the rows in one after another.
+      const cell = (p, col) => {
+        const c = colour(mk('div', 'rls-cell' + pos + (p === mvp ? ' mvp' : ''), String(Number(p[k]) || 0)), col);
+        c.style.setProperty('--r', String(r));
+        return c;
+      };
       L.players.forEach((p) => grid.appendChild(cell(p, L.col)));
       const lab = mk('div', 'rls-label' + (r === 0 ? ' first' : ''));
+      lab.style.setProperty('--r', String(r));
       const bar = mk('div', 'rls-bar');
       const a = total(L.players, k), b = total(R.players, k);
       const share = a + b > 0 ? a / (a + b) : 0.5;
@@ -2082,7 +2107,7 @@
     $('#brb-kicker').textContent = gameLine || BRAND.tagline || '';
     $('#ph-title').textContent = vTitle || (textMode === 'roster' ? 'Rosters' : '');
     $('#ph-sub').textContent = seriesLine;
-    applyClip(clipFor(state));
+    applyClip(clipWanted(state) ? clipFor(state) : '');
     placeholderSub.textContent = placeholderNote(state);
     if(state.montage !== undefined) $('#montage-wrap').style.display = state.montage === false ? 'none' : '';
     if(state.layout) applyLayout(state.layout.toLowerCase());
@@ -2110,10 +2135,12 @@
       const isStats = effectiveMode === 'stats';
       const isBoard = effectiveMode === 'scoreboard' || isStats;
       const isLeague = effectiveMode === 'standings' || effectiveMode === 'matchup';
-      widenerFrame.style.display = (isNecc || isBrb || isBoard || isLeague) ? 'none' : '';
+      // With the broadcast package its own layer draws the frame scenes and
+      // Be Right Back; the ones here stay hidden.
+      widenerFrame.style.display = (isNecc || isBrb || isBoard || isLeague || BX) ? 'none' : '';
       sbView.classList.toggle('stats-scene', isStats);
       neccFrame.classList.toggle('active', isNecc);
-      brbView.classList.toggle('active', isBrb);
+      brbView.classList.toggle('active', isBrb && !BX);
       lgView.classList.toggle('active', isLeague);
       if(isLeague){ lgView.dataset.view = effectiveMode; fitBrbStage(); }
       if(isBoard && !sbView.classList.contains('active')){
@@ -2159,6 +2186,7 @@
     renderRlScreens(false);
     renderMatchup(state);
     renderLeague(state);
+    if(BX) BX.onState(state, effectiveMode);
     // An unlocked page that follows OBS replays the entrance as its view
     // changes; a scene's own source hears it from OBS instead.
     if(!lockedView && effectiveMode && effectiveMode !== shownMode){
@@ -2428,7 +2456,8 @@
   // browser source loading /overlay?view=<its view>, which pins the page to
   // that view while every other field (titles, countdown, rosters, scores)
   // still updates live.
-  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard', 'stats', 'standings', 'matchup'];
+  const VIEW_MODES = ['starting-soon', 'post-match', 'roster', 'necc', 'brb', 'scoreboard', 'stats', 'standings', 'matchup']
+    .concat(BX ? BX.views : []);
   // v0.8.0 scene sources point at ?view=smash; keep them working.
   const rawView = params.get('view') === 'smash' ? 'scoreboard' : params.get('view');
   const lockedView = VIEW_MODES.includes(rawView) ? rawView : null;
@@ -2453,6 +2482,19 @@
     return true;
   }
 
+  // What the broadcast package's layer (bx.js) uses of this page: the state
+  // and view, the countdown's end, the video panel, and the helpers that fit
+  // names and colours the same way everywhere.
+  if(BX) BX.init({
+    get state(){ return lastState; },
+    get view(){ return lockedView || (lastState && lastState.mode) || ''; },
+    get countdownEnd(){ return countdownEnd; },
+    get series(){ return rlSeriesData; },
+    lockedView, montage, icons,
+    mediaUrl, safeColor, inkFor, clampInt, mk, pad, fitTeamName, shrinkToFit, shortTeamName, matchNameSizes, recordText, mapName,
+    backdrop: document.body.dataset.backdrop === '1',
+  });
+
   // Live updates from the app's local server. Every page gets the same one
   // state; a locked page picks out its own view.
   (function connect(){
@@ -2465,7 +2507,7 @@
         if (msg.type === 'montages') {
           montageStatus = msg.montages || {};
           if (lastState) {
-            applyClip(clipFor(lastState));
+            applyClip(clipWanted(lastState) ? clipFor(lastState) : '');
             placeholderSub.textContent = placeholderNote(lastState);
           }
         }
@@ -2482,6 +2524,7 @@
           if (lastState) applyState(lastState);
         }
         if (msg.type === 'state') applyState(msg.data);
+        if (BX) BX.onMessage(msg);
       } catch (e) {}
     });
     ws.addEventListener('close', () => setTimeout(connect, 2000));

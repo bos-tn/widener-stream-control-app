@@ -1,0 +1,55 @@
+/* Stream Control: the Broadcast page (test branch). Loaded after control.css
+   and built from its parts (cards, fields, segmented controls); this file
+   only adds what that page needs. */
+
+textarea{
+  width:100%; min-height:72px; padding:9px 11px; resize:vertical; box-sizing:border-box;
+  background:var(--panel-2); color:var(--text); border:1px solid var(--panel-border); border-radius:8px;
+  font:inherit; font-size:.875rem; line-height:1.45;
+}
+textarea:focus{ outline:2px solid var(--focus); outline-offset:1px; }
+textarea::placeholder{ color:var(--placeholder); }
+
+.bx-list{ display:flex; flex-direction:column; gap:8px; }
+.bx-form{ margin-top:14px; padding:12px; border-radius:10px; background:var(--panel-2); border:1px solid var(--panel-border); }
+
+/* One match: what and when, the teams with score steppers, then state,
+   note and actions. */
+.bx-m{ padding:9px 11px 10px; border-radius:10px; background:var(--panel-2); border:1px solid var(--panel-border); }
+.bx-m.home{ box-shadow:inset 3px 0 0 var(--brand-accent); }
+.bx-m.live{ border-color:var(--tally-live); }
+.bx-m.on-stream{ opacity:.72; }
+.bx-m-top{ display:flex; align-items:baseline; gap:10px; font-size:.76rem; color:var(--muted); }
+.bx-m-top b{ color:var(--text); font-weight:700; letter-spacing:.02em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bx-m-top span{ white-space:nowrap; }
+.bx-m-top em{ margin-left:auto; font-style:normal; white-space:nowrap; }
+.bx-m-main{ display:grid; grid-template-columns:minmax(0,1fr) auto auto auto minmax(0,1fr); align-items:center; gap:10px; margin:8px 0; }
+.bx-m-main i{ font-style:normal; color:var(--muted); }
+.bx-m-team{ font-weight:700; font-size:.92rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bx-m-team.a{ text-align:right; }
+.bx-m-step{ display:inline-flex; align-items:center; gap:6px; }
+.bx-m-step b{ min-width:26px; text-align:center; font-size:1.25rem; font-variant-numeric:tabular-nums; }
+.bx-m-foot{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.bx-m-foot .segmented{ flex:0 0 auto; }
+.bx-m-foot .seg-btn{ padding:6px 10px; font-size:.76rem; }
+.bx-m-foot .btn-secondary{ padding:6px 10px; font-size:.76rem; }
+.bx-m.live .seg-btn.active{ background:var(--tally-live); }
+.bx-m-note{ flex:1 1 110px; min-width:90px; padding:6px 9px !important; font-size:.8rem !important; }
+.lib-meta.error{ color:var(--bad); }
+
+/* Lower third: players as chips, each edged in its team's colour. */
+.bx-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.bx-chip{ padding:6px 11px !important; font-size:.8rem !important; box-shadow:inset 3px 0 0 var(--c, var(--brand-primary)); }
+.card.bx-live{ border-color:var(--tally-live); box-shadow:inset 3px 0 0 var(--tally-live); }
+.card.bx-live .card-hint{ color:var(--text); }
+
+/* Cameras: the device and the two things a camera can do. */
+.bx-cam{ padding:9px 11px 10px; border-radius:10px; background:var(--panel-2); border:1px solid var(--panel-border); }
+.bx-cam.on{ border-color:var(--tally-live); box-shadow:inset 3px 0 0 var(--tally-live); }
+.bx-cam-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.bx-cam-head b{ font-size:.92rem; }
+.bx-cam-status{ margin-left:auto; font-size:.76rem; color:var(--muted); }
+.bx-cam-status.warn{ color:var(--attention); }
+.bx-cam-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.bx-cam-row select{ flex:1 1 160px; min-width:0; }
+.bx-cam-row .btn-secondary, .bx-cam-row .btn-accent{ padding:7px 11px; font-size:.8rem; white-space:nowrap; }

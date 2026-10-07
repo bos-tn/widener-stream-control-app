@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scene review</title>
+<link rel="stylesheet" href="/brand.css">
+<script src="/brand.js"></script>
+<style>
+  /* Scene review (broadcast package): every scene of the app on one page,
+     each a live overlay page at 1920 x 1080 scaled into its tile, with
+     buttons that fire the pop-ups. For looking at the designs without OBS.
+     Scenes that are see-through on stream show a stand-in (?backdrop=1). */
+  :root{ --bg:#0a0e17; --panel:#131a29; --panel-2:#0d1420; --line:#242e42; --text:#eaf2ff; --muted:#9fb0cc;
+    --primary:var(--brand-primary, #0054B8); --accent:var(--brand-accent, #F0B310); }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif; }
+  header{ position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px 22px; flex-wrap:wrap; padding:12px 20px; background:rgba(10,14,23,.96); border-bottom:1px solid var(--line); }
+  h1{ margin:0; font-size:1rem; letter-spacing:.04em; text-transform:uppercase; }
+  h1 small{ display:block; margin-top:2px; font-size:.72rem; font-weight:400; letter-spacing:0; text-transform:none; color:var(--muted); }
+  .group{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .group > span{ margin-right:2px; font-size:.7rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  button, a.btn{ padding:7px 11px; border-radius:8px; border:1px solid var(--line); background:#1b2436; color:var(--text); font:inherit; font-size:.8rem; cursor:pointer; text-decoration:none; white-space:nowrap; }
+  button:hover, a.btn:hover{ background:#232f47; }
+  button.on{ background:var(--primary); border-color:var(--primary); }
+  button:focus-visible, a:focus-visible{ outline:2px solid var(--primary); outline-offset:1px; }
+  main{ padding:18px 20px 40px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px; }
+  .tile{ background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .tile-head{ display:flex; align-items:center; gap:8px; padding:8px 10px 8px 12px; }
+  .tile-head b{ font-size:.86rem; }
+  .tile-head span{ font-size:.74rem; color:var(--muted); }
+  .tile-head .sp{ margin-left:auto; }
+  .tile-head button, .tile-head a.btn{ padding:4px 9px; font-size:.74rem; }
+  .frame{ position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; background:#000; cursor:zoom-in; }
+  .frame iframe{ position:absolute; left:0; top:0; width:1920px; height:1080px; border:0; transform-origin:0 0; pointer-events:none; }
+  .note{ margin:0 0 14px; font-size:.82rem; color:var(--muted); line-height:1.5; max-width:1100px; }
+  .note b{ color:var(--text); }
+  /* One scene, as large as the window allows. */
+  .stage{ position:fixed; inset:0; z-index:40; display:none; flex-direction:column; background:rgba(4,7,14,.96); }
+  .stage.open{ display:flex; }
+  .stage-bar{ display:flex; align-items:center; gap:10px; padding:10px 16px; }
+  .stage-bar b{ font-size:.95rem; }
+  .stage-bar .sp{ margin-left:auto; }
+  .stage-box{ position:relative; flex:1 1 auto; overflow:hidden; }
+  .stage-box iframe{ position:absolute; width:1920px; height:1080px; border:0; transform-origin:0 0; background:#000; }
+  #status{ font-size:.76rem; color:var(--muted); min-width:120px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span id="name">Scene review</span><small>Live overlay pages at 1920 x 1080. Click a scene to enlarge it.</small></h1>
+    <div class="group" id="demoGroup" hidden><span>Demo match</span></div>
+    <div class="group"><span>Pop-ups</span>
+      <button type="button" data-pop="score">Score update</button>
+      <button type="button" data-pop="final">Final</button>
+      <button type="button" data-pop="live">Now live</button>
+      <button type="button" data-pop="note">Message</button>
+    </div>
+    <div class="group"><span>Lower third</span>
+      <button type="button" id="lowerBtn">Show</button>
+    </div>
+    <div class="group" id="camGroup"><span>Camera window</span></div>
+    <div class="group">
+      <button type="button" id="replayAll">Replay entrances</button>
+      <a class="btn" href="/control?page=broadcast" target="_blank" rel="noopener">Control panel</a>
+    </div>
+    <span id="status"></span>
+  </header>
+
+  <main>
+    <p class="note" id="note"></p>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <div class="stage" id="stage">
+    <div class="stage-bar">
+      <b id="stageName"></b>
+      <button type="button" id="stageReplay">Replay entrance</button>
+      <a class="btn" id="stageOpen" target="_blank" rel="noopener">Open in a tab</a>
+      <span class="sp"></span>
+      <button type="button" id="stageClose">Close</button>
+    </div>
+    <div class="stage-box" id="stageBox"></div>
+  </div>
+
+<script>
+  const BRAND = window.BRAND || {};
+  const BX = BRAND.broadcast || { scenes: [], cameras: [] };
+  const $ = (id) => document.getElementById(id);
+  document.title = (BRAND.shortName ? BRAND.shortName + ' ' : '') + 'scene review';
+  $('name').textContent = (BRAND.name ? BRAND.name + ': ' : '') + 'scene review';
+
+  // In stream order, as the scenes sit in OBS.
+  const SCENES = [
+    { view: 'starting-soon', name: 'Starting Soon', note: 'Countdown, matchup, highlight video' },
+    ...(BX.scenes.includes('schedule') ? [{ view: 'schedule', name: 'This Week', note: 'Pages turn every 11 s' }] : []),
+    ...(BX.scenes.includes('versus') ? [{ view: 'versus', name: 'Matchup', note: 'Both teams, before the match' }] : []),
+    { view: 'roster', name: 'Rosters', note: 'Starting lineups' },
+    { view: 'scoreboard', name: 'Scoreboard', note: 'Over the game capture' },
+    { view: 'stats', name: 'Game stats', note: 'Rocket League matches only' },
+    ...BX.cameras.map((c) => ({ view: 'cam-' + c.id, name: c.label, note: 'Over the camera' })),
+    { view: 'brb', name: 'Be Right Back', note: 'Series so far, other matches' },
+    { view: 'post-match', name: 'Post-Match', note: 'Result once a score is entered' },
+  ];
+  $('note').innerHTML = BRAND.broadcast
+    ? 'Each tile is the page OBS loads for that scene. Entrances start <b>' + ((BRAND.stinger && BRAND.stinger.transitionPoint) || 0) + ' ms</b> after a scene goes on air, the stinger’s cut point; Replay entrances shows them. Pop-ups and the lower third appear on every tile; a camera window appears on Scoreboard.'
+    : 'This profile has no broadcast package: the scenes below are the standard ones.';
+
+  function status(text) { $('status').textContent = text; clearTimeout(status.t); status.t = setTimeout(() => { $('status').textContent = ''; }, 2500); }
+  function send(method, url, body) {
+    return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
+      .then((r) => r.json()).catch(() => ({ error: 'App not reachable' }));
+  }
+  const post = (url, body) => send('POST', url, body || {});
+  const src = (view) => '/overlay?view=' + encodeURIComponent(view) + '&backdrop=1';
+
+  // --- Tiles ---------------------------------------------------------------
+  const tiles = [];
+  function fit(box, frame) {
+    const s = Math.min(box.clientWidth / 1920, box.clientHeight / 1080);
+    frame.style.transform = 'scale(' + s + ')';
+    frame.style.left = (box.clientWidth - 1920 * s) / 2 + 'px';
+    frame.style.top = (box.clientHeight - 1080 * s) / 2 + 'px';
+  }
+  SCENES.forEach((s) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.innerHTML = '<div class="tile-head"><b></b><span></span><span class="sp"></span><button type="button">Replay</button></div><div class="frame"><iframe loading="lazy" title=""></iframe></div>';
+    tile.querySelector('b').textContent = s.name;
+    tile.querySelector('.tile-head span').textContent = s.note;
+    const box = tile.querySelector('.frame');
+    const frame = tile.querySelector('iframe');
+    frame.title = s.name;
+    frame.src = src(s.view);
+    tile.querySelector('button').addEventListener('click', () => { frame.src = src(s.view); });
+    box.addEventListener('click', () => openStage(s));
+    $('grid').appendChild(tile);
+    tiles.push({ scene: s, box, frame });
+  });
+  function fitAll() { tiles.forEach((t) => fit(t.box, t.frame)); if (stageFrame) fit($('stageBox'), stageFrame); }
+  window.addEventListener('resize', fitAll);
+  new ResizeObserver(fitAll).observe($('grid'));
+  $('replayAll').addEventListener('click', () => { tiles.forEach((t) => { t.frame.src = src(t.scene.view); }); if (stageFrame) stageFrame.src = stageFrame.src; });
+
+  // --- One scene, large ------------------------------------------------------
+  let stageFrame = null;
+  let stageScene = null;
+  function openStage(s) {
+    stageScene = s;
+    $('stageName').textContent = s.name;
+    $('stageOpen').href = src(s.view);
+    $('stageBox').textContent = '';
+    stageFrame = document.createElement('iframe');
+    stageFrame.title = s.name;
+    stageFrame.src = src(s.view);
+    $('stageBox').appendChild(stageFrame);
+    $('stage').classList.add('open');
+    fit($('stageBox'), stageFrame);
+  }
+  function closeStage() { $('stage').classList.remove('open'); $('stageBox').textContent = ''; stageFrame = null; }
+  $('stageClose').addEventListener('click', closeStage);
+  $('stageReplay').addEventListener('click', () => { if (stageFrame) stageFrame.src = src(stageScene.view); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStage(); });
+
+  // --- Pop-ups, lower third, camera windows ---------------------------------------
+  let bx = null;
+  async function load() { bx = await send('GET', '/api/bx'); if (bx.error) bx = null; drawToggles(); }
+  function pick(kind) {
+    const list = (bx && bx.matches) || [];
+    const by = (st) => list.find((m) => m.state === st && !m.onStream);
+    return kind === 'final' ? by('final') : kind === 'live' ? (by('live') || by('upcoming')) : (by('live') || by('final') || list[0]);
+  }
+  document.querySelectorAll('[data-pop]').forEach((b) => b.addEventListener('click', async () => {
+    const kind = b.dataset.pop;
+    if (!bx) await load();
+    let r;
+    if (kind === 'note') r = await post('/api/bx/alert', { kicker: 'Tonight', title: 'Match two starts at 9 PM', body: 'Stay on this stream.' });
+    else {
+      const m = pick(kind);
+      if (!m) { status('No match to show. Add one on the Broadcast page.'); return; }
+      r = await post('/api/bx/alert', { matchId: m.id, kind });
+    }
+    status(r.error ? 'Failed: ' + r.error : 'Pop-up sent');
+  }));
+  $('lowerBtn').addEventListener('click', async () => {
+    if (!bx) await load();
+    const on = !(bx && bx.lower && bx.lower.on);
+    const st = await send('GET', '/api/state');
+    const p = (((st.teamA || {}).players || [])[0]) || {};
+    await post('/api/bx/lower', on
+      ? { on: true, kicker: 'Player spotlight', title: p.gamertag || p.name || 'Player name', sub: [p.gamertag && p.name, (st.teamA || {}).name].filter(Boolean).join(' · '), team: 'A', seconds: 0 }
+      : { on: false });
+    load();
+  });
+  function drawToggles() {
+    $('lowerBtn').textContent = bx && bx.lower && bx.lower.on ? 'Hide' : 'Show';
+    $('lowerBtn').classList.toggle('on', !!(bx && bx.lower && bx.lower.on));
+    const g = $('camGroup');
+    g.querySelectorAll('button').forEach((b) => b.remove());
+    ((bx && bx.cams) || []).forEach((c) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c.label;
+      b.classList.toggle('on', !!c.pip);
+      b.addEventListener('click', async () => { await post('/api/bx/cam', { id: c.id, pip: !c.pip }); load(); });
+      g.appendChild(b);
+    });
+    g.hidden = !bx || !bx.cams.length;
+  }
+
+  // --- Demo matches (the design server only) -----------------------------------------
+  const DEMO_NAMES = { rl: 'Rocket League', val: 'VALORANT', smash: 'Smash crew battle', long: 'Long names', blank: 'No match set' };
+  send('GET', '/api/dev/demo').then((d) => {
+    if (!d || !Array.isArray(d.presets)) return;
+    $('demoGroup').hidden = false;
+    d.presets.forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = DEMO_NAMES[p] || p;
+      b.addEventListener('click', async () => { const r = await post('/api/dev/demo/' + p); status(r.error ? 'Failed: ' + r.error : 'Match: ' + (DEMO_NAMES[p] || p)); });
+      $('demoGroup').appendChild(b);
+    });
+  });
+
+  load();
+  setInterval(load, 4000);
+  fitAll();
+</script>
+</body>
+</html>

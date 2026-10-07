@@ -27,6 +27,13 @@
       "runtimeArgs": ["app/server.js", "--profile=lote"],
       "env": { "PORT": "4321" },
       "port": 4321
+    },
+    {
+      "name": "stream-app-design",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/dev/design-server.js"],
+      "env": { "PORT": "4313" },
+      "port": 4313
     }
   ]
 }
