@@ -3,17 +3,24 @@
 // exporter: a raw TCP stream of concatenated JSON objects, each
 // { Event, Data } with Data as a JSON-encoded string.
 //
-//   node dev/mock-rlstats.js [port] [--fast]
+//   node dev/mock-rlstats.js [port] [--fast] [--player]
 //
 // Then run the app (or `node server.js`) with WIDENER_RL_PORT=<port> if the
 // port isn't 49123, and pick Rocket League as the game. --fast runs the clock
 // at 10x so a whole game, goal replays and the series win go by in under a
-// minute. Not shipped: package.json's build file list leaves dev/ out.
+// minute. --player sends the feed a playing client gets instead of a
+// spectator's: no boost, speed or car state. Commands the app sends
+// ({ Command, Data }) are printed; SetHUDVisibility is tracked as the game
+// would. Not shipped: package.json's build file list leaves dev/ out.
 
 const net = require('net');
 
 const port = Number(process.argv.find((a) => /^\d+$/.test(a))) || 49123;
 const fast = process.argv.includes('--fast');
+const asPlayer = process.argv.includes('--player');
+// The fields the docs mark SPECTATOR.
+const SPECTATOR_ONLY = ['bHasCar', 'Speed', 'Boost', 'bBoosting', 'bOnGround', 'bOnWall', 'bPowersliding', 'bDemolished', 'bSupersonic'];
+let hudVisible = true;
 const RATE = 30;
 const GAME_SECONDS = 300;
 
@@ -61,7 +68,11 @@ function tick() {
   });
   const target = match.players[match.target];
   send('UpdateState', {
-    Players: match.players.map((p) => ({ ...p, Boost: Math.round(p.Boost) })),
+    Players: match.players.map((p) => {
+      const out = { ...p, Boost: Math.round(p.Boost) };
+      if (asPlayer) SPECTATOR_ONLY.forEach((k) => delete out[k]);
+      return out;
+    }),
     Game: {
       Teams: [
         { Name: 'Blue', TeamNum: 0, Score: match.teams[0], ColorPrimary: '1873FF', ColorSecondary: 'E5E5E5' },
@@ -138,8 +149,28 @@ setInterval(() => {
   tick();
 }, 1000 / RATE);
 
+// Commands arrive on the same socket, one JSON object per line.
+function onCommand(line) {
+  let msg;
+  try { msg = JSON.parse(line); } catch (e) { console.log('Command not understood:', line); return; }
+  const data = msg.Data || {};
+  if (msg.Command === 'SetHUDVisibility' && typeof data.bVisible === 'boolean') {
+    if (data.bVisible !== hudVisible) console.log(`HUD ${data.bVisible ? 'shown' : 'hidden'}`);
+    hudVisible = data.bVisible;
+  } else {
+    console.log('Command:', line);
+  }
+}
+
 net.createServer((sock) => {
   clients.add(sock);
+  let pending = '';
+  sock.on('data', (chunk) => {
+    pending += chunk.toString('utf8');
+    const lines = pending.split('\n');
+    pending = lines.pop();
+    lines.filter((l) => l.trim()).forEach(onCommand);
+  });
   sock.on('close', () => clients.delete(sock));
   sock.on('error', () => clients.delete(sock));
-}).listen(port, '127.0.0.1', () => console.log(`Mock Rocket League Stats API on 127.0.0.1:${port}${fast ? ' (fast clock)' : ''}`));
+}).listen(port, '127.0.0.1', () => console.log(`Mock Rocket League Stats API on 127.0.0.1:${port}${fast ? ' (fast clock)' : ''}${asPlayer ? ' (playing, not spectating)' : ''}`));

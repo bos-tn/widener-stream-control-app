@@ -1189,7 +1189,7 @@ const SB_COUNTERS = ['scoreA', 'scoreB', 'lostA', 'lostB', 'swap'];
 function defaultScoreboardConfig() {
   return {
     round: '', unit: 'Game', bestOf: 3, crewSize: 4, stocksEach: 3, showStocks: false, position: 'top',
-    style: 'standard', rlAutoSeries: true, rlPlayers: true, rlBoost: true, rlGameColors: true, rlAutoStats: true,
+    style: 'standard', rlAutoSeries: true, rlPlayers: true, rlBoost: true, rlGameColors: true, rlAutoStats: true, rlHideHud: true,
   };
 }
 function sb() { return (state && state.scoreboard) || { ...defaultScoreboardConfig(), scoreA: 0, scoreB: 0, lostA: 0, lostB: 0, swap: false }; }
@@ -1271,6 +1271,7 @@ function renderScorePanel() {
   setVal($id('sbRlBoostInput'), s.rlBoost !== false);
   setVal($id('sbRlColorsInput'), s.rlGameColors !== false);
   setVal($id('sbRlStatsInput'), s.rlAutoStats !== false);
+  setVal($id('sbRlHudInput'), s.rlHideHud !== false);
   renderRlStatus();
 }
 
@@ -1278,7 +1279,7 @@ function renderScorePanel() {
   ['sbCrewInput', 'crewSize', (v) => clampInt(v, 1, 8, 4)], ['sbStocksInput', 'stocksEach', (v) => clampInt(v, 1, 5, 3)]]
   .forEach(([id, key, fn]) => onCommit($id(id), (el) => ({ scoreboard: { [key]: fn(el.value) } })));
 [['sbShowStocksInput', 'showStocks'], ['sbRlAutoInput', 'rlAutoSeries'], ['sbRlPlayersInput', 'rlPlayers'], ['sbRlBoostInput', 'rlBoost'],
-  ['sbRlColorsInput', 'rlGameColors'], ['sbRlStatsInput', 'rlAutoStats']]
+  ['sbRlColorsInput', 'rlGameColors'], ['sbRlStatsInput', 'rlAutoStats'], ['sbRlHudInput', 'rlHideHud']]
   .forEach(([id, key]) => onCommit($id(id), (el) => ({ scoreboard: { [key]: el.checked } })));
 
 function sendScore(counters) {
@@ -1383,7 +1384,10 @@ function renderRlStatus() {
     dot = 'connected';
     const [blue, orange] = rlSnap.teams;
     text = `In a match: Blue ${blue ? blue.score : 0} - ${orange ? orange.score : 0} Orange, ${fmtClock(rlSnap.clock, rlSnap.overtime)}`;
-    if (!rlSnap.target) sub = 'No spectated player: boost meter hidden.';
+    const notes = [];
+    if (rlSnap.hudHidden) notes.push('Game HUD: hidden.');
+    if (!rlSnap.target) notes.push('No spectated player: boost meter hidden.');
+    sub = notes.join(' ');
   } else if (connected) {
     dot = 'connected';
     text = 'Rocket League: connected';
@@ -1985,7 +1989,7 @@ function connect() {
       rlSnap = msg.rl;
       // Snapshots arrive up to 30 times a second; the status box only needs
       // redrawing when something it shows has changed.
-      const key = (s) => (s ? [s.status, s.inMatch, s.clock, s.overtime, s.target, (s.teams || []).map((t) => t.score).join('-'), (s.players || []).map((p) => p.team + p.name).join()].join('|') : '');
+      const key = (s) => (s ? [s.status, s.inMatch, s.clock, s.overtime, s.target, s.hudHidden, (s.teams || []).map((t) => t.score).join('-'), (s.players || []).map((p) => p.team + p.name).join()].join('|') : '');
       if (key(was) !== key(rlSnap)) renderRlStatus();
     }
     if (msg.type === 'music') renderMusic(msg.music);

@@ -79,8 +79,9 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
+  let server = null;
   app.whenReady().then(() => {
-    const server = createServer(PORT, { dataDir: app.getPath('userData'), documentsDir: app.getPath('documents') });
+    server = createServer(PORT, { dataDir: app.getPath('userData'), documentsDir: app.getPath('documents') });
     server.on('error', (err) => {
       dialog.showErrorBox(
         APP_TITLE,
@@ -100,5 +101,17 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
+  });
+
+  // The app turns Rocket League's HUD off for a spectator (rlstats.js). On
+  // the way out it turns it back on, and the command needs a moment to reach
+  // the game before the process ends.
+  let released = false;
+  app.on('before-quit', (e) => {
+    if (released || !server) return;
+    released = true;
+    if (!server.releaseGame()) return;
+    e.preventDefault();
+    setTimeout(() => app.quit(), 300);
   });
 }

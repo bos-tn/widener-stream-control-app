@@ -75,7 +75,8 @@ function defaultViewText() {
 // the four corners use the compact box, for games whose own HUD owns the top.
 // `style: 'rl'` (v0.11.0) swaps in the Rocket League board, which reads the
 // game itself (see rlstats.js): live goals and clock, player boost bars, and
-// the boost meter. The rl* flags turn its parts on and off.
+// the boost meter. The rl* flags turn its parts on and off; rlHideHud has the
+// app turn the game's own HUD off for a spectator while the board is in use.
 const SCOREBOARD_POSITIONS = ['top', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
 const SCOREBOARD_STYLES = ['standard', 'rl'];
 function defaultScoreboard() {
@@ -98,6 +99,7 @@ function defaultScoreboard() {
     rlBoost: true,
     rlGameColors: true,
     rlAutoStats: true,
+    rlHideHud: true,
   };
 }
 
@@ -717,8 +719,13 @@ function createServer(port, opts = {}) {
     },
   });
   let lastRlMusicKey = '';
+  // While the Rocket League board is in use, the game's own HUD is taken off
+  // a spectating client's screen (the board's rlHideHud setting): the board
+  // replaces it. rlstats.js gives it back when either stops being true.
   function updateRlActive() {
-    rl.setActive(state.scoreboard.style === 'rl');
+    const sb = state.scoreboard;
+    rl.setActive(sb.style === 'rl');
+    rl.setHideHud(sb.style === 'rl' && sb.rlHideHud !== false);
   }
 
   // --- Rocket League series record and the Stats scene ---------------------
@@ -1247,6 +1254,9 @@ function createServer(port, opts = {}) {
   // Closing the returned server closes every listener.
   const closeFirst = server.close.bind(server);
   server.close = (cb) => { rl.close(); servers.slice(1).forEach((s) => { try { s.close(); } catch (e) {} }); return closeFirst(cb); };
+  // For the app as it quits: drops the game feed, and says whether the game
+  // was sent its HUD back (main.js then waits a moment before exiting).
+  server.releaseGame = () => rl.close();
 
   // Every page subscribes as a 'panel' (the control panel, in the app window
   // or an OBS dock) or an overlay (every scene's browser source).

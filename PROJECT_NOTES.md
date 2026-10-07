@@ -1,7 +1,7 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.0.0**. If you're starting a new chat, read the
+updated through **v2.1.0**. If you're starting a new chat, read the
 v2.0.0 section first: it changed the app's whole model (OBS first, one state,
 no Push Live), so much of the history below describes things that are gone.
 The later sections are a history: each one records why something is the way
@@ -755,7 +755,8 @@ meter in the bottom right.
   single-colour silhouette rather than a faded colour logo.
 - **Long team names** (all scoreboard layouts): `fitTeamName()` drops a
   trailing "University" only when the full name overflows its box. It
-  measures live, so it re-runs once the real font has loaded.
+  measures live, so it re-runs once the real font has loaded. (Rebuilt in
+  v2.1.0: see that section.)
 - **Series length from NECC.** `importMatch()` now returns `bestOf` from the
   match's own `matchFormat`/`matchGameCount` (no extra request; verified
   against a real NECC match: `bestOf`, 5). Only odd best-of counts are used.
@@ -1571,6 +1572,152 @@ rc.2's; only the version changed.
   Rocket League stats auto-cut test on the LotE build. **Still not run
   against a real OBS or the real game.**
 
+## v2.1.0: game HUD off for a spectator, board at the top edge, name fitting
+
+The user, 2026-10-06: review the latest Stats API functions and have the
+game's HUD turn off by itself in spectator mode while the scoreboard is
+running; the scoreboard should touch the top of the screen; and a full bug
+test of team-name overflow on the scoreboards ("sometimes the ... comes out
+in weird spots, like when gold is after widener university"). Released the
+next day as v2.1.0 (the user: "Push this as a minor update, make sure the
+auto updater grabs it too"); see Release at the end of this section.
+
+### Stats API (docs re-read 2026-10-06, game v2.72 from August 2026)
+
+- v2.72 made the feed two-way. **Commands** go to the game on the same
+  socket, `{ "Command": name, "Data": { ... } }`: `SetHUDVisibility
+  {bVisible}`, `ChangePOV {Focus, Perspective}` (spectator and replay),
+  `SetMatchPaused {bPaused}`, and for saved replays `LoadReplay`,
+  `SeekReplay`, `SetGameSpeed`. It also added a real WebSocket on `WebPort`
+  (49124); the app stays on the TCP `Port`.
+- Events and fields the app does not use: `BallHit`, `BoostPickup`,
+  `CrossbarHit`, `StatfeedEvent`, `PlayerJoined`/`PlayerLeft`,
+  `GoalReplayWillEnd`, `PodiumStart`, `ReplayCreated`; per player `Loadout`,
+  `PickupClass`, `Attacker`, `PrimaryId`; `Game.PlaylistId`, `Frame`,
+  `Elapsed`.
+- The docs give no wire detail for commands. Two public clients send them the
+  way `rlstats.js` now does: `Data` as an object (events arrive with `Data` as
+  a string), one object per write. RLGymStream (Rolv-Arild, a live Rocket
+  League broadcast) ends each with a newline and re-sends the HUD command on
+  connect, `MatchCreated` and `CountdownBegin`; DevJMD's TypeScript client
+  sends no newline. The app sends the newline.
+- **Speeds may already be km/h.** RLGymStream treats `Speed` and `GoalSpeed`
+  as km/h with no conversion, and the docs' own `GoalScored` example has
+  `GoalSpeed: 87.3`. That would explain the goal banner's speed being
+  "always wrong" in v0.11.0 (`UU_TO_KPH` multiplies it by 0.036). Not
+  changed: the banner still leaves the speed off, and it needs one real game
+  to confirm before `kph` is trusted.
+
+### Game HUD (`rlstats.js`, `server.js`, `main.js`)
+
+- `scoreboard.rlHideHud` (default on; "Hide game HUD while spectating" in
+  Scoreboard settings). `updateRlActive()` calls `rl.setHideHud(style === 'rl'
+  && rlHideHud !== false)`. Not tied to the Scoreboard scene being on air:
+  OBS's preview shows the scene too, and `state.mode` goes stale without OBS.
+- **Spectating** is read from the feed: the docs mark boost, speed and car
+  state SPECTATOR ("only sent while spectating"), so any player carrying one
+  means this client is spectating. It is sticky: it outlives a match (the HUD
+  stays off between the games of a series) and only drops after 3 s of live
+  states without those fields (`SPECTATOR_LOST_MS`), so replays or a few odd
+  states never flash the HUD back. A playing client never gets a command.
+- `syncHud()` sends hide when wanted and spectating, and show as soon as
+  either stops. The hide is repeated on `MatchCreated`, `MatchInitialized` and
+  `CountdownBegin`: nothing says the game keeps the setting across matches.
+  `hudHidden` (what the game was last told) and `spectating` ride on every
+  snapshot; the panel's status line shows `Game HUD: hidden.`
+- **Giving it back.** `setActive(false)` writes the show command with
+  `socket.end()` and destroys the socket 500 ms later, so the game reads it
+  before any reset. `close()` returns whether that happened;
+  `server.releaseGame()` exposes it and `main.js` holds `before-quit` for
+  300 ms when it returns true (the app never used to close the server on
+  quit). A socket that is closing ignores further data.
+- `dev/mock-rlstats.js` prints commands, tracks the HUD, and `--player` sends
+  a playing client's feed.
+- Tested with a fake game (scratch script, 52 checks): hide on the first
+  spectator state, exact bytes on the wire, no repeat on plain states, the
+  repeats, setting off and on, match end and next match, replay and short
+  gaps, playing for 3 s, reconnect, deactivate and quit paths, and the same
+  through a real server and panel WebSocket. Then the real panel checkbox
+  against the mock. **Not run against the real game**: whether v2.72 accepts
+  the command exactly as sent is taken from the docs and the two clients above.
+
+### Board at the top edge (`overlay.html`, LotE `theme.css`)
+
+`.sb` (top bar) `top:22px` to 0; the Rocket League board `.rlb` and its player
+rows `.rl-team` `top:18px` to 0; the goal banner follows (186 to 168). LotE's
+bar keeps only its lower corners rounded. The corner boxes keep their inset.
+
+### Team names (`overlay.html`)
+
+Found with a scripted matrix in the preview (about 2,600 names over both
+standard boards, tags, logos, stocks, swap: 97,000 checks; 200 names over the
+stats screens):
+
+- `fitTeamName()` only dropped a **trailing** "University", so "Widener
+  University Gold" went straight to the stylesheet's ellipsis, which cuts
+  wherever the box ends: "WIDENER UNIVERSITY G...". The user's report.
+- Its `scrollWidth > clientWidth + 1` let a name one pixel too wide through to
+  that ellipsis ("FAIRLEIGH DICKINSO..." beside a logo, 344 px in 342).
+- Corner box with stocks: the stocks label lived inside the name's span, so a
+  long name's ellipsis swallowed the count.
+- Stats screens: `renderRlScreens()` drew a screen and then showed it. A
+  hidden screen has no sizes, so a screen switched by the server (game stats
+  to series overview, one `rlSeries` message) showed both names unfitted.
+  Now shown first, then drawn.
+- Stats header: the two names could end up in different sizes (32 px beside
+  42 px).
+- Rocket League board: the tag under a logo was clipped at both ends past
+  about nine letters (LotE's "Misericordia", "Mount Aloysius"); with no logo
+  it spilled out of its 112 px box from about seven letters ("WIDENER"), and
+  a two-word tag wrapped and made the board taller.
+- A corner box left over from the game before stayed on top of the Rocket
+  League board: `renderScoreboard()` returned for the `rl` style before
+  clearing `.compact`. Only on a page that lived through the game change.
+- Fonts: `document.fonts.ready` settles once. A weight first used later (the
+  scoreboard's on a page that was showing another view) never re-fitted.
+  `loadingdone` now re-fits too (`refitText()`).
+
+The fix is one ladder for every team name, `fitTeamName(el, name, {min,
+tag})`, first fit wins: the name as entered; `shortTeamName()` (drops
+"University"/"Univ."/"College" where the rest still names the team,
+"University of X" becomes "X", "York College of Pennsylvania" has no shorter
+form); that in smaller type down to `min` (bar 32 to 24 px, corner box 24 to
+18, stats header 50 to 32); the team's tag (the bar then hides its tag
+label); whole words plus an ellipsis, never ending on "of"/"the"/"and". The
+stylesheet's ellipsis is switched off (`text-overflow: clip`) until the last
+case, one word wider than the box. `matchNameSizes()` gives both teams the
+smaller size. `fitTag()` sizes the Rocket League tags (`shrinkToFit`, then
+the initials). The matchup row and standings use the same ladder without
+`min`. `tooWide()` compares whole pixels with no tolerance: 646 fitting
+names never read high.
+
+### Release (2026-10-07)
+
+- Version 2.1.0: a setting was added, so the minor number moved (it was
+  2.0.1 for a day, never built). Committed on `update/v2.1.0`, fast-forwarded
+  into `master`, tag `v2.1.0`.
+- `npm run dist` builds both installers. Each `.yml` was checked against its
+  installer (sha512, size) and each `app-update.yml` for its channel
+  (`latest`, `lote`).
+- **Packaged smoke test** (scratch script, not in the repo): the server is
+  run out of `app.asar` by the build's own exe with `ELECTRON_RUN_AS_NODE=1`,
+  on a spare port with a temp data folder. It checks the packaged version and
+  profile, that `dev/` and the other league's profile are not shipped, LotE's
+  two fonts, the overlay, panel and brand routes, and the HUD command from a
+  panel WebSocket through to a fake game, including the quit path. Widener 23
+  checks, LotE 27.
+- **Publishing order.** The tag is pushed, the release is created as a
+  **draft** with all six files, and only then published. The updater reads
+  the newest published release, so a release that is public while its files
+  are still uploading can hand an installed app an update file with no
+  installer behind it.
+- **Checking the updater without installing anything.** A throwaway Electron
+  app whose `package.json` says 2.0.0 runs electron-updater with
+  `forceDevUpdateConfig`, `autoDownload = false` and an update config for the
+  channel (`latest`, then `lote`), and prints what `checkForUpdates()` finds.
+  That is the installed app's own code path: GitHub's release feed, the
+  channel's `.yml`, the version comparison.
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
@@ -1593,7 +1740,8 @@ rc.2's; only the version changed.
                 scoreA, scoreB, lostA, lostB, swap,            // counters change via {type:'score'}
                 crewSize, stocksEach, showStocks,
                 style: 'standard'|'rl',                        // v0.11.0
-                rlAutoSeries, rlPlayers, rlBoost, rlGameColors, rlAutoStats },
+                rlAutoSeries, rlPlayers, rlBoost, rlGameColors, rlAutoStats,
+                rlHideHud },                                   // v2.1.0
 }
 ```
 Since v2.0.0 there is one state; `state.json` stores it as both `live` and

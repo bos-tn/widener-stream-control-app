@@ -223,11 +223,12 @@ body[data-mode="roster"] .page-head{ display:flex; }
 
 /* ---- Scoreboard ------------------------------------------------------------
    Square shoulders rounded off, dark score boxes over the team's colour, and
-   the league's purple in the middle. */
+   the league's purple in the middle. The bar sits against the top edge of
+   the screen, so only its lower corners are rounded. */
 
 .sb-team, .sb-team.right{ padding:0 24px; clip-path:none; border-bottom:6px solid var(--c); }
-.sb-team{ border-radius:10px 0 0 10px; }
-.sb-team.right{ border-radius:0 10px 10px 0; }
+.sb-team{ border-radius:0 0 0 10px; }
+.sb-team.right{ border-radius:0 0 10px 0; }
 .sb-team::before{ display:none; }
 .sb-score.side-a, .sb-score.side-b{ background:var(--sb-dark); color:#fff; border-bottom:6px solid var(--c); }
 .sb-mid{ background:var(--lote-purple); border-bottom:6px solid rgba(0,0,0,.28); }

@@ -339,7 +339,9 @@
   .sb-view{ --sb-panel:var(--brand-panel, rgba(9,19,40,.96)); --sb-dark:var(--brand-panel-dark, #050b1a); }
   .sb{
     --a:var(--brand-team-a, #0054B8); --b:var(--brand-team-b, #F0B310); --a-ink:#fff; --b-ink:#111;
-    position:absolute; top:22px; left:50%; transform:translateX(-50%);
+    /* Flush with the top edge: no gap of game above it, and less of the
+       game covered. */
+    position:absolute; top:0; left:50%; transform:translateX(-50%);
     display:grid; grid-template-columns:470px 96px 190px 96px 470px; grid-template-rows:76px auto;
     font-family:'Inter', system-ui, sans-serif; color:var(--text);
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.4));
@@ -368,8 +370,11 @@
   .sb-logo[hidden]{ display:none; }
   .sb-names{ display:flex; flex-direction:column; min-width:0; line-height:1; }
   .sb-team.right .sb-names{ align-items:flex-end; text-align:right; }
-  .sb-tag{ font-weight:700; font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--brand-accent); margin-bottom:6px; }
+  .sb-tag{ font-weight:700; font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--brand-accent); margin-bottom:6px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .sb-tag:empty{ display:none; }
+  /* Team names are fitted by the script (fitTeamName): the ellipsis here is
+     only what is left when one word is wider than the box. */
   .sb-name{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:32px; text-transform:uppercase;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; letter-spacing:.02em; }
   .sb-team.out .sb-name{ opacity:.45; }
@@ -455,9 +460,12 @@
   .sbc-bar{ align-self:stretch; width:8px; background:var(--c); flex-shrink:0; }
   .sbc-logo{ width:38px; height:38px; flex-shrink:0; }
   .sbc-logo[hidden]{ display:none; }
-  .sbc-name{ flex:1 1 auto; min-width:0; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px; text-transform:uppercase;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.02em; }
-  .sbc-name small{ font-family:'Inter', system-ui, sans-serif; font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.06em; margin-left:10px; }
+  /* The name and, beside it, the stocks left. The name alone gives way when
+     the row is short of room, so the count is never cut off with it. */
+  .sbc-name{ flex:1 1 auto; min-width:0; display:flex; align-items:baseline; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:24px;
+    text-transform:uppercase; white-space:nowrap; letter-spacing:.02em; }
+  .sbc-text{ flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .sbc-name small{ flex:none; font-family:'Inter', system-ui, sans-serif; font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.06em; margin-left:10px; }
   .sbc-row.out .sbc-name{ opacity:.45; }
   .sbc-score{ align-self:stretch; width:60px; flex-shrink:0; display:grid; place-items:center;
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:34px; font-variant-numeric:tabular-nums;
@@ -480,7 +488,7 @@
   .sb-view.rl .rl-only{ display:block; }
   .rl-only{ --rl-ink:var(--brand-ink-dark, #071022); --rl-white:#f3f6fb; }
 
-  .rlb{ position:absolute; top:18px; left:50%; transform:translateX(-50%); width:640px;
+  .rlb{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:640px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); animation: rlb-in .5s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rlb-in{ from{ opacity:0; transform:translate(-50%,-24px) } to{ opacity:1; transform:translate(-50%,0) } }
   .rlb-top{ height:34px; display:flex; align-items:center; justify-content:center; gap:14px;
@@ -488,10 +496,12 @@
     font-size:17px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; overflow:hidden; }
   .rlb-top i{ width:2px; height:16px; background:rgba(234,242,255,.35); }
   .rlb-main{ display:grid; grid-template-columns:112px 100px 216px 100px 112px; height:86px; }
-  .rlb-team{ display:grid; place-items:center; background:var(--sb-panel); border-bottom:4px solid var(--c); }
+  .rlb-team{ display:grid; place-items:center; padding:0 6px; background:var(--sb-panel); border-bottom:4px solid var(--c); }
   .rlb-team img{ width:68px; height:68px; object-fit:contain; }
   .rlb-team img[hidden]{ display:none; }
-  .rlb-team b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.02em; }
+  /* The tag stands in for a missing logo. One line, sized to the box by the
+     script (fitTag). */
+  .rlb-team b{ max-width:100%; overflow:hidden; white-space:nowrap; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:30px; letter-spacing:.02em; }
   .rlb-score{ display:grid; place-items:center; background:var(--c); color:var(--ink);
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:64px; line-height:1; font-variant-numeric:tabular-nums; }
   .rlb-score.bump{ animation: sb-bump .6s cubic-bezier(.22,1,.36,1); }
@@ -503,7 +513,7 @@
   .rlb-clock.replay{ background:var(--brand-primary); color:#fff; }
   .rlb-clock.paused{ background:var(--brand-paused, #2c3954); color:#fff; }
   .rlb-foot{ display:grid; grid-template-columns:112px 208px 208px 112px; height:28px; }
-  .rlb-abbr{ display:grid; place-items:center; background:var(--sb-dark); font-family:'Kanit', system-ui, sans-serif;
+  .rlb-abbr{ padding:0 6px; line-height:28px; text-align:center; background:var(--sb-dark); font-family:'Kanit', system-ui, sans-serif;
     font-weight:700; font-size:16px; letter-spacing:.14em; color:var(--brand-soft-text, #c9d6ee); text-transform:uppercase; white-space:nowrap; overflow:hidden; }
   .rlb-pips{ display:flex; align-items:center; gap:6px; padding:0 10px; background:var(--sb-dark); }
   .rlb-pips.left{ justify-content:flex-end; }
@@ -512,7 +522,7 @@
 
   /* Each team's players on its screen edge: name, boost number, boost bar.
      The player the camera follows is filled with the team colour. */
-  .rl-team{ position:absolute; top:18px; width:330px; display:flex; flex-direction:column; gap:3px;
+  .rl-team{ position:absolute; top:0; width:330px; display:flex; flex-direction:column; gap:3px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.4)); transition:opacity .3s, transform .35s cubic-bezier(.22,1,.36,1); }
   .rl-team.left{ left:0; }
   .rl-team.right{ right:0; }
@@ -538,7 +548,7 @@
   .rl-p.dead{ opacity:.4; }
 
   /* Goal banner under the board. */
-  .rl-goal{ position:absolute; top:186px; left:50%; display:flex; align-items:stretch; height:50px;
+  .rl-goal{ position:absolute; top:168px; left:50%; display:flex; align-items:stretch; height:50px;
     transform:translateX(-50%); filter:drop-shadow(0 4px 10px rgba(0,0,0,.45));
     opacity:0; transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); pointer-events:none; }
   .rl-goal.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -581,10 +591,10 @@
     letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .rls-name.win::before{ content:"Winner"; position:absolute; top:-30px; padding:4px 14px; background:var(--brand-accent); color:var(--rl-ink);
     font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:16px; letter-spacing:.2em; text-transform:uppercase; }
-  .rls-logo{ display:grid; place-items:center; background:var(--sb-dark); }
+  .rls-logo{ display:grid; place-items:center; padding:0 8px; background:var(--sb-dark); }
   .rls-logo img{ width:88px; height:88px; object-fit:contain; }
   .rls-logo img[hidden]{ display:none; }
-  .rls-logo b{ font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:36px; }
+  .rls-logo b{ max-width:100%; overflow:hidden; white-space:nowrap; font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:36px; }
   .rls-score{ display:grid; place-items:center; background:var(--c); color:var(--ink); font-family:'Kanit', system-ui, sans-serif;
     font-weight:800; font-size:84px; line-height:1; font-variant-numeric:tabular-nums; }
   .rls-center{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
@@ -1225,12 +1235,17 @@
   }
   // Kanit arrives asynchronously; a width measured against the fallback font
   // would size the headline wrongly, so re-fit once the real font is ready.
-  if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+  function refitText(){
     fitBrbHeadline();
     fitTitle();
     // Team names are fitted against the real font too.
-    if(lastState){ renderScoreboard(lastState); renderMatchup(lastState); renderLeague(lastState); }
-  });
+    if(lastState){ renderScoreboard(lastState); renderRlScreens(false); renderMatchup(lastState); renderLeague(lastState); }
+  }
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(refitText);
+  // A weight is only fetched when something first uses it, which can be
+  // after `ready` has settled (the scoreboard's name weight on a page that
+  // was showing another view), so every later batch of fonts re-fits too.
+  if(document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', refitText);
 
   // A theme can cap the Starting Soon / Post-Match headline at a number of
   // lines (--title-lines in its theme.css): the type steps down until what
@@ -1348,16 +1363,94 @@
     }
   }
 
-  // "Rowan University" becomes "Rowan" when the full name doesn't fit its
-  // box. Only a trailing University is dropped, and only when needed, so
-  // names that fit are shown exactly as entered. Measured live, so it needs
-  // the view visible and the real font loaded (both re-run this).
+  // --- Text that has to fit a one-line box ----------------------------------
+  // Measured live, so all of this needs the view visible and the real font
+  // loaded (a hidden element measures as fitting); both re-run it.
+  // scrollWidth is in whole pixels and never reads high for text that fits.
+  function tooWide(el){ return el.scrollWidth > el.clientWidth; }
+
+  // The type stepped down until the text fits, never below min px. Returns
+  // whether it fits. It only ever shrinks from the stylesheet's size.
+  function shrinkToFit(el, min){
+    el.style.fontSize = '';
+    if(!tooWide(el)) return true;
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    if(!(min < size)) return false;
+    // Straight to about the right size, then down a pixel at a time.
+    size = Math.max(min, Math.min(size - 1, Math.floor(size * el.clientWidth / el.scrollWidth)));
+    el.style.fontSize = size + 'px';
+    while(size > min && tooWide(el)){ size -= 1; el.style.fontSize = size + 'px'; }
+    return !tooWide(el);
+  }
+
+  // A team name without its "University" or "College", where the rest still
+  // names the team: "Rowan University" is "Rowan", "Widener University Gold"
+  // is "Widener Gold", "University of Delaware" is "Delaware". A name with no
+  // shorter form comes back as it is ("York College of Pennsylvania").
   const UNI_SUFFIX = /\s+(University|Univ\.?)\s*$/i;
-  function fitTeamName(el, name, extra){
-    const set = (text) => { el.textContent = text; if(extra) el.appendChild(extra); };
-    set(name);
-    const short = name.replace(UNI_SUFFIX, '').trim();
-    if(short && short !== name && el.scrollWidth > el.clientWidth + 1) set(short);
+  const SCHOOL_WORD = /^(University|Univ\.?|College)$/i;
+  function shortTeamName(name){
+    const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+    const lead = words.length && /^the$/i.test(words[0]) ? 1 : 0;
+    if(/^(University|Univ\.?)$/i.test(words[lead] || '') && /^of$/i.test(words[lead + 1] || '') && words.length > lead + 2){
+      return words.slice(lead + 2).join(' ');
+    }
+    const i = words.findIndex((w, j) => j > 0 && SCHOOL_WORD.test(w) && !/^of$/i.test(words[j + 1] || ''));
+    return i > 0 ? words.filter((w, j) => j !== i).join(' ') : words.join(' ');
+  }
+
+  // A team name in a one-line box. The first of these that fits is shown,
+  // so a name that fits is shown exactly as entered:
+  //   'full'   the name as entered
+  //   'short'  without "University" or "College" (shortTeamName)
+  //   'small'  that shorter name in smaller type, down to opts.min px
+  //   'tag'    the team's short name, opts.tag
+  //   'words'  as many whole words as fit, then an ellipsis
+  //   'cut'    one word wider than the box: the stylesheet's ellipsis
+  // Returns which. Until 'cut' the stylesheet's ellipsis is switched off: it
+  // appears wherever the box ends, mid-word ("Widener University G..."), and
+  // on a name only a fraction of a pixel too wide.
+  const JOINING_WORD = /^(of|the|and|at|for|de|&|-|–|vs\.?)$/i;
+  function fitTeamName(el, name, opts){
+    opts = opts || {};
+    name = String(name || '');
+    const show = (text) => { el.textContent = text; return !tooWide(el); };
+    el.style.fontSize = '';
+    el.style.textOverflow = 'clip';
+    if(show(name)) return 'full';
+    const short = shortTeamName(name);
+    if(short !== name && show(short)) return 'short';
+    if(opts.min && shrinkToFit(el, opts.min)) return 'small';
+    el.style.fontSize = '';
+    if(opts.tag && show(opts.tag)) return 'tag';
+    // Whole words in the smallest type. A cut never ends on a joining word
+    // ("Stevens Institute of...").
+    const base = parseFloat(getComputedStyle(el).fontSize);
+    if(opts.min && opts.min < base) el.style.fontSize = opts.min + 'px';
+    const words = short.split(' ');
+    for(let n = words.length - 1; n >= 1; n--){
+      if(JOINING_WORD.test(words[n - 1])) continue;
+      if(show(words.slice(0, n).join(' ') + '…')) return 'words';
+    }
+    el.textContent = short;
+    el.style.textOverflow = '';
+    return 'cut';
+  }
+
+  // Both teams of a pair in the same type: the smaller of the two sizes.
+  function matchNameSizes(els){
+    const sizes = els.map((e) => parseFloat(e.style.fontSize)).filter((n) => n > 0);
+    if(sizes.length) els.forEach((e) => { e.style.fontSize = Math.min(...sizes) + 'px'; });
+  }
+
+  // A team's tag in a small fixed box (the Rocket League board and stats
+  // header): smaller type as it gets longer, down to min px, then the team's
+  // initials.
+  function fitTag(el, tag, initials, min){
+    el.textContent = tag;
+    if(shrinkToFit(el, min) || !initials || initials === tag) return;
+    el.textContent = initials;
+    shrinkToFit(el, min);
   }
 
   function bump(el){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
@@ -1375,7 +1468,11 @@
       B: { team: state.teamB || {}, score: clampInt(sm.scoreB, 0, 99, 0), lost: clampInt(sm.lostB, 0, total, 0) },
     };
     const isRl = sm.style === 'rl';
+    const position = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(sm.position) ? sm.position : 'top';
     sbView.classList.toggle('rl', isRl);
+    // Before the Rocket League board takes over: a corner box left showing
+    // from the game before would sit on top of it.
+    sbView.classList.toggle('compact', !isRl && position !== 'top');
     if(isRl){ renderRlBoard(state); return; }
     const colA = safeColor(t.A.team.color, BRAND.teamColors.A);
     const colB = safeColor(t.B.team.color, BRAND.teamColors.B);
@@ -1384,8 +1481,6 @@
       box.style.setProperty('--b', colB); box.style.setProperty('--b-ink', inkFor(colB));
     });
     $('#sb').classList.toggle('sb-stocks-hidden', !showStocks);
-    const position = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(sm.position) ? sm.position : 'top';
-    sbView.classList.toggle('compact', position !== 'top');
     $('#sbc').className = 'sbc' + (position !== 'top' ? ' pos-' + position : '') + (sm.round ? ' has-round' : '');
 
     // Swap puts team B on the left (or on top, in the compact box), for when
@@ -1405,8 +1500,14 @@
       const logo = $('#sb' + slot + '-logo');
       if(logoSrc){ if(logo.getAttribute('src') !== logoSrc) logo.src = logoSrc; logo.hidden = false; }
       else { logo.removeAttribute('src'); logo.hidden = true; }
-      $('#sb' + slot + '-tag').textContent = d.team.tag || '';
-      fitTeamName($('#sb' + slot + '-name'), name);
+      // Set first: the tag is a line of the same box the name is fitted to.
+      const tagEl = $('#sb' + slot + '-tag');
+      tagEl.textContent = d.team.tag || '';
+      // A name that is the tag (it had to fall back to it, or was entered
+      // that way) isn't labelled with it too.
+      const nameEl = $('#sb' + slot + '-name');
+      fitTeamName(nameEl, name, { min: 24, tag: d.team.tag });
+      if(nameEl.textContent.trim().toLowerCase() === String(d.team.tag || '').trim().toLowerCase()) tagEl.textContent = '';
       const scoreEl = $('#sb' + slot + '-score');
       scoreEl.className = 'sb-score ' + side;
       scoreEl.textContent = String(d.score);
@@ -1419,16 +1520,19 @@
       const clogo = $('#sbc' + slot + '-logo');
       if(logoSrc){ if(clogo.getAttribute('src') !== logoSrc) clogo.src = logoSrc; clogo.hidden = false; }
       else { clogo.removeAttribute('src'); clogo.hidden = true; }
-      let st = null;
-      if(showStocks){
-        st = document.createElement('small');
-        st.textContent = (total - d.lost) + ' stocks';
-      }
-      fitTeamName($('#sbc' + slot + '-name'), name, st);
+      // The name in its own span, so the stocks left stay whole beside it.
+      const cname = $('#sbc' + slot + '-name');
+      const ctext = mk('span', 'sbc-text');
+      cname.textContent = '';
+      cname.appendChild(ctext);
+      if(showStocks) cname.appendChild(mk('small', '', (total - d.lost) + ' stocks'));
+      fitTeamName(ctext, name, { min: 18, tag: d.team.tag });
       const cscore = $('#sbc' + slot + '-score');
       cscore.textContent = String(d.score);
       if(scoreChanged) bump(cscore);
     });
+    matchNameSizes([$('#sbL-name'), $('#sbR-name')]);
+    matchNameSizes(Array.from($('#sbc').querySelectorAll('.sbc-text')));
     sbPrev.lostA = t.A.lost; sbPrev.lostB = t.B.lost;
     sbPrev.scoreA = t.A.score; sbPrev.scoreB = t.B.score;
 
@@ -1467,6 +1571,10 @@
     return {
       name,
       tag: (team.tag || initials || key).toUpperCase(),
+      // What a small box shows when the tag is too long for it (fitTag).
+      initials: (initials || key).toUpperCase(),
+      // The team's own short name, if it has one (not the initials).
+      short: team.tag || '',
       logo: team.logoUrl ? mediaUrl(team.logoUrl) : '',
       color: safeColor(team.color, BRAND.teamColors[key]),
     };
@@ -1510,8 +1618,12 @@
       });
       setLogo($('#rlb' + slot + '-logo'), $('#rlb' + slot + '-mono'), team);
       // Under a logo, the tag names it; without one the tag is already in
-      // the box, so it isn't repeated.
-      $('#rlb' + slot + '-abbr').textContent = team.logo ? team.tag : '';
+      // the box, so it isn't repeated. Either way it is sized to its box.
+      if(team.logo) fitTag($('#rlb' + slot + '-abbr'), team.tag, team.initials, 11);
+      else {
+        $('#rlb' + slot + '-abbr').textContent = '';
+        fitTag($('#rlb' + slot + '-mono'), team.tag, team.initials, 17);
+      }
       fillPips($('#rlb' + slot + '-pips'), won[i], need, slot === 'L');
     });
     const decided = won[0] >= need || won[1] >= need;
@@ -1519,6 +1631,8 @@
     top.textContent = '';
     const parts = [sm.round, decided ? 'Series final' : 'Game ' + Math.min(won[0] + won[1] + 1, bestOf), 'Best of ' + bestOf].filter(Boolean);
     parts.forEach((part, i) => { if(i) top.appendChild(document.createElement('i')); top.append(part); });
+    // A long round name is set smaller before it would be cut at both ends.
+    shrinkToFit(top, 12);
     renderRl();
     renderRlScreens();
   }
@@ -1713,7 +1827,7 @@
       setLogo(img, mono, t.team);
       const score = mk('div', 'rls-score', String(t.score));
       [name, score].forEach((n) => { n.style.setProperty('--c', t.col); n.style.setProperty('--ink', inkFor(t.col)); });
-      return { name, span, logo, score, team: t.team };
+      return { name, span, mono, logo, score, team: t.team };
     };
     const L = side('L'), R = side('R');
     const center = mk('div', 'rls-center');
@@ -1727,12 +1841,15 @@
       pips.appendChild(span);
     });
     box.append(top, row, pips);
-    // Names are fitted once they're in the page and measurable.
+    // Names and tags are fitted once they're in the page and measurable
+    // (renderRlScreens shows the screen before drawing it). With a logo the
+    // short name can stand in for a long one; without, the logo box already
+    // shows it.
     [L, R].forEach((t) => {
-      fitTeamName(t.span, t.team.name);
-      // Still too long: step the type down before the ellipsis kicks in.
-      for(let size = 50; size > 30 && t.span.scrollWidth > t.span.clientWidth + 1; size -= 2) t.span.style.fontSize = size + 'px';
+      fitTeamName(t.span, t.team.name, { min: 32, tag: t.team.logo ? t.team.short : '' });
+      if(!t.team.logo) fitTag(t.mono, t.team.tag, t.team.initials, 20);
     });
+    matchNameSizes([L.span, R.span]);
   }
 
   // The stats table. L and R are { players, col }; mvp is one player or null.
@@ -1869,19 +1986,20 @@
   function renderRlScreens(cut){
     if(!lastState) return;
     let screen = (lockedView || lastState.mode) === 'stats' ? rlScreenState.screen : 'live';
-    if(screen === 'game'){
-      const idx = rlScreenState.game >= 0 ? rlScreenState.game : rlSeriesData.games.length - 1;
-      if(!renderRlGameScreen(idx)) screen = 'series';
-    }
-    if(screen === 'series') renderRlSeriesScreen();
+    const idx = rlScreenState.game >= 0 ? rlScreenState.game : rlSeriesData.games.length - 1;
+    if(screen === 'game' && !rlSeriesData.games[idx]) screen = 'series';
     const key = screen + ':' + rlScreenState.game + ':' + rlSeriesData.games.length;
     // The first screen just appears; a change while the scene is up wipes in.
     // Set only when the screen changes: clearing it on a later redraw would
     // restart the wipe.
     if(key !== rlShown) ['#rls-game', '#rls-series'].forEach((id) => $(id).classList.toggle('cut', !!cut));
+    // Shown before it is drawn: the team names are measured to fit, and a
+    // screen that is still hidden has no sizes to measure.
     $('#rls-game').classList.toggle('on', screen === 'game');
     $('#rls-series').classList.toggle('on', screen === 'series');
     sbView.classList.toggle('rls-on', screen !== 'live');
+    if(screen === 'game') renderRlGameScreen(idx);
+    if(screen === 'series') renderRlSeriesScreen();
     // Re-run the entrance only when the screen actually changes.
     if(key !== rlShown && screen !== 'live' && !cut){
       const s = $(screen === 'game' ? '#rls-game' : '#rls-series');
@@ -2161,9 +2279,7 @@
       else { logo.removeAttribute('src'); logo.hidden = true; }
       // The full name where it fits, then without "University", then the
       // short name.
-      const nameEl = el.querySelector('.mu-name');
-      fitTeamName(nameEl, t.name);
-      if(t.tag && nameEl.scrollWidth > nameEl.clientWidth + 1) nameEl.textContent = t.tag;
+      fitTeamName(el.querySelector('.mu-name'), t.name, { tag: t.tag });
       el.querySelector('.mu-rec').textContent = recordText(state, t);
       el.querySelector('.mu-score').textContent = scored ? String(score[k]) : '';
       el.classList.toggle('lost', scored && decided && score[k] < score[k === 'A' ? 'B' : 'A']);
@@ -2233,8 +2349,7 @@
         if(s.scored) row.append(mk('span', 'st-num', signed(r.sf - r.sa)));
         col.appendChild(row);
         // The short name where the full one would be cut off.
-        fitTeamName(name, r.name);
-        if(r.tag && name.scrollWidth > name.clientWidth + 1) name.textContent = r.tag;
+        fitTeamName(name, r.name, { tag: r.tag });
       });
     }
   }

@@ -113,7 +113,10 @@ Match page, four steps.
 - **Score**: +1 series win per team, +/− corrections, Swap sides, Reset score
   (two clicks). Crew battles add stock controls.
 - **Scoreboard settings**: score source (Manual or live game data), series
-  unit, position, Rocket League options, stock counter.
+  unit, position, Rocket League options, stock counter. The top bar sits
+  against the top edge of the screen. A team name too long for its box is
+  shortened in this order: without "University" or "College", smaller type,
+  the team's short name, whole words with an ellipsis.
 - **Scenes**: the scenes of the current match with the program scene marked.
   Per scene: title, subtitle, badge, background. Post-Match: countdown length
   and layout. **Put on air** cuts OBS to the scene. A notice lists scenes
@@ -224,7 +227,14 @@ One-time setup:
 1. Score card > **Connect to Rocket League**. Sets `PacketSendRate=30` in
    `Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini`.
 2. Restart Rocket League. The file is read at launch.
-3. Spectate the match with the game's HUD hidden.
+3. Spectate the match.
+
+**Hide game HUD while spectating** (Scoreboard settings, on by default): the
+app sends the Stats API command `SetHUDVisibility` when the game client is
+spectating, and again at each new match and kickoff countdown. Needs game
+v2.72 or later. A client that is playing is left alone. The HUD is turned
+back on when the setting is off, the score source is Manual, or the app
+closes. On an older game version, hide the HUD in the game (default key H).
 
 Blue is the left side. **Swap sides** when Team A is on orange; the panel
 offers it when roster gamertags match the blue team. Auto-count stops once the

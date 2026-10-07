@@ -13,6 +13,14 @@
 // server.js forwards to every overlay. It only connects while something wants
 // it (the scoreboard is set to the Rocket League style), and everything fails
 // soft: no game, no match, or the API turned off just means status 'waiting'.
+//
+// Since game v2.72 (August 2026) the socket is two-way: the game also takes
+// commands, each a JSON object { Command, Data }. The app sends one,
+// SetHUDVisibility, to take the game's own HUD off a spectator's screen while
+// the board is in use (see setHideHud). The others (ChangePOV, SetMatchPaused,
+// LoadReplay, SeekReplay, SetGameSpeed) are not used. v2.72 also added a
+// WebSocket on WebPort (49124) carrying the same feed; this module stays on
+// the TCP port.
 
 const fs = require('fs');
 const net = require('net');
@@ -29,6 +37,10 @@ const EMIT_MS = 33;
 // game ends: the finished game's last packets can still be in flight, and no
 // game starts during the podium.
 const INFER_AFTER_END_MS = 10000;
+// A client that was spectating counts as playing once the feed has gone this
+// long without the spectator-only fields. Not at once: a few states without
+// them must not flash the game's HUD back on.
+const SPECTATOR_LOST_MS = 3000;
 // Ball speed in the feed is in Unreal units/s (1 uu = 1 cm).
 const UU_TO_KPH = 0.036;
 
@@ -178,8 +190,16 @@ function hexColor(c) {
 function playerKey(p) { return p ? `${num(p.TeamNum)}:${num(p.Shortcut)}` : null; }
 function ref(p) { return p && p.Name ? { name: String(p.Name), team: num(p.TeamNum) } : null; }
 
+// The docs mark these player fields SPECTATOR: the game only sends them to a
+// client that is spectating, so one of them on any player says this one is.
+const SPECTATOR_FIELDS = ['Boost', 'Speed', 'bHasCar'];
+function hasSpectatorFields(p) { return SPECTATOR_FIELDS.some((k) => p[k] !== undefined && p[k] !== null); }
+
 function emptySnapshot(status) {
-  return { status, inMatch: false, clock: 300, overtime: false, replay: false, paused: false, winner: -1, arena: '', teams: [], players: [], target: null };
+  return {
+    status, inMatch: false, clock: 300, overtime: false, replay: false, paused: false, winner: -1, arena: '', teams: [], players: [], target: null,
+    spectating: false, hudHidden: false,
+  };
 }
 
 function createRlStats(opts = {}) {
@@ -227,16 +247,52 @@ function createRlStats(opts = {}) {
     else if (!emitTimer) emitTimer = setTimeout(emitNow, wait);
   }
 
+  // --- The game's own HUD ---------------------------------------------------
+  // `hideHud` is what the server asks for (see setHideHud). `spectating`
+  // comes from the feed and outlives a match, so the HUD stays off between
+  // the games of a series. `hudHidden` is what the game was last told: true
+  // from a hide until the show that undoes it, so the HUD is always given
+  // back. Both ride on every snapshot for the panel.
+  let hideHud = false;
+  let spectating = false;
+  let spectatorAt = 0;
+  let hudHidden = false;
+  function blank(status) { return { ...emptySnapshot(status), spectating, hudHidden }; }
+
+  // One object per write with a newline after it. The docs describe no reply,
+  // so a command counts as done once it is written.
+  function encodeCommand(command, data) { return JSON.stringify({ Command: command, Data: data || {} }) + '\n'; }
+  function sendCommand(command, data) {
+    if (!socket || socket.destroyed || snap.status !== 'connected') return false;
+    try { socket.write(encodeCommand(command, data)); return true; } catch (e) { return false; }
+  }
+
+  // Hidden while the server wants it hidden and this client is spectating,
+  // shown again as soon as either stops. `again` repeats a hide already sent:
+  // nothing says the game keeps the setting from one match or kickoff to the
+  // next, and the command is harmless to repeat.
+  function syncHud(again) {
+    const want = hideHud && spectating;
+    if (want === hudHidden && !(want && again)) return;
+    if (!sendCommand('SetHUDVisibility', { bVisible: !want })) return;
+    if (hudHidden === want) return;
+    hudHidden = want;
+    snap = { ...snap, hudHidden };
+    emit();
+  }
+
   function setStatus(status) {
     if (snap.status === status) return;
-    snap = status === 'connected' ? { ...snap, status } : emptySnapshot(status);
+    // Not connected: no game to be spectating, and no HUD of ours to undo.
+    if (status !== 'connected') { spectating = false; hudHidden = false; }
+    snap = status === 'connected' ? { ...snap, status } : blank(status);
     emitNow();
   }
 
   function endMatch() {
     clearTimeout(staleTimer);
     if (!snap.inMatch) return;
-    snap = emptySnapshot(snap.status);
+    snap = blank(snap.status);
     emitNow();
   }
 
@@ -245,6 +301,13 @@ function createRlStats(opts = {}) {
     // MatchCreated) still counts as a match starting.
     if (!snap.inMatch && !(d.Game && d.Game.bHasWinner)) onEvent({ type: 'matchStart' });
     const g = d.Game || {};
+    // Spectating: some player carries the spectator-only fields. A replay
+    // or an empty player list says nothing either way.
+    const now = Date.now();
+    const list = d.Players || [];
+    if (list.some(hasSpectatorFields)) { spectating = true; spectatorAt = now; }
+    else if (g.bReplay || !list.length) spectatorAt = now;
+    else if (now - spectatorAt > SPECTATOR_LOST_MS) spectating = false;
     if (!g.bHasWinner) {
       fresh = true;
       // Ball.TeamNum is the last team to touch the ball, 255 before kickoff.
@@ -255,7 +318,7 @@ function createRlStats(opts = {}) {
       const t = (g.Teams || []).find((x) => num(x.TeamNum) === n) || {};
       return { name: String(t.Name || (n ? 'Orange' : 'Blue')), score: num(t.Score), color: hexColor(t.ColorPrimary), color2: hexColor(t.ColorSecondary) };
     });
-    const players = (d.Players || []).map((p) => ({
+    const players = list.map((p) => ({
       key: playerKey(p),
       name: String(p.Name || ''),
       team: num(p.TeamNum),
@@ -279,7 +342,9 @@ function createRlStats(opts = {}) {
       teams,
       players,
       target: g.bHasTarget && g.Target ? playerKey(g.Target) : null,
+      spectating,
     };
+    syncHud();
     clearTimeout(staleTimer);
     staleTimer = setTimeout(endMatch, STALE_MS);
     emit();
@@ -298,7 +363,7 @@ function createRlStats(opts = {}) {
         if (t > clockMax) clockMax = t;
         break;
       }
-      case 'CountdownBegin': starting('countdown'); break;
+      case 'CountdownBegin': starting('countdown'); syncHud(true); break;
       case 'RoundStarted': starting('round'); break;
       case 'GoalScored': {
         const scorer = ref(d.Scorer);
@@ -334,11 +399,12 @@ function createRlStats(opts = {}) {
       // MatchCreated: the match has loaded (teams created). MatchInitialized:
       // its first kickoff countdown has begun.
       case 'MatchCreated': case 'MatchInitialized':
-        snap = { ...emptySnapshot(snap.status) };
+        snap = blank(snap.status);
         emitNow();
         onEvent({ type: 'matchStart' });
         started = false; clockMax = 0;
         if (msg.event === 'MatchInitialized') starting('countdown');
+        syncHud(true);
         break;
       default: break;
     }
@@ -354,6 +420,8 @@ function createRlStats(opts = {}) {
     s.setNoDelay(true);
     s.on('connect', () => setStatus('connected'));
     s.on('data', (chunk) => {
+      // A socket being closed (see setActive) can still be receiving.
+      if (socket !== s) return;
       framer.push(chunk).forEach((raw) => {
         const msg = decode(raw);
         if (msg) { try { handle(msg); } catch (e) { /* one bad packet never kills the feed */ } }
@@ -373,18 +441,40 @@ function createRlStats(opts = {}) {
     // Connect only while the Rocket League scoreboard is in use.
     setActive(on) {
       on = !!on;
-      if (on === active) return;
+      if (on === active) return false;
       active = on;
-      if (on) { setStatus('waiting'); connect(); return; }
+      if (on) { setStatus('waiting'); connect(); return false; }
       clearTimeout(retryTimer); retryTimer = null;
-      if (socket) { const s = socket; socket = null; s.destroy(); }
+      // The game gets its HUD back on the way out. The command goes out
+      // ahead of the close, and the socket is only torn down once the game
+      // has had time to read it. Returns whether that was needed.
+      const restore = hudHidden && !!socket && !socket.destroyed;
+      if (socket) {
+        const s = socket;
+        socket = null;
+        if (restore) {
+          try { s.end(encodeCommand('SetHUDVisibility', { bVisible: true })); } catch (e) { /* already gone */ }
+          setTimeout(() => s.destroy(), 500).unref();
+        } else {
+          s.destroy();
+        }
+      }
       clearTimeout(staleTimer);
       setStatus('off');
+      return restore;
+    },
+    // Whether the game's own HUD should be off while this client spectates
+    // (the Rocket League board's setting). Turning it off shows the HUD again.
+    setHideHud(on) {
+      hideHud = !!on;
+      syncHud();
     },
     snapshot() { return snap; },
     config() { return configStatus(documentsDir); },
     enable(rate) { return enableConfig(documentsDir, rate); },
-    close() { this.setActive(false); clearTimeout(emitTimer); },
+    // True when the game was sent a last command (its HUD back): the caller
+    // should give it a moment before the process ends.
+    close() { const sent = this.setActive(false); clearTimeout(emitTimer); return sent; },
   };
 }
 
