@@ -2433,6 +2433,42 @@ same steps as v2.1.0 (see its Release section).
   the 2.2.0 installer is run by hand on the user's PC.
 - The six review findings left open are listed in the design.5 section.
 
+### Release checks (2026-10-09)
+
+- Commit `e0724e9` on `test/widener-broadcast`, `master` fast-forwarded to
+  it, annotated tag `v2.2.0`; both branches and the tag pushed. Before the
+  commit: no tracked file holds a camera address or a camera's stream name
+  (a test used one stream's path on 127.0.0.1; it is `cam1` now).
+- Both installers built from a temp copy of the committed tree (outside
+  OneDrive, junction to `app/node_modules`, removed before the copy was
+  deleted), with LotE's two fonts and without `local.json`. `latest.yml`
+  and `lote.yml` matched their installers (sha512, size); each
+  `app-update.yml` named its channel.
+- Packaged smoke tests, the server run out of `app.asar` by the build's own
+  exe against the source tree's mock OBS. **Widener, 27 checks**: design.6's
+  (see that section). **LotE, 23 checks**: version and profile; `dev/`,
+  `build/`, Widener's profile and `local.json` not shipped; both fonts
+  shipped and served; no camera address in a shipped file; update channel
+  `lote`; `broadcast: null` in the brand and no `/api/bx` routes; the panel's
+  four-step markup and script; Studio Mode off on a first run; a scene page
+  and the theme served; a reordered roster served in order; a deciding win
+  scored with no `bx` message sent; a build of its nine scenes in `LotE
+  Stream` with no camera scenes, Studio Mode left alone; 720p30 read as low,
+  refused while streaming, raised by Set 1080p60 with the pages resized.
+- Publishing: draft release with the six files, each upload matched to its
+  local file by size and sha256, then published and marked Latest
+  (2026-10-09 17:39 UTC).
+- The updater, without installing (the throwaway Electron app of the v2.1.0
+  release, with each build's own `app-update.yml`): run as 2.1.0 and as
+  2.0.0, both channels report `update-available` with 2.2.0, the right
+  installer name, size and sha512; run as 2.2.0, both report
+  `update-not-available`. Run as 2.2.0-design.6 it finds nothing ("No
+  published versions on GitHub"), as expected.
+- Both 2.2.0 installers are also in the user's Downloads folder. The user's
+  PC runs design.6 and needs the Widener one run by hand.
+- **Not done:** an actual download and install from an installed 2.1.0 copy;
+  the LotE build in a real OBS; an import through LotE's Match link pane.
+
 ## State shape (server.js `DEFAULT_STATE`)
 
 ```js
