@@ -153,7 +153,8 @@ function seed(dataDir) {
   });
   write(path.join(dataDir, 'rl-series.json'), rlSeries());
   write(path.join(dataDir, 'broadcast.json'), {
-    v: 1, manual: otherMatches(), follows: [], feed: {}, overrides: {}, hidden: [],
+    // defaultsDone: the demo keeps to its own matches, without the profile's league feed.
+    v: 1, manual: otherMatches(), follows: [], feed: {}, overrides: {}, hidden: [], defaultsDone: true,
     settings: { ticker: { on: true, gameplay: false, cams: true, messages: ['Follow /wideneresports on Twitch', 'Home matches are open to students: Widener Esports Arena'] } },
   });
   // The setup guide has nothing to do in a demo.

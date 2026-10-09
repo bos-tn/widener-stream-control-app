@@ -1,8 +1,9 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.1.0**, plus the unreleased broadcast package on the
-`test/widener-broadcast` branch (its own section, near the end). If you're
+updated through **v2.2.0**, which released the broadcast package built on the
+`test/widener-broadcast` branch (the design.1 to design.6 sections and the
+v2.2.0 release section, near the end). If you're
 starting a new chat, read the
 v2.0.0 section first: it changed the app's whole model (OBS first, one state,
 no Push Live), so much of the history below describes things that are gone.
@@ -1888,6 +1889,549 @@ Right Back, Post-Match.
   browser. bx.css uses `color-mix` only inside `@supports`.
 - **A live score change on the league site** (see above).
 - A packaged build. `broadcast.js` is in `build.files`; nothing was built.
+
+## v2.2.0-design.2: link-first match setup, league feed controls, highlight video fix
+
+The user, 2026-10-08, on the test branch: "I want the leagueos link import to
+be a part of the setup, it should be the primary input method, the manual is
+secondary. Next add quality of life stuff, like clear button for all matches
+added to 'follow' section, in case too many are added. Also have default
+'follow' settings for just all widener matches in necc. And do bug testing for
+the montages not playing, sometimes they dont start playing, get it fixed."
+
+Nothing here is committed or pushed. The working tree on
+`test/widener-broadcast` holds it; `master` is untouched. A local Widener
+installer was built from the working tree on 2026-10-08 at the user's request
+("build it for testing") into their Downloads folder; nothing was published.
+
+### What the installed test build showed
+
+The installed design.1 (`%APPDATA%\widener-stream-overlay-app\broadcast.json`,
+1.4 MB) was following **63 NECC seasons**: the league's home page had been
+pasted into Follow, which follows every running season (NECC runs one per game
+and division). 46 of the 63 read as "fetch failed" and 37 matches had been
+removed by hand. Three causes, all fixed below: nothing warned about the size
+of a home-page link, there was no way to clear it, and every read of a season
+re-downloaded every team logo (no "already have it" check in `cacheLogo`), a
+few hundred requests per season per read, all seasons at once.
+
+### Match page (`index.html`, `control.js`, `broadcast.js` in the panel)
+
+- Five steps: **Match**, Game, Teams, Details, Scenes (`STEPS`, default
+  `link`). The Match step holds the link field (the same `neccUrlInput`,
+  `neccFetchBtn`, `neccStatus` elements, moved out of the Teams step), a list
+  of this week's unfinished matches from the league feed with an Import button
+  each (`renderFeedPick` in the panel's broadcast.js; the home team's matches
+  when the feed has any; it sets the field and presses Import, so it is the
+  same import), the match as it stands (`renderMatchNow`) and **Manual
+  setup**, which opens the Game step. Details and Next: Scenes are disabled
+  until both teams are set.
+- The Teams step lost its Match link tab (`showTeamSrc` maps a stored
+  `import` to `library`). The setup guide's last step opens the Match step.
+- My reading of "the setup" was the match setup, not the first-run guide. The
+  guide ends on the Match step, so it leads into the link either way.
+
+### League feed (`necc.js`, `broadcast.js`, `server.js`, `profile.js`)
+
+- **A school is followed, not a league.** LeagueOS has no "matches of this
+  school" call (the guesses `/league/teams/<id>/matches`, `/rosters`,
+  `/league/groups/<id>/matches` are 404). What works:
+  `GET /league/groups/<schoolId>/teams` returns the school's teams, each with
+  `stdAct` (the game) and `leagueData[leagueId].division`; a NECC season is
+  named `<Game> | <Division>`. `schoolSeasons()` maps each team to the running
+  season of its game whose name holds its division as a whole word ("Division
+  I" must not find "Division IV"), and falls back to looking the team up in
+  the rosters of its game's running seasons. Widener: 12 teams, 12 seasons,
+  about 4 s. `resolveLeagueLink()` takes a school (`/league/groups/<id>`) or
+  team (`/league/teams/<id>`) link and returns `school` with the seasons.
+- `store.schools` in `broadcast.json`; a follow carries `school`. The school's
+  seasons are looked up again at start (if older than an hour), every 6 hours
+  and on the panel's Refresh (`resyncSchools`): new ones are added, ones the
+  teams have left or that have ended are dropped.
+- **Default feed.** `profile.json` `broadcast.follow: { links, scope }`.
+  Widener: its NECC school page, scope `home`. A store with no follows and no
+  `defaultsDone` gets it at start, retried every 10 minutes until the league
+  site answers; a store that already follows something is only marked done.
+  `POST /api/bx/follows/default` replaces everything with it and puts the old
+  list back if the site cannot be read.
+- **Clear all**: `DELETE /api/bx/follows` returns what it removed;
+  `POST /api/bx/follows/restore` takes that back (ids and a `*.leagueos.gg`
+  host are checked). `DELETE /api/bx/schools/:id`.
+- **A link with more than 8 new seasons** answers `{ confirm, count, host,
+  ownLink }` and follows nothing until it is sent again with `all: true`. The
+  panel offers "<short name> teams only" (the profile's own link, when the
+  host is the same), Follow all, Cancel.
+- Reads: two seasons at a time (`readMany`), one retry after 1.5 s, the store
+  written once per round (`saveSoon`), new follows read in the background so
+  the panel answers at once. `cacheLogo` keeps a logo it already has.
+- **Scenes get a `bx` message only when what they draw changed.** Each season
+  read changes its "read at" time, and that used to go to every scene's page,
+  which redrew several times a minute. `broadcast()` now compares the part
+  the scenes use; panels still get everything.
+- Panel: League feed sits above the match list, a school is one row that
+  opens to its seasons, more than six loose seasons fold into one row, Add
+  match became "Add match manually" and moved to the end.
+
+### Highlight video not starting: cause and fix (`overlay.html`)
+
+Reproduced in the user's own OBS build without touching their OBS: the
+program folder was copied to a temp folder and run with `--portable --multi
+--remote-debugging-port=9339` (its own config, obs-websocket on 4466, no
+password), the app's server on a spare port with a temp data folder and the
+real downloaded videos. CEF's debugger (`http://127.0.0.1:9339/json`, then
+`Runtime.evaluate` over each page's WebSocket) reads `currentTime`,
+`readyState` and the media events inside each scene's page. A script cut
+between scenes and checked each video. **This is the first run of the scene
+pages in a real OBS** (32.0.4, obs-browser 2.26.3, CEF 127, browser hardware
+acceleration on). The copy was deleted afterwards.
+
+What it showed:
+
+- A scene's page **is** hidden while its scene is off air (`document.hidden`,
+  `visibilitychange`; `obsSourceVisibleChanged` and `obsSourceActiveChanged`
+  arrive at the same moment). Chromium pauses the video-only file by itself.
+- The old code called `play()` on **every state message**, also on a hidden
+  page, and every program scene change is a state message. A video that was
+  paused mid-buffer (`readyState` 2, which happens for an instant at most cuts)
+  then reports `paused: false`, has 14 s buffered ahead, and never decodes
+  another frame, also after the page is shown. Baseline: Starting Soon stuck
+  on 5 of 5 visits, Post-Match on 2 of 5.
+- Without that, resuming a video that had played and been paused while hidden
+  still stopped the same way on 6 of 40 shows ("play, playing, waiting" and
+  no more).
+- A video built as the page shows never stopped (100+ shows) but in some
+  runs took 1.3 to 2 s to start on up to one show in five: the seek to the
+  old position.
+- A video built while hidden, left paused, and played on show: 108 shows, 105
+  started at once, 3 stopped and were rebuilt by the check.
+
+The player now (`syncClip`, `buildClip`, `checkClip`):
+
+- Hidden: the video that was playing is removed (source emptied, so the
+  decoder and connection go) and a new one is built at its position, paused
+  (`clipArmed`). `play()` is never called on a hidden page.
+- Shown: that video is played. A check every 250 ms rebuilds a video that has
+  data buffered past its position, is not seeking, and has shown no new frame
+  for 700 ms; a video with nothing buffered is given 8 s (a slow source;
+  Chromium reports the network idle while it waits, so `networkState` cannot
+  tell the two apart). Each failed rebuild doubles the wait; after three the
+  panel says "Clip failed to load" and the broadcast package shows the mascot
+  artwork instead (`O.clip` in bx.js). It keeps trying, and every message
+  from the server retries at once, so the video returns after the app is
+  restarted.
+- Each rebuild is written with `console.error`, which OBS puts in its own
+  log under the source's name: `[highlight video] rebuilt at 19.4 s: no new
+  frame for 763 ms`.
+- Only the Starting Soon and Post-Match pages load the video, in every
+  profile (it was every page outside the broadcast package), and not at all
+  when the video panel is off.
+
+**OBS opened before the app** was a second cause of blank scenes: the pages
+load Chromium's error page and never try again (`chrome-error://chromewebdata/`
+seen through the debugger; in OBS's log it shows as OBS's own injected script
+failing with "Cannot read properties of null (reading 'appendChild')"). A
+scene's page now names its scene when it subscribes, and four seconds after
+OBS connects the server reloads the sources of scenes with no page connected
+(`reloadMissingPages`, `obs.reloadPages`, the refresh button of the browser
+source). Checked in the rig: three dead pages came back.
+
+### Verified
+
+- `npm run test:broadcast`: 73 checks (55 before). New: the default feed,
+  school seasons, scope, the confirm step, two reads at a time, a school
+  moving to a new season, clear and restore, a refused restore, page reloads.
+  The league site is stood in for by swapping `necc.js`'s exports before the
+  server is required.
+- Live against NECC from a fresh data folder: default feed (Widener
+  University, 12 seasons, no read errors, 12 of the 311 matches kept), Import
+  from the feed list (game, rosters, start time, best of 5, six graphic
+  links), a 51-season confirm, Clear all and Undo, Default feed and Undo.
+- The video: the counts above, plus a game change on air and off air, the
+  panel off and on, a game with no video, and the app stopped for 40 s.
+- League of the East: Match step, no feed list, no Broadcast page, overlay
+  loads clean.
+
+### Local build
+
+Built from a copy of the working tree in a temp folder (outside OneDrive,
+with a junction to `app/node_modules`, removed before the folder was
+deleted). Packaged smoke test, 36 checks, with the server run out of
+`app.asar` by the build's own exe (`ELECTRON_RUN_AS_NODE=1`): version and
+profile, `dev/` and the other league not shipped, the new overlay player and
+panel markup, a first run taking the default feed from the real NECC site
+(Widener University, 12 seasons, 12 home matches that week, no read errors),
+the confirm on the league's home page, Clear all and restore, no logo
+downloaded twice, and a scene page receiving no `bx` message for a feed read
+that changed nothing. That last check found `broadcast(true)` still sending
+to the scenes on a manual Refresh; `force` now applies to panels only.
+
+### Not verified
+
+- The installed build in the user's own OBS: its 63 follows stay until
+  **Default feed** or **Clear all** is pressed.
+- The stinger over a cut to Starting Soon in a real OBS (the rig used Fade).
+- A season rollover on the league site (the resync is tested with a stand-in).
+
+## v2.2.0-design.3: network cameras
+
+The user, 2026-10-09: "I want to add default network connections for the
+cameras [...] integrate this the simplest way to operate possible", with the
+comp room camera's address, then the crowd camera's on a second server (first
+given with port 8554, corrected to "the port for crowd cam is 8889 too").
+Both are MediaMTX servers on the campus network; `:8889/<path>/` is
+MediaMTX's WebRTC page. The addresses themselves are not written here: this
+file is in the public repository (see local.json below).
+
+Nothing is committed or pushed. A local Widener installer was built from the
+working tree on 2026-10-09 at the user's request, into their Downloads
+folder; nothing was published. It carries local.json (the camera defaults).
+Packaged smoke test, 44 checks: the camera defaults packed and applied, both
+cameras' signal read as live from the packaged server, no address in what
+the pages are served, an address cleaned and restored, and the design.2
+checks (default league feed from NECC, clear and restore, 607 logos cached
+and none fetched again on a second read).
+
+### How a camera is set
+
+- A camera has an address or it does not. With one it is a network camera;
+  without, a capture device as before. Nothing else to choose.
+- `profile.js` `cameraLink()` cleans what is typed (no scheme: RTSP on port
+  554 or 8554, otherwise `http://`) and `cameraLinkKind()` sorts it: `page`
+  (http, https), `stream` (rtsp, rtmp, srt, udp, rist, or an `.m3u8`),
+  `device` (none). obs.js has the same two-line rule (`linkKind`).
+- **Defaults are in `profiles/<id>/local.json`, which is gitignored**:
+  `{ "cameras": { "room": "<address>", "crowd": "<address>" } }`, both
+  `http://<server>:8889/<path>/`. The repository is public and
+  neither stream asks for a login, so the addresses were kept out of
+  `profile.json` (my decision; the user asked for defaults, not for where
+  they live). electron-builder packs the file, so an installer built on this
+  PC has them, a public release built here included. `STREAM_NO_LOCAL=1`
+  leaves the file out (the tests use it). A camera's `url` in `profile.json`
+  is still read, for an address that may be public.
+- The operator's own choice is `camLinks` in `broadcast.json`, kept only when
+  it differs from the default ('' is a choice: a capture device).
+  `POST /api/bx/cameras/:id/link { url }` or `{ default: true }`; the server
+  then calls `obs.applyCamera(id)`, which does for one camera what a build
+  does, so a new address is on air without a build.
+- The pages get the cameras' names, not their addresses (`clientBrand`).
+
+### OBS (`obs.js`)
+
+- One input per camera at a time, named by sort: `WU-cam-<id>` (device),
+  `WU-netcam-<id>` (browser source), `WU-stream-<id>` (media source).
+- Page: `url`, canvas size, `shutdown: false` (stays connected off air),
+  `reroute_audio: true` and the input muted (otherwise a page's sound plays
+  out of the PC's speakers into Desktop Audio), and `css` that makes the
+  page and the video transparent, crops the picture to fill
+  (`object-fit: cover`), and hides MediaMTX's `#message` and the player
+  controls. A camera that is down is therefore nothing, not a grey page with
+  an error on it.
+- Stream: `is_local_file: false`, `input`, `buffering_mb: 0`,
+  `reconnect_delay_sec: 2`, `hw_decode`, `close_when_inactive: false`, and
+  `ffmpeg_options: rtsp_transport=tcp` for RTSP.
+- An input whose settings already match is left alone, so a rebuild never
+  drops a connected camera.
+- **Removing an input: remove its scene items, never `RemoveInput`.**
+  Measured in OBS 32 with throwaway inputs: an input is let go of the moment
+  its last scene item is removed. `RemoveInput` only marks the source; a
+  scene drops its items of a marked source only as it is drawn, so an item in
+  a scene that is not on program (the camera's hidden window in the
+  Scoreboard scene) keeps the source alive under its name. It can then be
+  neither created again ("A source already exists by that input name") nor
+  added to a scene ("Tried to add a removed source to a scene" in OBS's log),
+  and one that was offered to a scene stayed until OBS was closed. This cost
+  the first version of the type switch. `removeInput()` walks every scene.
+  `dev/mock-obs.js` now behaves the same way, so the tests would catch it.
+  The older stale-scene removal still calls `RemoveInput` on a scene's page
+  source and then removes the scene, which takes the item with it.
+
+### Signal (`broadcast.js` `probeLink`, `probeRtsp`)
+
+- MediaMTX page: `POST <address>whep` with a body that is not an offer. The
+  path is checked before the offer: 400 when the camera is publishing, 404
+  "no stream is available on path" when it is not. No session is opened.
+  Checked against both servers.
+- RTSP: one `DESCRIBE` over TCP. 200, 404, 401.
+- Anything else: whether the page answers. Other stream schemes: not checked
+  (the row shows OBS's media state instead, `media` in `/api/bx/cameras`).
+- Cached 4 s; the panel asks every 10 s while the Broadcast page is open.
+
+### Panel
+
+Each camera: label, signal (Live in green), the address field (Enter or
+blur), **Default link** when it differs from the default, the device list
+only when there is no address, Show window, Put scene on air.
+
+### Verified in OBS 32 (the portable rig, see the design.2 section)
+
+- A build with the defaults: both cameras as browser sources, 1920 x 1080,
+  playing, restyled, muted. Screenshots of the Comp Room scene (camera under
+  the frame) and of the Scoreboard scene with both windows open.
+- Cutting to each camera scene and away, six times each: the picture was
+  moving within half a second every time (12 of 12). The pages keep
+  receiving while their scene is off air.
+- The stream sort with the comp camera's RTSP address (the same server's port
+  8554): `OBS_MEDIA_STATE_PLAYING`.
+- Seven changes of one camera between page, stream and device: each applied,
+  one input left each time, items in both scenes.
+- `npm run test:broadcast`: 92 checks (73 before), with stand-ins for a
+  MediaMTX page and an RTSP port.
+
+### Not verified
+
+- A capture-device camera in a real OBS (none on the dev PC's rig).
+- The crowd camera could not be reached from the dev PC at first (it timed
+  out on 8554 and 8889) and answered a few minutes later; nothing was changed
+  on this side in between.
+- A camera dropping and coming back during a show (MediaMTX's own page
+  retries; OBS's media source reconnects after 2 s).
+- The installed build in the user's own OBS.
+
+## v2.2.0-design.4: video settings check (Set 1080p60)
+
+The user, 2026-10-09: "Is the app able to set the obs stream settings? Like
+can I have a button that turns the stream to 1080p 60fps if its detected that
+is lower then that?", then "build it." Nothing is committed or pushed, and no
+installer was built. Not specific to the broadcast package: it works for any
+profile, it only sits on this branch because the working tree does.
+
+### What it does
+
+- Build step checklist, one row: `Video: 1920x1080, 60 fps` (green), or the
+  sizes and rate as they are (amber) with **Set 1080p60**. When canvas and
+  output differ: `Video: canvas 1920x1080, output 1280x720, 30 fps`.
+- `obs.js` `videoStatus()`: `{ base, output, fps, ok, locked, bitrate,
+  rescale }`, returned as `video` by `/api/obs/inspect`. Low is a canvas or an
+  output under 1920x1080, or a rate under 59.9 (59.94 passes).
+- `obs.js` `raiseVideo()` (`POST /api/obs/video`): `SetVideoSettings` with
+  only the pairs that are under. A larger canvas is kept (2560x1440 scaled to
+  720p: only the output size is sent), a higher rate is kept. Nothing under:
+  OBS is not asked.
+- A canvas that grew is followed by `refit()`: each of the app's pages gets
+  the new `width`/`height` and is stretched over the canvas, each camera is
+  covered over its scene, a page camera gets the new size. It is not a build:
+  no scene is made, removed or moved. Camera windows over the game are placed
+  each time they are shown, so they need nothing. The game capture is left
+  alone (the app never set its transform).
+- OBS has no event for a changed video setting. The panel asks
+  (`/api/obs/inspect`) when the Build step is shown, after a build, on
+  connect, and when the window gets focus with the Build step open.
+- The bitrate is never written: the right figure depends on the platform and
+  the uplink. Two amber rows, no button, when they apply: Simple output mode's
+  `SimpleOutput/VBitrate` under 6000 kbps once the video row is green, and
+  Advanced mode's stream rescale under 1920x1080.
+
+### Measured in OBS 32.0.4 (the portable rig, obs-websocket 5.6.3)
+
+- A fresh profile is canvas 1920x1080, output 1280x720, 30 fps, Simple mode,
+  6000 kbps. So an untouched OBS reads as low.
+- `SetVideoSettings` takes one pair alone (fps only, output only).
+- While recording: error 500, "Video settings cannot be changed while an
+  output is active." The app returns `{ blocked: 'live' }`; the row reads
+  "Locked while OBS is streaming or recording" with no button. `locked` is
+  read from the stream, record, virtual camera and replay buffer statuses
+  (`GetReplayBufferStatus` is error 604 when the buffer is off: counted as not
+  running). A plugin's output is not in those four, so a 500 also sets
+  `locked` in the reply.
+- **OBS rescales scene items by itself when the canvas changes** (bounds
+  1280x720 became 1920x1080 with no call from the app), but a browser source
+  keeps its own `width`/`height`, so the page would be rendered at 720p and
+  stretched. That is what `refit()` is for. After it the item's transform
+  still reports `scaleX: 1.5` and `width: 2880`: with a bounds type set OBS
+  draws to the bounds, and a screenshot of the scene showed the page filling
+  the canvas.
+- The change is saved in the profile: still 1920x1080 at 60 after a restart.
+- Advanced mode's rescale is `AdvOut/RescaleFilter` (0 is off) and
+  `AdvOut/RescaleRes`. With `3` and `1280x720` set and OBS restarted, the
+  log's `advanced_video_stream` encoder ran at 1280x720 while the video
+  settings said 1920x1080. `AdvOut/Rescale` (the checkbox before OBS 30.1) is
+  read only when `RescaleFilter` is absent. Neither has a default, so a
+  profile that never touched them returns null.
+- Advanced mode's bitrate is in `streamEncoder.json`, which obs-websocket
+  does not expose: `bitrate` is 0 there and nothing is said about it.
+
+### Verified
+
+- `npm run test:broadcast`: 107 checks (92 before). `dev/mock-obs.js` gained
+  `SetVideoSettings` (refused while streaming, pairs enforced),
+  `GetProfileParameter`, `GetVirtualCamStatus`, `GetReplayBufferStatus`, and
+  `state.video` / `state.profile` for a test to set.
+- The panel on the design server against the mock: the amber row, a click on
+  **Set 1080p60**, the green row, the low bitrate row, the locked row, the
+  rescale row. No console errors.
+
+### Not verified
+
+- A canvas change with a capture-device camera or a fitted game capture in a
+  real OBS (the rig has neither). OBS's own rescale should carry a game
+  capture the operator fitted to the old canvas.
+- A real stream: only a recording was used to make OBS refuse the change.
+- Whether the PC and uplink hold 1080p60. The app does not test either.
+
+## v2.2.0-design.5: fixes from the pre-release review
+
+The user, 2026-10-09: "Do one last review and brainstorm for this version
+before we make it the main release". The review (everything since master,
+ten findings) is in that session; the user then asked for four of them and
+one change of their own: "Leave the camera addresses out, give me the
+adresses in a text doc to send to interal users. Do the rest of the 4
+suggested fixes. I want studio mode check box to be unchecked by default."
+Nothing is committed or pushed, no installer was built, and master is
+untouched: the release itself has not been asked for yet.
+
+### Fixed
+
+- **Camera addresses stay out of an installer.** `build/dist.js` adds
+  `!profiles/<id>/local.json` to the files (and `package.json`'s own list has
+  `!profiles/*/local.json`). local.json is now for dev runs only. The
+  addresses are in `Widener camera addresses (internal).txt` at the repo
+  root, gitignored (`*(internal).txt`), with the steps to enter them:
+  Broadcast, Cameras, the address field. An operator's addresses are
+  `camLinks` in the data folder's `broadcast.json` and survive updates.
+  **The installed design.3 build has the defaults packed; the release will
+  not, so that PC's cameras become capture devices until the addresses are
+  entered once.** `dist.js` now exports `profileConfig(id)` and only builds
+  when run directly, so the file list can be checked without a build.
+- **LotE keeps v2.1's Match page.** The link-first step is the broadcast
+  package's (`LINK_FIRST = !!BX` in `control.js`). Without it: four steps,
+  the stepper's link entry removed and renumbered, the link field moved at
+  start-up into the Teams step's **Match link** source (`#importPane`), no
+  Back button on Game. One link field in the HTML, moved, not two.
+- **`weekOf` ends at the next local midnight**, not 168 hours on. The week of
+  2026-10-26 would have dropped a match starting after 11 PM on Sunday
+  2026-11-01 (clocks go back that day). `weekOf` is exported for the test.
+- **Build result names a camera by what it is.** `buildScenes` returns
+  `cameraSources: { <id>: { input, kind } }`. A network camera reads "Network
+  camera source added: WU-netcam-room"; "No device selected" is only said of
+  a capture device.
+- **Studio Mode is off by default** (`p.studioMode === true` in
+  `panelPrefs`, both checkboxes unticked in the HTML). An install that has
+  saved its options before keeps `studioMode: true`, because every save
+  writes every flag and an old default cannot be told from a choice.
+
+### Verified
+
+- `npm run test:broadcast`: 111 checks (107 before).
+- The pack check: the Widener profile packed unpacked (electron-builder
+  `dir` target) into a temp folder with `profileConfig('widener')`:
+  `local.json` not in `app.asar`, `profile.json` in it, `dev/` not in it,
+  and no text file in the archive holds either address.
+- The LotE panel (`stream-app-lote-dev`): Game, Teams, Details, Scenes;
+  Match link, LotE schools, Manual; the link field and Import in the Match
+  link pane; no Broadcast page; no console errors. A LotE scene page loads
+  with no `bx` layer and no errors.
+- The Widener panel (design server): five steps, the link step, Team library
+  and Manual; both Studio Mode boxes unticked; the five build-result lines
+  for a camera (network added, present, device added, no device kind,
+  network not created).
+
+### Local build (2026-10-09, "build an installer")
+
+A Widener installer of design.5, built from a temp copy of the uncommitted
+working tree (outside OneDrive, a junction to `app/node_modules`, removed
+before the copy was deleted), is in the user's Downloads folder:
+`Widener-Esports-Stream-Control-Setup-2.2.0-design.5.exe`. Not published.
+It is a test build, not the 2.2.0 release build: a `-design.N` version never
+auto-updates and no installed copy will update to it.
+
+Packaged smoke test, 25 checks, the server run out of `app.asar` by the
+build's own exe (`ELECTRON_RUN_AS_NODE=1`) against the source tree's mock
+OBS: version and profile; `local.json`, `dev/`, `build/` and LotE not
+shipped; no shipped file holds a camera address; cameras start with no
+address; a first run has Studio Mode off; a build makes both cameras capture
+devices and leaves Studio Mode alone; a fresh OBS reads as low, Set 1080p60
+raises it, a stream blocks it; an entered address makes a network camera,
+is written to the data folder and named as one by the next build; and a
+first run taking the default feed from the real NECC site (12 seasons, 12
+home matches that week, no read errors, the week Monday midnight to Monday
+midnight).
+
+### Left as they are (the other six findings)
+
+- The series-final pop-up goes out the moment the deciding win is clicked,
+  and again if the score is taken back and re-entered.
+- A cached logo is never fetched again; a logo that fails is retried on every
+  read.
+- Clear all and Default feed drop score corrections and removed matches, and
+  Undo does not bring them back.
+- The signal check posts to `<address>/whep` on any http camera address.
+- `reloadMissingPages` runs once, 4 s after OBS connects.
+- **Set 1080p60** makes a smaller canvas 1920x1080 whatever its shape.
+
+### Not verified
+
+- An import through the LotE Match link pane (the handler is the same one;
+  no match was imported, so the dev PC's LotE match and library were left
+  as they were).
+- A LotE installer build from this tree.
+- The design.5 installer run and installed over design.3 on the user's PC.
+
+## v2.2.0-design.6: player order beside the stock counter
+
+The user, 2026-10-09: "smash bros needs to be able to drag roster around
+frequently during the match, when smash bros is selected the roster order
+dragging needs to be easily assessable next to the stock counter". Nothing is
+committed or pushed. A local Widener installer of design.6 was built the
+same day at the user's request ("build an installer") into their Downloads
+folder, the same way as design.5's (temp copy, never published); packaged
+smoke test 27 checks, design.5's 25 plus the Player order script and styles
+being served and a reordered roster being the order `/api/state` gives.
+
+- Why the order matters: the stock counter is one number per team
+  (`lostA`, `lostB`), and stocks are lost down the roster, so the player at
+  index `floor(lost / stocksEach)` is the one on stage, on the panel and on
+  the scoreboard's crew list. In a crew battle who goes next is decided as
+  it is played, so the roster is reordered during the match. Until now that
+  meant the Rosters card further down the Live page: Edit, then a small
+  handle.
+- **Player order**, in each team's column of the Score card, under Lost a
+  stock and Undo, shown with the stock counter (`sb-stock-only`, so any game
+  with it on, not Smash by name). One row per named player: place, name, and
+  Out / On stage · n left / Next / Bench (past Players per team). The "On
+  stage:" line is hidden when a row says it.
+- Drag: `buildOrderList(t)` in `control.js`, pointer events with capture, the
+  whole row is the handle. Not HTML drag and drop (the roster editor's):
+  rows here have no fields to protect, and pointer events do not depend on
+  what an OBS dock does with drag and drop. A drop moves the player in
+  `rosters[t].players` by player, not by index (the working copy may hold a
+  blank row the list leaves out), redraws the roster editor and calls
+  `sendTeam(t)`, the same path as a reorder there. A state update that
+  arrives mid-drag does not redraw the list being dragged (`ordDragging`).
+- Any row can go anywhere. A status belongs to a place, not a player:
+  dragging a waiting player onto the On stage row puts them on stage with
+  that place's stocks.
+
+Verified on the design server with the mouse (Smash preset picked): third to
+first, first to last, and after four lost stocks the third player onto the On
+stage row; the panel, the roster editor and `/api/state` agreed each time.
+With pointer events from a script: a blank row in the working copy kept, a
+click without a move changing nothing, the drop markers, Bench with two
+players per team, and the list gone for a game without the stock counter.
+`npm run test:broadcast` still 111 (the panel has no automated test).
+
+Not verified: in an OBS dock, on a touch screen, or with two panels open.
+
+## v2.2.0: release
+
+The user, 2026-10-09, after installing the design.6 build: "I ran testing,
+everything is good. Push this to main release". The code is design.6's; only
+the version and the README's "test branch" wording changed. Committed on
+`test/widener-broadcast`, fast-forwarded into `master`, tag `v2.2.0`, the
+same steps as v2.1.0 (see its Release section).
+
+- What the release carries, for both profiles: the video settings row and
+  **Set 1080p60**, Studio Mode off by default, the highlight video fix, the
+  reload of scene pages that never loaded, Player order beside the stock
+  counter. For Widener only (its `broadcast` block): the redesigned scenes,
+  This Week, Matchup and the camera scenes, the ticker, pop-ups, the lower
+  third, the league feed, network cameras and the link-first Match page.
+  LotE keeps v2.1's scenes and four-step Match page.
+- No camera address is in either installer or in the repository. Widener's
+  operators enter them once from the internal note (design.5 section).
+- An installed `-design.N` build does not update itself to 2.2.0
+  (electron-updater only follows releases with the same pre-release word):
+  the 2.2.0 installer is run by hand on the user's PC.
+- The six review findings left open are listed in the design.5 section.
 
 ## State shape (server.js `DEFAULT_STATE`)
 

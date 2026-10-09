@@ -91,7 +91,11 @@
     "cameras": [
       {"id": "crowd", "label": "Crowd Cam", "title": "Crowd Cam", "subtitle": "Widener Esports Arena"},
       {"id": "room", "label": "Comp Room", "title": "Comp Room", "subtitle": "Widener Esports Arena"}
-    ]
+    ],
+    "follow": {
+      "links": ["https://necc.v1.leagueos.gg/league/groups/0vzi57y2uxge8qs2vuuvgccvw"],
+      "scope": "home"
+    }
   },
   "defaults": {
     "montage": true

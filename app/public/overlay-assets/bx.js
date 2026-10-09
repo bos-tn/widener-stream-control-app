@@ -492,7 +492,10 @@
     r.sub.textContent = dup ? '' : sub;
     drawMu(r.mu, post && s.any);
     r.next.textContent = state.next || '';
-    const video = state.montage !== false;
+    // With nothing to play (no video for the game, not downloaded yet, or
+    // failed) the artwork takes the panel's place. A page opened outside OBS
+    // keeps the panel: its placeholder shows the download.
+    const video = state.montage !== false && (O.clip || O.backdrop);
     r.video.hidden = !video;
     r.art.hidden = video;
     if (video && O.montage.parentNode !== r.slot) r.slot.appendChild(O.montage);

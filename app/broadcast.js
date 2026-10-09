@@ -10,14 +10,17 @@
 //   { type: 'bx', bx }          the whole picture, on subscribe and on change
 //   { type: 'bxEvent', event }  one pop-up to play now: { kind, match, ... }
 //
-// Stored in <data>/broadcast.json: typed-in matches, followed seasons, the
-// last feed read from each, the operator's corrections to league matches,
-// and the settings. The lower third and the camera windows are not stored:
-// a restart starts with both off.
+// Stored in <data>/broadcast.json: typed-in matches, followed seasons and
+// schools, the last feed read from each season, the operator's corrections
+// to league matches, the settings, and a camera link the operator has set
+// over the profile's. The lower third and the camera windows are not
+// stored: a restart starts with both off.
 
 const path = require('path');
 const crypto = require('crypto');
-const { resolveLeagueLink, seasonMatches } = require('./necc');
+const net = require('net');
+const { resolveLeagueLink, seasonMatches, schoolSeasons } = require('./necc');
+const { cameraLink, cameraLinkKind } = require('./profile');
 
 const DAY = 24 * 60 * 60 * 1000;
 // How often a followed season is read: while one of its matches is due or
@@ -31,6 +34,15 @@ const ACTIVE_AFTER_MS = 5 * 60 * 60 * 1000;
 // A burst of score clicks in the panel is one pop-up, sent this long after
 // the last click.
 const EDIT_ALERT_MS = 2500;
+// Seasons read from the league site at a time. Sixty at once (a whole
+// league's home page, followed) had the site refuse most of them.
+const READ_AT_ONCE = 2;
+// A link that names more seasons than this is not followed until the panel
+// says so.
+const MANY_SEASONS = 8;
+// How often a followed school's seasons are looked up again, so a new
+// season its teams enter is picked up and a finished one dropped.
+const SCHOOL_SYNC_MS = 6 * 60 * 60 * 1000;
 // A camera window is switched in OBS this long after the scenes are told, so
 // the overlay's frame is in place (closed) before the camera appears under
 // it, and closed again before the camera goes.
@@ -62,12 +74,15 @@ function cleanColor(c) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c) ? c : '';
 }
 
-// The week a date falls in, Monday to Sunday, in this PC's time zone.
+// The week a date falls in, Monday to Sunday, in this PC's time zone. Both
+// ends are local midnights: the week the clocks change is 167 or 169 hours.
 function weekOf(now) {
   const d = new Date(now);
-  const mondayOffset = (d.getDay() + 6) % 7;
-  const from = new Date(d.getFullYear(), d.getMonth(), d.getDate() - mondayOffset).getTime();
-  return { from, to: from + 7 * DAY };
+  const monday = d.getDate() - ((d.getDay() + 6) % 7);
+  return {
+    from: new Date(d.getFullYear(), d.getMonth(), monday).getTime(),
+    to: new Date(d.getFullYear(), d.getMonth(), monday + 7).getTime(),
+  };
 }
 
 // LeagueOS's match state as one of ours.
@@ -81,24 +96,41 @@ function leagueState(m) {
 }
 
 // opts: { dataDir, profile, readJson(file), writeJson(file, obj), sendAll(msg),
+//         sendPanels(msg), sendScenes(msg),
 //         cacheLogo(url) -> url, getState() -> the match state, obs }
 function createBroadcast(opts) {
   const { profile, readJson, writeJson, sendAll, cacheLogo, getState, obs } = opts;
+  const sendPanels = opts.sendPanels || sendAll;
+  const sendScenes = opts.sendScenes || (opts.sendPanels ? () => {} : null);
   const file = path.join(opts.dataDir, 'broadcast.json');
   const cameras = profile.broadcast.cameras;
   const homeWord = String(profile.homeTeam || '').trim().toLowerCase();
+  // The profile's own feed (profile.json broadcast.follow): the links a new
+  // install follows, and whose matches it keeps.
+  const defaults = profile.broadcast.follow || { links: [], scope: 'all' };
 
   let store = readJson(file) || {};
   store = {
     v: 1,
     manual: Array.isArray(store.manual) ? store.manual : [],
     follows: Array.isArray(store.follows) ? store.follows : [],
+    schools: Array.isArray(store.schools) ? store.schools : [],
+    defaultsDone: !!store.defaultsDone,
     feed: store.feed && typeof store.feed === 'object' ? store.feed : {},
     overrides: store.overrides && typeof store.overrides === 'object' ? store.overrides : {},
     hidden: Array.isArray(store.hidden) ? store.hidden : [],
-    settings: mergeSettings(defaultSettings(), store.settings),
+    camLinks: store.camLinks && typeof store.camLinks === 'object' ? store.camLinks : {},
+    settings: mergeSettings({ ...defaultSettings(), scope: defaults.scope === 'home' ? 'home' : 'all' }, store.settings),
   };
-  function save() { writeJson(file, store); }
+  function save() { clearTimeout(saveTimer); saveTimer = null; writeJson(file, store); }
+  // After a read of the league site: what was read is a copy that can be
+  // read again, so a round of reads is written once, not once per season.
+  let saveTimer = null;
+  function saveSoon() {
+    if (saveTimer) return;
+    saveTimer = setTimeout(save, 3000);
+    if (saveTimer.unref) saveTimer.unref();
+  }
   function newId() { return crypto.randomBytes(5).toString('hex'); }
 
   function mergeSettings(base, patch) {
@@ -130,6 +162,99 @@ function createBroadcast(opts) {
   const cams = {};
   cameras.forEach((c) => { cams[c.id] = { pip: false }; });
   const pipTimers = {};
+
+  // --- Camera links -------------------------------------------------------------
+  // A camera with a link is a network camera: OBS shows the link's page in
+  // a browser source, or reads its stream with a media source (obs.js).
+  // Without one it is a capture device on this PC. The profile gives each camera its link; the operator's own choice,
+  // an empty one included, is kept over it.
+  const defaultLink = (id) => (cameras.find((c) => c.id === id) || {}).link || '';
+  function camLink(id) {
+    return Object.prototype.hasOwnProperty.call(store.camLinks, id) ? String(store.camLinks[id] || '') : defaultLink(id);
+  }
+  function cameraLinks() {
+    const out = {};
+    cameras.forEach((c) => { out[c.id] = camLink(c.id); });
+    return out;
+  }
+  // url: a link, '' for a capture device, or null for the profile's own.
+  function setCameraLink(id, url) {
+    if (!cams[id]) return { error: 'No such camera' };
+    if (url === null || url === undefined) {
+      delete store.camLinks[id];
+    } else {
+      const typed = String(url).trim();
+      const link = cameraLink(typed);
+      if (typed && !link) return { error: 'Not a camera address. A web page (http://...) or a stream (rtsp://...)' };
+      if (link === defaultLink(id)) delete store.camLinks[id]; else store.camLinks[id] = link;
+    }
+    delete liveCache[id];
+    save(); broadcast();
+    return { link: camLink(id) };
+  }
+
+  // Whether a network camera is sending. A MediaMTX page answers a WebRTC
+  // request with no offer in it by its path: 400 (it would talk, the offer is
+  // bad) when the camera is publishing, 404 when nothing is. Nothing is
+  // opened on the camera's server by asking. Any other page is only known
+  // to answer or not. { state: 'live' | 'idle' | 'up' | 'down', detail }
+  // An RTSP stream is asked to describe itself: 200 when the camera is
+  // publishing, 404 when nothing is, 401 when it wants a login.
+  const LIVE_CACHE_MS = 4000;
+  const liveCache = {};
+  function probeRtsp(link) {
+    return new Promise((resolve) => {
+      let u;
+      try { u = new URL(link); } catch (e) { return resolve({ state: 'down', detail: 'Not a valid address.' }); }
+      const socket = net.connect({ host: u.hostname, port: Number(u.port) || 554 });
+      let text = '';
+      const done = (out) => { clearTimeout(timer); socket.destroy(); resolve(out); };
+      const timer = setTimeout(() => done({ state: 'down', detail: 'The camera did not answer.' }), 3000);
+      socket.on('connect', () => socket.write(`DESCRIBE rtsp://${u.host}${u.pathname}${u.search} RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: stream-control\r\nAccept: application/sdp\r\n\r\n`));
+      socket.on('data', (d) => {
+        text += d.toString('latin1');
+        const m = /^RTSP\/1\.\d (\d{3})/.exec(text);
+        if (!m) return;
+        if (m[1] === '200') done({ state: 'live', detail: '' });
+        else if (m[1] === '404') done({ state: 'idle', detail: 'The camera is not sending.' });
+        else if (m[1] === '401') done({ state: 'up', detail: 'The camera asks for a login.' });
+        else done({ state: 'down', detail: `The camera answered ${m[1]}.` });
+      });
+      socket.on('error', () => done({ state: 'down', detail: 'The camera did not answer.' }));
+    });
+  }
+  async function probeLink(link) {
+    if (/^rtsp:/i.test(link)) return probeRtsp(link);
+    // Other streams (rtmp, srt, ...) are only known to OBS.
+    if (cameraLinkKind(link) === 'stream' && !/^https?:/i.test(link)) return null;
+    const timed = (url, init) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      return fetch(url, { ...init, signal: ctrl.signal, redirect: 'follow' }).finally(() => clearTimeout(timer));
+    };
+    try {
+      const base = link.endsWith('/') ? link : link + '/';
+      const res = await timed(new URL('whep', base), { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: 'v=0' });
+      if (res.status === 400) return { state: 'live', detail: '' };
+      if (res.status === 404) {
+        const body = await res.text().catch(() => '');
+        if (/no stream is available/i.test(body)) return { state: 'idle', detail: 'The camera is not sending.' };
+      }
+      const page = await timed(link, { method: 'GET' });
+      return page.ok ? { state: 'up', detail: '' } : { state: 'down', detail: `The link answered ${page.status}.` };
+    } catch (err) {
+      return { state: 'down', detail: 'The link did not answer.' };
+    }
+  }
+  async function cameraLive(id) {
+    const link = camLink(id);
+    if (!link) return null;
+    const hit = liveCache[id];
+    if (hit && hit.link === link && Date.now() - hit.at < LIVE_CACHE_MS) return hit.live;
+    const live = await probeLink(link);
+    liveCache[id] = { link, at: Date.now(), live };
+    return live;
+  }
 
   // --- Matches ---------------------------------------------------------------
   function isHome(team) {
@@ -263,22 +388,36 @@ function createBroadcast(opts) {
       week: { from: new Date(week.from).toISOString(), to: new Date(week.to).toISOString() },
       settings: store.settings,
       lower,
-      cams: cameras.map((c) => ({ id: c.id, label: c.label, pip: cams[c.id].pip })),
+      cams: cameras.map((c) => ({ id: c.id, label: c.label, pip: cams[c.id].pip, link: camLink(c.id), defaultLink: defaultLink(c.id) })),
       layout: { reserved: reserved(), pip: pipRects() },
       follows: store.follows.map((f) => {
         const feed = store.feed[f.id] || {};
-        return { id: f.id, name: f.name, game: f.game, league: f.league, host: f.host, checkedAt: feed.checkedAt || '', error: feed.error || '', count: (feed.matches || []).length };
+        return { id: f.id, name: f.name, game: f.game, league: f.league, host: f.host, school: f.school || '', checkedAt: feed.checkedAt || '', error: feed.error || '', count: (feed.matches || []).length };
       }),
+      schools: store.schools.map((s) => ({ id: s.id, name: s.name, league: s.league, host: s.host, team: !!s.teamId, checkedAt: s.checkedAt || '', error: s.error || '' })),
+      // Whether the profile has a feed of its own to go back to.
+      defaultFeed: defaults.links.length > 0,
       hidden: store.hidden.length,
     };
   }
+  // Panels get every change. The scenes only get the ones they draw: each
+  // read of a season changes its "read at" time, and sending that to every
+  // scene had all of them redraw several times a minute, on air or not.
   let lastSent = '';
+  let lastScenes = '';
   function broadcast(force) {
     const bx = snapshot();
     const key = JSON.stringify(bx);
     if (!force && key === lastSent) return;
     lastSent = key;
-    sendAll({ type: 'bx', bx });
+    if (!sendScenes) { sendAll({ type: 'bx', bx }); return; }
+    sendPanels({ type: 'bx', bx });
+    const { follows, schools, hidden, defaultFeed, ...drawn } = bx;
+    const scenesKey = JSON.stringify(drawn);
+    // force is for the panels (a Refresh with nothing new still answers).
+    if (scenesKey === lastScenes) return;
+    lastScenes = scenesKey;
+    sendScenes({ type: 'bx', bx });
   }
 
   // --- Pop-ups -------------------------------------------------------------------
@@ -396,7 +535,13 @@ function createBroadcast(opts) {
       const hadFeed = !!store.feed[f.id];
       try {
         caches[f.id] = caches[f.id] || {};
-        const res = await seasonMatches(f.host, f.leagueId, f.seasonId, { from: week.from - DAY, to: week.to + DAY }, caches[f.id]);
+        const range = { from: week.from - DAY, to: week.to + DAY };
+        // One more try after a moment: a refused request is usually the
+        // site being busy.
+        const res = await seasonMatches(f.host, f.leagueId, f.seasonId, range, caches[f.id]).catch(async () => {
+          await new Promise((r) => setTimeout(r, 1500));
+          return seasonMatches(f.host, f.leagueId, f.seasonId, range, caches[f.id]);
+        });
         // Logos are fetched once and served from this PC.
         const logos = new Map();
         res.matches.forEach((m) => m.teams.forEach((t) => { if (t.logoUrl) logos.set(t.logoUrl, t.logoUrl); }));
@@ -407,7 +552,7 @@ function createBroadcast(opts) {
       } catch (err) {
         store.feed[f.id] = { matches: [], ...(store.feed[f.id] || {}), checkedAt: now, error: String((err && err.message) || 'The league site did not answer').slice(0, 200) };
       }
-      save();
+      saveSoon();
       // What changed since the last read becomes a pop-up, for a match
       // other than the one on stream. Never on the first read of a season.
       if (hadFeed && !quiet && store.settings.alerts.auto) {
@@ -427,6 +572,15 @@ function createBroadcast(opts) {
     return reading[f.id];
   }
 
+  // A list of seasons, a few at a time.
+  async function readMany(list, quiet) {
+    const todo = list.slice();
+    const worker = async () => {
+      while (todo.length) await readFollow(todo.shift(), quiet).catch(() => {});
+    };
+    await Promise.all(Array.from({ length: Math.min(READ_AT_ONCE, todo.length) }, worker));
+  }
+
   function schedulePoll() {
     clearTimeout(pollTimer);
     if (!store.follows.length) return;
@@ -443,28 +597,142 @@ function createBroadcast(opts) {
     if (pollTimer.unref) pollTimer.unref();
   }
 
-  function addSeasons(host, leagueId, seasons, league) {
+  // school: the id of the followed school these seasons belong to, if any.
+  function addSeasons(host, leagueId, seasons, league, school) {
     let added = 0;
     seasons.forEach((s) => {
       if (store.follows.some((f) => f.seasonId === s.id)) return;
       const game = (profile.games.find((g) => (g.leagueActivity || []).includes(s.activity)
         || s.name.toLowerCase().includes(g.name.toLowerCase())) || {}).name || s.name;
-      store.follows.push({ id: newId(), host, leagueId, seasonId: s.id, name: s.name, game, league: league || '', addedAt: new Date().toISOString() });
+      store.follows.push({ id: newId(), host, leagueId, seasonId: s.id, name: s.name, game, league: league || '', school: school || '', addedAt: new Date().toISOString() });
       added++;
     });
     return added;
   }
-  // A LeagueOS link: a league's home page follows every season it is
-  // running; a season, stage or match link follows that season.
-  async function follow(url, league) {
+  function dropFollow(id) {
+    store.follows = store.follows.filter((f) => f.id !== id);
+    delete store.feed[id];
+    delete caches[id];
+  }
+  // The seasons just added are read in the background: the panel shows them
+  // at once, as being read.
+  function readNew() {
+    broadcast();
+    return readMany(store.follows.filter((f) => !store.feed[f.id]), true).catch(() => {}).then(() => { broadcast(); schedulePoll(); });
+  }
+  // A LeagueOS link. A school or team link follows the seasons that school's
+  // teams (or that team) play in, and keeps following them as seasons start
+  // and end. A season, stage or match link follows that season. A league's
+  // home page follows every season it is running: on a big league that is
+  // dozens, so above MANY_SEASONS the answer is { confirm, count } and
+  // nothing is followed until the link comes back with all: true.
+  async function follow(url, league, opts) {
     const r = await resolveLeagueLink(url);
     const label = cleanText(league, 60) || leagueName(r.hostname);
+    if (r.school) return followSchool(r.hostname, r.leagueId, r.school, label, r.seasons);
+    const fresh = r.seasons.filter((s) => !store.follows.some((f) => f.seasonId === s.id));
+    if (fresh.length > MANY_SEASONS && !(opts && opts.all)) {
+      const own = defaults.links.find((l) => { try { return new URL(l).hostname === r.hostname; } catch (e) { return false; } });
+      return { confirm: true, count: fresh.length, host: r.hostname, ownLink: own || '' };
+    }
     const added = addSeasons(r.hostname, r.leagueId, r.seasons, label);
     save();
-    await Promise.all(store.follows.filter((f) => !store.feed[f.id]).map((f) => readFollow(f, true)));
-    broadcast();
-    schedulePoll();
+    readNew();
     return { added, seasons: r.seasons.map((s) => s.name) };
+  }
+
+  // --- Followed schools ---------------------------------------------------------
+  async function followSchool(host, leagueId, school, label, seasons) {
+    let entry = store.schools.find((s) => s.host === host && s.schoolId === school.id && (s.teamId || '') === (school.teamId || ''));
+    if (!entry) {
+      entry = { id: newId(), host, leagueId, schoolId: school.id, teamId: school.teamId || '', name: cleanText(school.name, 80), league: label, addedAt: new Date().toISOString() };
+      store.schools.push(entry);
+    }
+    const added = syncSchool(entry, seasons);
+    save();
+    readNew();
+    return { added, seasons: seasons.map((s) => s.name), school: entry.name };
+  }
+  // A school's seasons are the ones its teams are in now: new ones are
+  // added, the ones it has left or that have ended are dropped.
+  function syncSchool(entry, seasons) {
+    const want = new Set(seasons.map((s) => s.id));
+    store.follows.filter((f) => f.school === entry.id && !want.has(f.seasonId)).forEach((f) => dropFollow(f.id));
+    entry.checkedAt = new Date().toISOString();
+    entry.error = '';
+    return addSeasons(entry.host, entry.leagueId, seasons, entry.league, entry.id);
+  }
+  async function resyncSchools(olderThan) {
+    let changed = false;
+    for (const entry of store.schools.slice()) {
+      if (olderThan && Date.now() - new Date(entry.checkedAt || 0).getTime() < olderThan) continue;
+      try {
+        const r = await schoolSeasons(entry.host, entry.leagueId, entry.schoolId, entry.teamId ? [entry.teamId] : null);
+        if (!store.schools.includes(entry)) continue; // removed meanwhile
+        const before = store.follows.length;
+        if (syncSchool(entry, r.seasons) || store.follows.length !== before) changed = true;
+      } catch (err) {
+        entry.error = String((err && err.message) || 'The league site did not answer').slice(0, 200);
+      }
+    }
+    save();
+    if (changed) readNew(); else broadcast();
+  }
+  function unfollowSchool(id) {
+    store.follows.filter((f) => f.school === id).forEach((f) => dropFollow(f.id));
+    store.schools = store.schools.filter((s) => s.id !== id);
+    save(); broadcast(); schedulePoll();
+    return { ok: true };
+  }
+
+  // --- Everything at once ---------------------------------------------------------
+  // Every followed season and school goes, with what was read from them.
+  // What is returned can be handed to restoreFollows (the panel's Undo).
+  function clearFollows() {
+    const removed = { follows: store.follows, schools: store.schools };
+    store.follows = [];
+    store.schools = [];
+    store.feed = {};
+    store.overrides = {};
+    store.hidden = [];
+    Object.keys(caches).forEach((k) => delete caches[k]);
+    save(); broadcast(); schedulePoll();
+    return { ok: true, removed };
+  }
+  function restoreFollows(raw) {
+    const id = (v) => (/^[a-z0-9]{4,40}$/i.test(String(v || '')) ? String(v) : '');
+    const host = (v) => (/^[a-z0-9.-]+\.leagueos\.gg$/i.test(String(v || '')) ? String(v) : '');
+    ((raw && raw.schools) || []).forEach((s) => {
+      if (!id(s.id) || !host(s.host) || !id(s.leagueId) || !id(s.schoolId) || store.schools.some((x) => x.id === s.id)) return;
+      store.schools.push({ id: s.id, host: s.host, leagueId: s.leagueId, schoolId: s.schoolId, teamId: id(s.teamId), name: cleanText(s.name, 80), league: cleanText(s.league, 60), addedAt: cleanText(s.addedAt, 40), checkedAt: cleanText(s.checkedAt, 40) });
+    });
+    ((raw && raw.follows) || []).forEach((f) => {
+      if (!id(f.id) || !host(f.host) || !id(f.leagueId) || !id(f.seasonId) || store.follows.some((x) => x.seasonId === f.seasonId)) return;
+      store.follows.push({ id: f.id, host: f.host, leagueId: f.leagueId, seasonId: f.seasonId, name: cleanText(f.name, 120), game: cleanText(f.game, 60), league: cleanText(f.league, 60), school: id(f.school), addedAt: cleanText(f.addedAt, 40) });
+    });
+    save();
+    readNew();
+    return { ok: true };
+  }
+  // Back to the profile's own feed: its links, and its scope. If the league
+  // site cannot be read, what was followed before is put back.
+  async function followDefault() {
+    if (!defaults.links.length) return { error: 'This profile has no default feed' };
+    const removed = clearFollows().removed;
+    let added = 0;
+    let failed = '';
+    for (const link of defaults.links) {
+      try { added += (await follow(link, '', { all: true })).added || 0; }
+      catch (err) { failed = failed || String((err && err.message) || 'The league site did not answer'); }
+    }
+    if (failed && !store.follows.length) {
+      restoreFollows(removed);
+      return { error: failed };
+    }
+    store.settings = mergeSettings(store.settings, { scope: defaults.scope });
+    store.defaultsDone = true;
+    save(); broadcast(true);
+    return { added, removed };
   }
   // The season a match was imported from is followed too (server.js calls
   // this after an import), so its other matches that week show up.
@@ -487,8 +755,11 @@ function createBroadcast(opts) {
     save(); broadcast(); schedulePoll();
     return { ok: true };
   }
+  // The panel's Refresh: the schools' seasons are looked up again, then
+  // every season is read.
   async function refresh() {
-    await Promise.all(store.follows.map((f) => readFollow(f).catch(() => {})));
+    await resyncSchools().catch(() => {});
+    await readMany(store.follows);
     broadcast(true);
     return snapshot();
   }
@@ -562,22 +833,38 @@ function createBroadcast(opts) {
     broadcast();
   }
 
+  // A new install follows the profile's own feed. One that already follows
+  // something keeps it. Until the league site has answered once this is
+  // tried again (the PC may be offline the first time the app runs).
+  let defaulting = false;
+  function applyDefaults() {
+    if (store.defaultsDone || defaulting) return;
+    if (store.follows.length || store.schools.length || !defaults.links.length) { store.defaultsDone = true; save(); return; }
+    defaulting = true;
+    followDefault().catch(() => {}).then(() => { defaulting = false; });
+  }
+
   // Start: read every followed season once, then keep them current.
   function start() {
-    store.follows.forEach((f) => { readFollow(f, true).catch(() => {}); });
+    applyDefaults();
+    readMany(store.follows, true).then(() => resyncSchools(60 * 60 * 1000)).catch(() => {});
     schedulePoll();
     // The week rolls over at midnight on Sunday; a quiet re-send picks it up.
-    const tick = setInterval(() => broadcast(), 10 * 60 * 1000);
+    const tick = setInterval(() => { broadcast(); applyDefaults(); }, 10 * 60 * 1000);
     if (tick.unref) tick.unref();
+    const sync = setInterval(() => { resyncSchools().catch(() => {}); }, SCHOOL_SYNC_MS);
+    if (sync.unref) sync.unref();
   }
 
   return {
     snapshot, message: () => ({ type: 'bx', bx: snapshot() }), start, onState,
     upsertManual, removeMatch, restoreHidden, setScore, clearCorrection, alertMatch, alert, alertSeriesFinal,
     follow, followImported, unfollow, refresh,
+    unfollowSchool, clearFollows, restoreFollows, followDefault, resyncSchools,
     setLower, setPip, setSettings,
+    cameraLinks, setCameraLink, cameraLive,
     cameras,
   };
 }
 
-module.exports = { createBroadcast, PIP_SIZES };
+module.exports = { createBroadcast, PIP_SIZES, weekOf };

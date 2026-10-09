@@ -49,7 +49,23 @@ textarea::placeholder{ color:var(--placeholder); }
 .bx-cam-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
 .bx-cam-head b{ font-size:.92rem; }
 .bx-cam-status{ margin-left:auto; font-size:.76rem; color:var(--muted); }
+.bx-cam-status + .bx-cam-status{ margin-left:0; }
+.bx-cam-status.ok{ color:var(--ok); font-weight:700; }
+.bx-cam-row + .bx-cam-row{ margin-top:8px; }
+.bx-cam-link{ flex:1 1 220px; min-width:0; font-size:.8rem !important; }
 .bx-cam-status.warn{ color:var(--attention); }
 .bx-cam-row{ display:flex; gap:8px; flex-wrap:wrap; }
 .bx-cam-row select{ flex:1 1 160px; min-width:0; }
 .bx-cam-row .btn-secondary, .bx-cam-row .btn-accent{ padding:7px 11px; font-size:.8rem; white-space:nowrap; }
+
+/* League feed: a followed school is one row that opens to its seasons. */
+.bx-feed-bar{ margin-top:10px; align-items:flex-end; justify-content:space-between; }
+.bx-follow-group{ border-radius:10px; background:var(--panel-2); border:1px solid var(--panel-border); }
+.bx-follow-group > summary{ display:flex; align-items:center; gap:10px; padding:7px 10px; cursor:pointer; list-style:none; }
+.bx-follow-group > summary::-webkit-details-marker{ display:none; }
+.bx-follow-group > summary::before{ content:"\25B8"; color:var(--muted); font-size:.8rem; }
+.bx-follow-group[open] > summary::before{ content:"\25BE"; }
+.bx-follow-group .lib-row{ margin:0 8px 6px 26px; }
+.bx-confirm{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:2px 0 10px; padding:9px 11px; border-radius:10px; border:1px solid var(--warn, #c98a00); background:var(--panel-2); font-size:.84rem; }
+.bx-confirm[hidden]{ display:none; }
+.bx-confirm span{ flex:1 1 200px; }

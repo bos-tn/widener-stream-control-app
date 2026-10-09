@@ -255,7 +255,7 @@ const NECC_TYPES = [
 ];
 let prefs = {
   neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
-  setupDone: false, guideV2: false, gameCapture: true, studioMode: true, orderScenes: true,
+  setupDone: false, guideV2: false, gameCapture: true, studioMode: false, orderScenes: true,
 };
 let prefsLoaded = false;
 
@@ -696,15 +696,28 @@ function placeRosterEditor(page) {
 
 // --- Match page -------------------------------------------------------------------
 //
-// Four steps: the game, the teams (a LeagueOS link, the league's schools
-// and saved teams, or typed in), the details, then building the scenes.
-
-const STEPS = ['game', 'teams', 'details', 'build'];
+// Five steps. The first reads the whole match from a LeagueOS match link.
+// The next three set the same things by hand or correct them: the game, the
+// teams (the league's schools and saved teams, or typed in), the details.
+// The last builds the scenes.
+//
+// The link step belongs to the broadcast package (its league feed offers
+// matches there). A profile without it keeps v2.1's four steps: the link is
+// one of the Teams step's sources.
+const LINK_FIRST = !!BX;
+const STEPS = LINK_FIRST ? ['link', 'game', 'teams', 'details', 'build'] : ['game', 'teams', 'details', 'build'];
 const STEP_KEY = 'stream-match-step';
-let currentStep = 'game';
+let currentStep = STEPS[0];
+if (!LINK_FIRST) {
+  document.querySelector('#stepper [data-step="link"]').parentElement.remove();
+  document.querySelectorAll('#stepper b').forEach((b, i) => { b.textContent = String(i + 1); });
+  $id('importPane').appendChild($id('linkField'));
+  $id('importSrcBtn').hidden = false;
+  $id('gameBackBtn').replaceWith(document.createElement('span'));
+}
 
 function showStep(step) {
-  if (!STEPS.includes(step)) step = 'game';
+  if (!STEPS.includes(step)) step = STEPS[0];
   currentStep = step;
   document.querySelectorAll('.step-card').forEach((c) => { c.hidden = c.dataset.step !== step; });
   document.querySelectorAll('#stepper button').forEach((b) => {
@@ -712,11 +725,13 @@ function showStep(step) {
     b.classList.toggle('done', stepDone(b.dataset.step) && b.dataset.step !== step);
   });
   lsSet(STEP_KEY, step);
-  if (step === 'build') { renderChecklist(); refreshStinger(); }
+  if (step === 'build') { renderChecklist(); refreshStinger(); refreshObs(true); }
+  if (step === 'link') renderMatchNow();
   $id('pageCol').scrollTop = 0;
 }
 function stepDone(step) {
   if (!state) return false;
+  if (step === 'link') return !!(state.teamA.name && state.teamB.name && Object.keys(state.neccUrls || {}).length);
   if (step === 'game') return games.some((g) => g.id === state.game) || !!state.team;
   if (step === 'teams') return !!(state.teamA.name && state.teamB.name);
   if (step === 'details') return !!(state.end);
@@ -726,7 +741,27 @@ function stepDone(step) {
 document.querySelectorAll('#stepper button').forEach((b) => b.addEventListener('click', () => showStep(b.dataset.step)));
 document.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => showStep(b.dataset.next)));
 
-// Step 1: game.
+// Step 1: the match as it stands, under the link field.
+function renderMatchNow() {
+  const box = $id('matchNow');
+  if (!state) return;
+  const a = state.teamA.name, b = state.teamB.name;
+  const ready = !!(a && b);
+  $id('linkDetailsBtn').disabled = !ready;
+  $id('linkBuildBtn').disabled = !ready;
+  if (!ready) { box.innerHTML = '<div class="lib-empty">No teams set.</div>'; return; }
+  const sb = state.scoreboard || {};
+  const start = state.countdownMode === 'at' && state.end ? new Date(state.end) : null;
+  const side = (t) => {
+    const { logo } = teamTile(t);
+    return `<span class="match-now-team">${logo}<b>${esc(t.name)}</b></span>`;
+  };
+  const meta = [state.team, sb.round, `Best of ${sb.bestOf || 3}`,
+    start && !isNaN(start) ? `${start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} ${clockTime(start)}` : ''].filter(Boolean);
+  box.innerHTML = `<div class="match-now-teams">${side(state.teamA)}<i>vs</i>${side(state.teamB)}</div><div class="match-now-meta">${esc(meta.join(' · '))}</div>`;
+}
+
+// Step 2: game.
 const gameGrid = $id('gameGrid');
 const teamInput = $id('teamInput');
 // A series length from a LeagueOS import wins over a game's preset, so
@@ -769,10 +804,12 @@ function pickGame(id) {
 }
 onCommit(teamInput, (el) => ({ team: el.value }));
 
-// Step 2: teams.
+// Step 3: teams.
 const SRC_KEY = 'stream-team-src';
 let pickFor = 'A';
 function showTeamSrc(src) {
+  // Link first: the match link has its own step and is not a source here.
+  if (src !== 'manual' && (LINK_FIRST || src !== 'import')) src = 'library';
   document.querySelectorAll('#teamSrc .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.src === src));
   document.querySelectorAll('.team-pane').forEach((p) => { p.hidden = p.dataset.src !== src; });
   lsSet(SRC_KEY, src);
@@ -892,7 +929,7 @@ neccFetchBtn.addEventListener('click', async () => {
 });
 neccUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') neccFetchBtn.click(); });
 
-// Step 3: details.
+// Step 4: details.
 const modeAt = $id('modeAt');
 const modeDuration = $id('modeDuration');
 const atInput = $id('atInput');
@@ -969,6 +1006,12 @@ function renderDetails() {
 
 // Step 4: build.
 let lastBuild = null;
+// OBS's video settings, from /api/obs/inspect: { base, output, fps, ok,
+// locked, bitrate, rescale }, or null when OBS has not been asked.
+let obsVideo = null;
+let videoBusy = false;
+// The stream bitrate under which a 1080p60 picture is flagged.
+const VIDEO_KBPS = 6000;
 function renderChecklist() {
   const ul = $id('buildChecklist');
   if (!state) return;
@@ -985,6 +1028,19 @@ function renderChecklist() {
     const ok = stingerState && stingerState.found;
     items.push([ok, ok ? `Transition present: ${BRAND.stinger.name}` : `Transition not found in OBS: ${BRAND.stinger.name}`, ok ? '' : 'stinger', true]);
   }
+  // OBS's video settings against 1920x1080 at 60. OBS takes no change while
+  // an output is running, so the button goes and the row says why.
+  const v = obsStatus && obsStatus.connected ? obsVideo : null;
+  if (v) {
+    const text = `Video: ${videoText(v)}`;
+    if (v.ok) items.push([true, text, '']);
+    else if (v.locked) items.push([false, `${text}. Locked while OBS is streaming or recording.`, '', true]);
+    else items.push([false, text, 'video', true]);
+    if (v.rescale) items.push([false, `Stream rescaled to ${v.rescale}: OBS Settings > Output > Streaming.`, '', true]);
+    if (v.ok && v.bitrate && v.bitrate < VIDEO_KBPS) {
+      items.push([false, `Stream bitrate: ${v.bitrate} kbps. 1080p60 reference: ${VIDEO_KBPS} kbps. OBS Settings > Output.`, '', true]);
+    }
+  }
   // Said before it happens: a build takes out the app's scenes this match
   // doesn't use (another game's stats scene, an unticked extra scene).
   if (obsStatus && obsStatus.connected && sceneStale.length) {
@@ -1000,16 +1056,36 @@ function renderChecklist() {
     if (fix) {
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'btn-secondary';
-      btn.textContent = { connect: 'Connect', game: 'Select game', teams: 'Select teams', details: 'Set start time', stinger: 'Stinger setup' }[fix];
+      btn.textContent = { connect: 'Connect', game: 'Select game', teams: 'Select teams', link: 'Import match', details: 'Set start time', stinger: 'Stinger setup', video: 'Set 1080p60' }[fix];
+      if (fix === 'video') btn.disabled = videoBusy;
       btn.addEventListener('click', () => {
         if (fix === 'connect') openObsSettings();
         else if (fix === 'stinger') { setPage('settings'); openSection('set-stinger'); scrollToSection('set-stinger'); }
+        else if (fix === 'video') raiseVideo();
         else showStep(fix);
       });
       li.appendChild(btn);
     }
     ul.appendChild(li);
   });
+}
+
+function videoText(v) {
+  const size = (s) => `${s.w}x${s.h}`;
+  const sizes = size(v.base) === size(v.output) ? size(v.output) : `canvas ${size(v.base)}, output ${size(v.output)}`;
+  return `${sizes}, ${v.fps} fps`;
+}
+async function raiseVideo() {
+  const statusEl = $id('buildStatus');
+  videoBusy = true;
+  renderChecklist();
+  let res;
+  try { res = await postJson('/api/obs/video'); } catch (e) { res = { error: 'App not reachable' }; }
+  videoBusy = false;
+  if (res.video) obsVideo = res.video;
+  statusEl.classList.toggle('error', !!res.error);
+  statusEl.textContent = res.error ? `Video settings not changed: ${res.error}` : '';
+  renderChecklist();
 }
 
 $id('buildBtn').addEventListener('click', async (e) => {
@@ -1051,9 +1127,15 @@ function buildResultHtml(res) {
     <li><b>Sources</b> &gt; <b>+</b> &gt; <b>Window Capture</b> or <b>Display Capture</b>. Select the game.</li>
     <li>Place it below <b>${esc(prefix)}-src-scoreboard</b>.</li></ol></li>`);
   Object.keys(res.cameras || {}).forEach((id) => {
-    const input = `${prefix}-cam-${id}`;
-    if (res.cameras[id] === 'created') lines.push(`<li class="warn">Camera source added: <b>${esc(input)}</b>. No device selected: Broadcast &gt; Cameras.</li>`);
-    else if (res.cameras[id] === 'exists') lines.push(`<li class="ok">Camera source present: <b>${esc(input)}</b>.</li>`);
+    // A network camera is a browser or media source and has no device.
+    const { input, kind } = (res.cameraSources || {})[id] || { input: `${prefix}-cam-${id}`, kind: 'device' };
+    const made = res.cameras[id];
+    if (made === 'exists') lines.push(`<li class="ok">Camera source present: <b>${esc(input)}</b>.</li>`);
+    else if (kind !== 'device') {
+      lines.push(made === 'created'
+        ? `<li class="ok">Network camera source added: <b>${esc(input)}</b>.</li>`
+        : `<li class="warn">Network camera source not created: <b>${esc(input)}</b>. Check the address: Broadcast &gt; Cameras.</li>`);
+    } else if (made === 'created') lines.push(`<li class="warn">Camera source added: <b>${esc(input)}</b>. No device selected: Broadcast &gt; Cameras.</li>`);
     else lines.push(`<li class="warn">No Video Capture Device source type in this OBS. Add a camera source named <b>${esc(input)}</b> manually.</li>`);
   });
   if ((res.removed || []).length) {
@@ -1224,7 +1306,107 @@ function buildScoreSide(t) {
     <div class="sb-btns sb-stock-only">
       <button class="sb-big" type="button" data-sb="lose" data-team="${t}">Lost a stock <kbd>${k.lose}</kbd></button>
       <button class="btn-secondary" type="button" data-sb="undo" data-team="${t}">Undo <kbd>${k.undo}</kbd></button>
+    </div>
+    <div class="sb-ord sb-stock-only">
+      <div class="sb-ord-head"><span class="lbl">Player order</span><small>Drag to reorder</small></div>
+      <div class="sb-ord-list" id="sbOrd${t}"></div>
     </div>`;
+  buildOrderList(t);
+}
+
+// The order a team's players take the stage in, under its stock counter: the
+// roster's own order (stocks are lost down it, and the scoreboard lists the
+// crew in it), so a row dragged here is a player moved in the roster. It goes
+// out when the row is dropped. Pointer events, not HTML drag and drop: the
+// whole row is the handle, and it works the same in an OBS dock.
+let ordDragging = '';
+function buildOrderList(t) {
+  const list = $id('sbOrd' + t);
+  let row = null;
+  const rows = () => Array.from(list.querySelectorAll('.sb-ord-row'));
+  // The gap the pointer is over: 0 is above the first row.
+  const gapAt = (y) => {
+    const rs = rows();
+    const i = rs.findIndex((r) => { const b = r.getBoundingClientRect(); return y < b.top + b.height / 2; });
+    return i < 0 ? rs.length : i;
+  };
+  // Where the dragged row would land, as a position in the list.
+  const landing = (y) => {
+    const from = rows().indexOf(row);
+    const gap = gapAt(y);
+    return { from, to: gap > from ? gap - 1 : gap };
+  };
+  const stop = () => {
+    rows().forEach((r) => r.classList.remove('dragging', 'drop-above', 'drop-below'));
+    row = null;
+    ordDragging = '';
+  };
+  list.addEventListener('pointerdown', (e) => {
+    const r = e.target.closest('.sb-ord-row');
+    if (!r || e.button !== 0) return;
+    e.preventDefault();
+    row = r;
+    ordDragging = t;
+    // Captured, so the drag carries on when the pointer leaves the list.
+    try { list.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+    r.classList.add('dragging');
+  });
+  list.addEventListener('pointermove', (e) => {
+    if (!row) return;
+    const rs = rows();
+    const { from, to } = landing(e.clientY);
+    rs.forEach((r) => r.classList.remove('drop-above', 'drop-below'));
+    if (to !== from) rs[to].classList.add(to < from ? 'drop-above' : 'drop-below');
+  });
+  list.addEventListener('pointerup', (e) => {
+    if (!row) return;
+    const idx = rows().map((r) => Number(r.dataset.i));
+    const { from, to } = landing(e.clientY);
+    stop();
+    if (to === from) return;
+    // By player, not by index: the roster's working copy may hold a blank
+    // row that this list leaves out.
+    const players = rosters[t].players;
+    const moved = players[idx[from]];
+    const anchor = players[idx[to]];
+    players.splice(players.indexOf(moved), 1);
+    players.splice(players.indexOf(anchor) + (to > from ? 1 : 0), 0, moved);
+    renderRosterEditor(t);
+    sendTeam(t);
+  });
+  list.addEventListener('pointercancel', () => { if (row) { stop(); renderScorePanel(); } });
+}
+
+// One row per player: its place, its name, and where it stands on stocks.
+function renderOrderList(t, crewSize, stocksEach, lost) {
+  if (ordDragging === t) return;
+  const list = $id('sbOrd' + t);
+  const players = rosters[t].players.map((p, i) => ({ p, i })).filter(({ p }) => p.gamertag.trim() || p.name.trim());
+  const active = Math.floor(lost / stocksEach);
+  const out = lost >= crewSize * stocksEach;
+  list.textContent = '';
+  if (!players.length) {
+    const none = document.createElement('div');
+    none.className = 'lib-empty';
+    none.textContent = 'No players in the roster.';
+    list.appendChild(none);
+    return;
+  }
+  players.forEach(({ p, i }, k) => {
+    let cls = '', text = '';
+    if (k >= crewSize) { cls = 'bench'; text = 'Bench'; }
+    else if (out || k < active) { cls = 'out'; text = 'Out'; }
+    else if (k === active) { cls = 'on'; text = `On stage · ${stocksEach - (lost % stocksEach)} left`; }
+    else if (k === active + 1) text = 'Next';
+    const row = document.createElement('div');
+    row.className = 'sb-ord-row' + (cls ? ' ' + cls : '');
+    row.dataset.i = String(i);
+    row.title = 'Drag to reorder';
+    const cell = (tag, c, s) => { const n = document.createElement(tag); n.className = c; n.textContent = s; return n; };
+    row.append(cell('span', 'ret-handle', '⋮⋮'), cell('b', 'sb-ord-n', k < crewSize ? String(k + 1) : ''),
+      cell('span', 'sb-ord-name', p.gamertag || p.name), cell('em', 'sb-ord-st', text));
+    list.appendChild(row);
+  });
 }
 
 function renderScorePanel() {
@@ -1261,15 +1443,18 @@ function renderScorePanel() {
     $id('sbWonLbl' + t).textContent = `${unit}s won`;
     $id('sbWin' + t).textContent = `Won ${unit.toLowerCase()}`;
     const on = $id('sbOn' + t);
+    const idx = Math.floor(lost / stocksEach);
+    // The order list below says who is on stage, when it has that player.
+    on.hidden = left > 0 && !!team.players[idx];
     if (left <= 0) {
       on.textContent = 'Out of stocks';
     } else {
-      const idx = Math.floor(lost / stocksEach);
       const p = team.players[idx] || {};
       const name = p.gamertag || p.name || `Player ${idx + 1}`;
       on.innerHTML = 'On stage: <b></b>';
       on.querySelector('b').textContent = `${name} (${stocksEach - (lost % stocksEach)} left)`;
     }
+    if (showStocks) renderOrderList(t, crewSize, stocksEach, lost);
     scorePanel.querySelector(`[data-sb="lose"][data-team="${t}"]`).disabled = left <= 0;
     scorePanel.querySelector(`[data-sb="undo"][data-team="${t}"]`).disabled = lost <= 0;
   });
@@ -2047,6 +2232,7 @@ function renderAll() {
   setVal(teamInput, state.team || '');
   renderGameGrid();
   renderMatchup();
+  renderMatchNow();
   renderSchoolGrid();
   renderDetails();
   renderNeccTypeList();
@@ -2386,8 +2572,11 @@ async function refreshObs(inspect) {
     if (Array.isArray(st.stale)) sceneStale = st.stale;
     if (!st.connected) sceneStale = [];
     if (st.stinger) { stingerState = { ...(stingerState || {}), ...st.stinger }; renderStingerGuides(); }
+    if (st.video !== undefined) obsVideo = st.video;
+    if (!st.connected) obsVideo = null;
     if (st.onAirNow) onAir = st.onAirNow;
     renderObsStatus(st);
+    if (inspect && currentStep === 'build') renderChecklist();
     return st;
   } catch (e) {
     renderObsStatus({ connected: false, error: 'the app is not answering' });
@@ -2445,6 +2634,9 @@ setInterval(async () => {
   if (now && !obsWasConnected) refreshObs(true);
   obsWasConnected = now;
 }, 4000);
+// OBS has no event for a changed video setting: the Build step's checklist
+// asks again when the panel is returned to.
+window.addEventListener('focus', () => { if (currentPage === 'match' && currentStep === 'build') refreshObs(true); });
 
 // --- Stinger -----------------------------------------------------------------------------
 //
@@ -2687,7 +2879,7 @@ wizard.addEventListener('click', (e) => {
   if (b.dataset.wiz === 'next') showWizStep(order[Math.min(order.length - 1, i + 1)]);
   if (b.dataset.wiz === 'back') showWizStep(order[Math.max(0, i - 1)]);
   if (b.dataset.wiz === 'skip') { closeWizard(); toast('Setup skipped. Available under Settings.'); }
-  if (b.dataset.wiz === 'finish') { closeWizard(); setPage('match'); showStep('game'); }
+  if (b.dataset.wiz === 'finish') { closeWizard(); setPage('match'); showStep(STEPS[0]); }
 });
 
 function renderWizConnect(res) {
@@ -2756,9 +2948,9 @@ renderLibrary();
 applyCollapsed();
 setTextSize(lsGet(TEXT_KEY) || 'normal');
 shotInput.checked = lsGet(SHOT_KEY) !== 'off';
-showTeamSrc(lsGet(SRC_KEY) || (BRAND.leagueTeams ? 'library' : 'import'));
+showTeamSrc(lsGet(SRC_KEY) || (LINK_FIRST || BRAND.leagueTeams ? 'library' : 'import'));
 setPickFor('A');
-currentStep = [new URLSearchParams(location.search).get('step'), lsGet(STEP_KEY)].find((x) => STEPS.includes(x)) || 'game';
+currentStep = [new URLSearchParams(location.search).get('step'), lsGet(STEP_KEY)].find((x) => STEPS.includes(x)) || STEPS[0];
 setPage(START_PAGE || 'live');
 showCountdownFields();
 $id('dockUrl').value = `${location.origin}/control`;

@@ -415,6 +415,29 @@ input:focus, select:focus, button:focus-visible{outline:2px solid var(--focus); 
 .sb-big:hover:not(:disabled){ background:#4d1a1e; border-color:var(--bad); color:#fff; }
 .sb-big:active:not(:disabled){ transform:translateY(1px); }
 .sb-big:disabled{ opacity:.4; cursor:not-allowed; }
+/* The order a team's players take the stage in, under its stock counter.
+   A row is dragged to move its player. */
+.sb-ord{ display:flex; flex-direction:column; gap:6px; }
+.sb-ord-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; font-size:.8rem; color:var(--muted); }
+.sb-ord-head small{ font-size:.72rem; }
+.sb-ord-list{ display:flex; flex-direction:column; gap:4px; touch-action:none; }
+.sb-ord-row{
+  display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:grab; user-select:none;
+  background:var(--panel); border:1px solid var(--panel-border); border-left:3px solid var(--panel-border); font-size:.86rem;
+}
+.sb-ord-row:hover{ border-color:var(--brand-accent); }
+.sb-ord-row:hover .ret-handle{ color:var(--brand-accent); }
+.sb-ord-n{ flex:0 0 1em; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums; }
+.sb-ord-name{ flex:1 1 auto; min-width:0; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sb-ord-st{ flex:0 0 auto; font-style:normal; font-size:.72rem; color:var(--muted); white-space:nowrap; }
+.sb-ord-row.on{ border-left-color:var(--team); }
+.sb-ord-row.on .sb-ord-st{ color:var(--brand-accent); font-weight:700; }
+.sb-ord-row.out .sb-ord-name{ color:var(--muted); text-decoration:line-through; }
+.sb-ord-row.bench{ border-style:dashed; }
+.sb-ord-row.bench .sb-ord-name{ color:var(--muted); }
+.sb-ord-row.dragging{ opacity:.45; cursor:grabbing; }
+.sb-ord-row.drop-above{ box-shadow:0 -3px 0 var(--brand-accent); }
+.sb-ord-row.drop-below{ box-shadow:0 3px 0 var(--brand-accent); }
 .sb-actions{ margin-bottom:12px; }
 .sb-side.flash{ animation:sbFlash .5s ease-out; }
 @keyframes sbFlash{ from{ box-shadow:0 0 0 3px var(--brand-accent); } to{ box-shadow:none; } }
@@ -660,3 +683,21 @@ body > #rosterEditor{ display:none; }
 .st-view-row img, .st-view-row .mono{ width:34px; height:34px; object-fit:contain; }
 .st-view-row .mono{ display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:.62rem; }
 .st-view-name{ text-align:left; font-weight:700; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Match step 1: the match as it stands, and matches offered from the league feed. */
+.step-foot-end{ display:flex; gap:10px; }
+.match-now{ padding:11px 12px; border-radius:10px; background:var(--panel-2); border:1px solid var(--panel-border); }
+.match-now-teams{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.match-now-teams i{ font-style:normal; color:var(--muted); font-size:.8rem; }
+.match-now-team{ display:inline-flex; align-items:center; gap:9px; min-width:0; font-size:.95rem; }
+.match-now-team img, .match-now-team .mono{ width:30px; height:30px; flex:none; object-fit:contain; display:grid; place-items:center; font-size:.62rem; font-weight:800; border-radius:6px; }
+.match-now-meta{ margin-top:6px; font-size:.8rem; color:var(--muted); }
+.feed-pick{ display:flex; flex-direction:column; gap:6px; }
+.feed-pick-row{ display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:9px; background:var(--panel-2); border:1px solid var(--panel-border); }
+.feed-pick-row.live{ border-color:var(--tally-live); }
+.feed-pick-row.set{ box-shadow:inset 3px 0 0 var(--ok); }
+.feed-pick-when{ flex:0 0 118px; font-size:.78rem; color:var(--muted); white-space:nowrap; }
+.feed-pick-what{ flex:1 1 auto; min-width:0; }
+.feed-pick-what b{ display:block; font-size:.875rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.feed-pick-what small{ display:block; font-size:.74rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.feed-pick-row .btn-secondary{ padding:6px 12px; flex:none; }

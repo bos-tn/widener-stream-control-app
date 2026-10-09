@@ -21,12 +21,51 @@ const FONT_FORMATS = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'w
 // matches; 'versus', the matchup) and one scene and one pop-up window per
 // camera: { id, label, title, subtitle }.
 const BROADCAST_SCENES = ['schedule', 'versus'];
-function broadcastOptions(raw) {
+
+// A network camera's address, as typed or as a profile gives it: a web page
+// (http, https) or a stream (rtsp, rtmp, srt, ...). An address with no
+// scheme is taken as RTSP on the RTSP ports (554, 8554) and as a web page
+// otherwise. '' when it is not an address.
+const CAMERA_LINK = /^(https?|rtsps?|rtmps?|srt|udp|rist):\/\/[^\s]+$/i;
+function cameraLink(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return '';
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+    const port = (/^[^/]*:(\d+)(\/|$)/.exec(s) || [])[1];
+    s = (port === '554' || port === '8554' ? 'rtsp://' : 'http://') + s;
+  }
+  return CAMERA_LINK.test(s) && s.length <= 500 ? s : '';
+}
+// What OBS shows it with: 'page' (a browser source), 'stream' (a media
+// source), or 'device' for no address (a capture device on this PC).
+function cameraLinkKind(link) {
+  if (!link) return 'device';
+  return /^https?:\/\//i.test(link) && !/\.m3u8(\?|#|$)/i.test(link) ? 'page' : 'stream';
+}
+
+// local: profiles/<id>/local.json, `{ "cameras": { "<camera id>": "<address>" } }`.
+// Addresses on the organisation's own network are kept there and not in
+// profile.json: that file is in the public repository, local.json is not
+// (.gitignore), and it is left out of an installer (build/dist.js). It is
+// for dev runs on that PC; an installed app's operator types the addresses
+// in once (Broadcast, Cameras), and they are kept in its data folder.
+function broadcastOptions(raw, local) {
   if (!raw || typeof raw !== 'object') return { enabled: false, scenes: [], cameras: [] };
   const cameras = (Array.isArray(raw.cameras) ? raw.cameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '')).slice(0, 4)
-    .map((c) => ({ id: c.id, label: String(c.label || c.id), title: String(c.title || c.label || c.id), subtitle: String(c.subtitle || '') }));
+    // link: the camera's address on the network (local.json, else `url`
+    // here). Without one the camera is a capture device on this PC.
+    .map((c) => ({ id: c.id, label: String(c.label || c.id), title: String(c.title || c.label || c.id), subtitle: String(c.subtitle || ''),
+      link: cameraLink(((local && local.cameras) || {})[c.id] !== undefined ? local.cameras[c.id] : c.url) }));
   const scenes = (Array.isArray(raw.scenes) ? raw.scenes : BROADCAST_SCENES).filter((x) => BROADCAST_SCENES.includes(x));
-  return { enabled: true, scenes, cameras };
+  // The league feed a new install follows: LeagueOS links (a school's page
+  // follows that school's teams), and whose matches are kept: 'home' (the
+  // profile's home team) or 'all'.
+  const f = raw.follow && typeof raw.follow === 'object' ? raw.follow : {};
+  const follow = {
+    links: (Array.isArray(f.links) ? f.links : []).filter((l) => /^https:\/\/[a-z0-9.-]+\.leagueos\.gg\//i.test(String(l))).slice(0, 6),
+    scope: f.scope === 'home' ? 'home' : 'all',
+  };
+  return { enabled: true, scenes, cameras, follow };
 }
 
 // Headline typefaces the operator can pick between (v2.0.0, optional):
@@ -60,6 +99,13 @@ function listProfiles() {
 
 // Reads and checks one profile. Missing optional parts get safe defaults, so
 // a new league can start from a short profile.json and grow.
+// What this PC adds to a profile (see broadcastOptions). STREAM_NO_LOCAL=1
+// leaves it out, for tests.
+function readLocal(dir) {
+  if (process.env.STREAM_NO_LOCAL === '1') return {};
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'local.json'), 'utf8')) || {}; } catch (e) { return {}; }
+}
+
 function loadProfile(id) {
   if (!/^[a-z0-9-]+$/.test(id || '')) throw new Error(`Bad profile id "${id}"`);
   const dir = path.join(PROFILES_DIR, id);
@@ -112,7 +158,7 @@ function loadProfile(id) {
       defaults: { ...((raw.backgrounds && raw.backgrounds.defaults) || {}) },
     },
     headlineFonts: headlineFonts(raw.headlineFonts, assetsDir),
-    broadcast: broadcastOptions(raw.broadcast),
+    broadcast: broadcastOptions(raw.broadcast, readLocal(dir)),
     themeScript: raw.themeScript && fs.existsSync(path.join(dir, raw.themeScript)) ? path.join(dir, raw.themeScript) : '',
     music: raw.music && raw.music.driveId ? raw.music : null,
     defaults: raw.defaults || {},
@@ -152,7 +198,7 @@ function clientBrand(p) {
     backgrounds: p.backgrounds,
     headlineFonts: { list: p.headlineFonts.list.map(({ id, name, family }) => ({ id, name, family })), default: p.headlineFonts.default },
     hasMusicTrack: !!p.music,
-    broadcast: p.broadcast.enabled ? { scenes: p.broadcast.scenes, cameras: p.broadcast.cameras } : null,
+    broadcast: p.broadcast.enabled ? { scenes: p.broadcast.scenes, cameras: p.broadcast.cameras.map(({ link, ...c }) => c) } : null,
   };
 }
 
@@ -210,4 +256,4 @@ function brandCss(p) {
   return `/* ${p.name}: generated from profiles/${p.id}/profile.json */\n:root{\n${lines.join('\n')}\n}\n${faces.join('')}`;
 }
 
-module.exports = { PROFILES_DIR, profileId, listProfiles, loadProfile, clientBrand, brandCss };
+module.exports = { PROFILES_DIR, profileId, listProfiles, loadProfile, clientBrand, brandCss, cameraLink, cameraLinkKind };

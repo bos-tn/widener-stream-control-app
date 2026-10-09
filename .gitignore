@@ -15,6 +15,12 @@ Stream/
 .DS_Store
 Thumbs.db
 
+# What one PC adds to a profile: network camera addresses on the
+# organisation's own network. Not for a public repository.
+app/profiles/*/local.json
+# The same addresses written out for the organisation's own operators.
+*(internal).txt
+
 # Licensed fonts: their licences don't allow passing the files on, so they
 # are not published here. See app/profiles/lote/assets/fonts/README.md.
 app/profiles/lote/assets/fonts/PinkBlue.ttf

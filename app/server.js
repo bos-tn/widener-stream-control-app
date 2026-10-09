@@ -504,8 +504,20 @@ function createServer(port, opts = {}) {
   // /logos, so the overlay doesn't depend on images.leagueos.gg answering
   // mid-broadcast. On any failure the original remote URL is kept.
   const LOGO_TYPES = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/svg+xml': '.svg', 'image/avif': '.avif' };
+  // A logo is downloaded once: the league feed asks for the same ones on
+  // every read (a few hundred per read of a big league).
+  const logoHave = new Map();
+  function cachedLogo(url) {
+    if (logoHave.has(url)) return logoHave.get(url);
+    const base = crypto.createHash('sha1').update(url).digest('hex').slice(0, 16);
+    const ext = [...new Set(Object.values(LOGO_TYPES))].find((e) => fs.existsSync(path.join(logosDir, base + e)));
+    if (ext) logoHave.set(url, '/logos/' + base + ext);
+    return ext ? logoHave.get(url) : '';
+  }
   async function cacheLogo(url) {
     if (!/^https?:\/\//i.test(url || '')) return url;
+    const have = cachedLogo(url);
+    if (have) return have;
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -518,6 +530,7 @@ function createServer(port, opts = {}) {
       const name = crypto.createHash('sha1').update(url).digest('hex').slice(0, 16) + ext;
       fs.mkdirSync(logosDir, { recursive: true });
       fs.writeFileSync(path.join(logosDir, name), buf);
+      logoHave.set(url, '/logos/' + name);
       return '/logos/' + name;
     } catch (e) {
       return url;
@@ -550,6 +563,7 @@ function createServer(port, opts = {}) {
     stingerName: `${PROFILE.shortName} Stinger`,
     allNeccTypes: NECC_TYPES,
     allCameras: PROFILE.broadcast.cameras,
+    onConnected: () => { setTimeout(reloadMissingPages, PAGE_CHECK_MS).unref(); },
     onProgram: (p) => {
       if (p.key !== 'stats') autoStatsUp = false;
       onAir = { key: p.key, view: p.view, necc: p.necc, scene: p.scene };
@@ -573,7 +587,8 @@ function createServer(port, opts = {}) {
   // broadcast.js). Null for a profile without a `broadcast` block.
   const bx = BX_ON ? createBroadcast({
     dataDir, profile: PROFILE, readJson: readJsonSafe, writeJson: writeJsonSafe,
-    sendAll: (msg) => sendToAll(msg), cacheLogo, getState: () => state, obs,
+    sendAll: (msg) => sendToAll(msg), sendPanels: (msg) => sendToPanels(msg), sendScenes: (msg) => sendToOverlays(msg),
+    cacheLogo, getState: () => state, obs,
   }) : null;
 
   // --- Background music (v0.11.0) -------------------------------------------
@@ -601,7 +616,8 @@ function createServer(port, opts = {}) {
       // The v2 setup guide (OBS scenes and the stinger) has run on this PC.
       guideV2: p.guideV2 === true,
       gameCapture: p.gameCapture !== false,
-      studioMode: p.studioMode !== false,
+      // Off until the operator ticks it (on by default before v2.2.0).
+      studioMode: p.studioMode === true,
       // A build puts the app's scenes in stream order in OBS's list.
       orderScenes: p.orderScenes !== false,
       // The broadcast package's scenes: all of them until one is unticked.
@@ -633,6 +649,8 @@ function createServer(port, opts = {}) {
       leagueScenes: prefs.leagueScenes,
       broadcastScenes: PROFILE.broadcast.scenes.filter((k) => prefs.bxScenes.includes(k)),
       cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`)),
+      // Which cameras are network cameras, and where (see broadcast.js).
+      cameraLinks: bx ? bx.cameraLinks() : {},
       gameCapture: prefs.gameCapture,
       studioMode: prefs.studioMode,
       orderScenes: prefs.orderScenes,
@@ -643,7 +661,7 @@ function createServer(port, opts = {}) {
   let layoutKey = '';
   function syncLayout(quiet) {
     const o = buildOptions();
-    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id)]);
+    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id), o.cameraLinks]);
     if (key === layoutKey) return;
     layoutKey = key;
     obs.setLayout(o);
@@ -1123,15 +1141,41 @@ function createServer(port, opts = {}) {
     app.post('/api/bx/lower', (req, res) => reply(res, bx.setLower(req.body || {})));
     app.post('/api/bx/settings', (req, res) => reply(res, bx.setSettings(req.body || {})));
     app.post('/api/bx/follows', async (req, res) => {
-      try { reply(res, await bx.follow(String((req.body || {}).url || ''), (req.body || {}).league)); }
+      try { reply(res, await bx.follow(String((req.body || {}).url || ''), (req.body || {}).league, { all: !!(req.body || {}).all })); }
       catch (err) { res.status(502).json({ error: err.message || 'Could not read that link' }); }
     });
+    // { url, all }: all follows a link that names many seasons (see follow).
+    app.delete('/api/bx/follows', (req, res) => reply(res, bx.clearFollows()));
+    app.post('/api/bx/follows/restore', (req, res) => reply(res, bx.restoreFollows(req.body || {})));
+    app.post('/api/bx/follows/default', async (req, res) => {
+      try { reply(res, await bx.followDefault()); }
+      catch (err) { res.status(502).json({ error: err.message || 'Could not read the league site' }); }
+    });
     app.delete('/api/bx/follows/:id', (req, res) => reply(res, bx.unfollow(req.params.id)));
+    app.delete('/api/bx/schools/:id', (req, res) => reply(res, bx.unfollowSchool(req.params.id)));
     app.post('/api/bx/refresh', async (req, res) => { res.json(await bx.refresh()); });
     // Cameras: a window over the game, and the device each one uses.
     app.post('/api/bx/cam', (req, res) => reply(res, bx.setPip(String((req.body || {}).id || ''), (req.body || {}).pip)));
     app.get('/api/bx/cameras', async (req, res) => {
-      res.json({ connected: obs.isConnected(), cameras: await obs.cameraStatus(bx.cameras).catch(() => []) });
+      const rows = await obs.cameraStatus(bx.cameras).catch(() => []);
+      const links = bx.cameraLinks();
+      // A network camera: its link, and whether it is sending.
+      await Promise.all(rows.map(async (row) => {
+        row.link = links[row.id] || '';
+        row.live = row.link ? await bx.cameraLive(row.id).catch(() => null) : null;
+      }));
+      res.json({ connected: obs.isConnected(), cameras: rows });
+    });
+    // { url }: a link makes the camera a network camera, '' a capture
+    // device; { default: true } goes back to the profile's. OBS is changed
+    // at once when the camera's scene has been built.
+    app.post('/api/bx/cameras/:id/link', async (req, res) => {
+      const b = req.body || {};
+      const out = bx.setCameraLink(String(req.params.id), b.default ? null : String(b.url || ''));
+      if (out.error) return res.status(400).json(out);
+      syncLayout(true);
+      const applied = await obs.applyCamera(String(req.params.id)).catch((err) => 'error: ' + ((err && err.message) || 'OBS refused'));
+      res.json({ ok: true, ...out, applied });
     });
     app.post('/api/bx/cameras/:id/device', async (req, res) => {
       try { await obs.setCameraDevice(req.params.id, String((req.body || {}).device || '')); res.json({ ok: true }); }
@@ -1332,6 +1376,14 @@ function createServer(port, opts = {}) {
     catch (err) { res.status(502).json({ error: err.message || 'Could not set up the stinger' }); }
   });
 
+  // Raises OBS's canvas, output size and frame rate to 1920x1080 at 60,
+  // whichever are under it; what they are now is `video` in /api/obs/inspect.
+  // OBS refuses while an output is running: { blocked: 'live' }.
+  app.post('/api/obs/video', async (req, res) => {
+    try { res.json(await obs.raiseVideo()); }
+    catch (err) { res.status(502).json({ error: err.message || 'OBS did not take the video settings' }); }
+  });
+
   // A small picture of what OBS has on program, for the panel.
   app.get('/api/obs/program-shot', async (req, res) => {
     noStore(res);
@@ -1367,12 +1419,39 @@ function createServer(port, opts = {}) {
   // was sent its HUD back (main.js then waits a moment before exiting).
   server.releaseGame = () => rl.close();
 
+  // OBS opened before the app leaves every scene's page on Chromium's error
+  // page: nothing was listening when OBS asked for it, and it does not try
+  // again. Each page names its scene when it subscribes, so a few seconds
+  // after OBS is connected the scenes with no page connected are reloaded.
+  // A loaded page reconnects by itself within two seconds of the app
+  // starting, so by then only the dead ones are missing.
+  const PAGE_CHECK_MS = 4000;
+  const pageReloadedAt = {};
+  function reloadMissingPages() {
+    if (!obs.isConnected()) return;
+    const loaded = new Set();
+    wss.clients.forEach((c) => { if (c.readyState === 1 && c.role === 'overlay' && c.pageKey) loaded.add(c.pageKey); });
+    const now = Date.now();
+    const missing = obs.status().scenes.map((s) => s.key).filter((k) => !loaded.has(k) && now - (pageReloadedAt[k] || 0) > 20000);
+    if (!missing.length) return;
+    missing.forEach((k) => { pageReloadedAt[k] = now; });
+    obs.reloadPages(missing).then((done) => {
+      if (done.length) console.log('Reloaded scene pages that had not loaded: ' + done.join(', '));
+    }).catch(() => {});
+  }
+
   // Every page subscribes as a 'panel' (the control panel, in the app window
   // or an OBS dock) or an overlay (every scene's browser source).
   function sendToPanels(obj) {
     const payload = JSON.stringify(obj);
     wss.clients.forEach((client) => {
       if (client.readyState === 1 && client.role === 'panel') client.send(payload);
+    });
+  }
+  function sendToOverlays(obj) {
+    const payload = JSON.stringify(obj);
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1 && client.role === 'overlay') client.send(payload);
     });
   }
   function sendToAll(obj) {
@@ -1400,6 +1479,8 @@ function createServer(port, opts = {}) {
       if (msg.type === 'subscribe') {
         // v1 pages subscribed to a channel: 'draft' was a panel.
         ws.role = msg.role === 'panel' || msg.channel === 'draft' ? 'panel' : 'overlay';
+        // A scene's page names its scene (see reloadMissingPages).
+        if (ws.role === 'overlay') ws.pageKey = msg.view === 'necc' && msg.necc ? 'necc:' + String(msg.necc) : String(msg.view || '');
         // First, so a page from an older version reloads before anything else.
         ws.send(JSON.stringify({ type: 'hello', version: APP_VERSION, stamp: PAGE_STAMPS[ws.role] }));
         // Montage status first, so an overlay's first render already knows

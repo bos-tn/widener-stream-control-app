@@ -50,9 +50,31 @@ const BROADCAST_VIEWS = [
   { view: 'schedule', label: 'This Week' },
   { view: 'versus', label: 'Matchup' },
 ];
+// What the video settings are held against (videoStatus, raiseVideo).
+const VIDEO = { w: 1920, h: 1080, fps: 60 };
 // The kind of input a camera is, by platform, and the setting that holds
 // its device.
-const CAMERA_KINDS = ['dshow_input', 'av_capture_input_v2', 'av_capture_input', 'v4l2_input'];
+const CAMERA_KINDS =['dshow_input', 'av_capture_input_v2', 'av_capture_input', 'v4l2_input'];
+// A network camera is one of two OBS sources, by its address (the same
+// rule as profile.js cameraLinkKind):
+//   a web page (http, https)       a browser source showing the camera's own
+//                                  page: a MediaMTX WebRTC page, or any page
+//                                  that fills itself with the picture
+//   a stream (rtsp, rtmp, srt, an  a media source reading it, over TCP for
+//   .m3u8 playlist, ...)           RTSP, with no buffering, reconnecting
+function linkKind(link) {
+  if (!link) return 'device';
+  return /^https?:\/\//i.test(link) && !/\.m3u8(\?|#|$)/i.test(link) ? 'page' : 'stream';
+}
+// The page is restyled: no background, no status text, no player controls,
+// and the picture cropped to fill, so a camera that is off the air is
+// nothing at all rather than a grey page with an error on it.
+const NET_CAMERA_CSS = [
+  'html, body { margin: 0 !important; background: rgba(0, 0, 0, 0) !important; overflow: hidden !important; }',
+  'video { background: rgba(0, 0, 0, 0) !important; object-fit: cover !important; }',
+  'video::-webkit-media-controls { display: none !important; }',
+  '#message { display: none !important; }',
+].join('\n');
 const CAMERA_DEVICE_PROP = { dshow_input: 'video_device_id', av_capture_input_v2: 'device', av_capture_input: 'device', v4l2_input: 'device_id' };
 
 // The scenes this match uses, in the order a stream runs through them, which
@@ -118,11 +140,30 @@ function createObs(opts = {}) {
   const prefix = opts.prefix || 'APP';
   const getOverlayBase = opts.getOverlayBase || (() => 'http://localhost:4310');
   const onProgram = opts.onProgram || (() => {});
+  const onConnected = opts.onConnected || (() => {});
   const collectionName = opts.collection || `${prefix} Stream`;
   const stingerName = opts.stingerName || `${prefix} Stinger`;
   const musicInput = `${prefix}: Music`;
   const captureInput = `${prefix}-game-capture`;
-  const cameraInput = (id) => `${prefix}-cam-${id}`;
+  // A camera is one input: a capture device, or with a link a browser
+  // source (a page) or a media source (a stream). Each sort has its own
+  // name, so changing a camera from one to another never asks OBS for a
+  // name it is still letting go of.
+  const CAMERA_INPUTS = {
+    device: (id) => `${prefix}-cam-${id}`,
+    page: (id) => `${prefix}-netcam-${id}`,
+    stream: (id) => `${prefix}-stream-${id}`,
+  };
+  let cameraLinks = {};
+  const cameraLink = (id) => String(cameraLinks[id] || '');
+  const cameraInput = (id) => CAMERA_INPUTS[linkKind(cameraLink(id))](id);
+  function setCameraLinks(buildOpts) {
+    cameraLinks = {};
+    (opts.allCameras || []).forEach((c) => { cameraLinks[c.id] = String(c.link || ''); });
+    // The operator's own links (the server's build options) over the profile's.
+    Object.assign(cameraLinks, (buildOpts && buildOpts.cameraLinks) || {});
+  }
+  setCameraLinks(null);
   const obs = new OBSWebSocket();
 
   // The scenes this match uses (the server's build options), and every scene
@@ -237,6 +278,7 @@ function createObs(opts = {}) {
       await refreshProgram();
       musicApplied = null;
       applyMusic(0).catch(() => {});
+      try { onConnected(); } catch (e) { /* the caller's own business */ }
       return status();
     } catch (e) {
       connected = false;
@@ -265,6 +307,109 @@ function createObs(opts = {}) {
     } catch (e) {
       return { w: 1920, h: 1080 };
     }
+  }
+
+  // --- Video settings ----------------------------------------------------------
+  // OBS's canvas, output size and frame rate, held against 1920x1080 at 60.
+  // OBS takes a change only while no output is running (stream, recording,
+  // virtual camera, replay buffer). The bitrate is not a video setting: it
+  // is read where OBS gives it (Simple output mode) and never written.
+
+  const fpsOf = (v) => (v.fpsDenominator ? v.fpsNumerator / v.fpsDenominator : 0);
+  // 59.94 (60000/1001) counts as 60.
+  const videoLow = (v) => ({
+    base: v.baseWidth < VIDEO.w || v.baseHeight < VIDEO.h,
+    output: v.outputWidth < VIDEO.w || v.outputHeight < VIDEO.h,
+    fps: fpsOf(v) < VIDEO.fps - 0.1,
+  });
+
+  async function outputRunning() {
+    const live = await Promise.all(['GetStreamStatus', 'GetRecordStatus', 'GetVirtualCamStatus', 'GetReplayBufferStatus']
+      .map((req) => obs.call(req).then((s) => !!s.outputActive).catch(() => false)));
+    return live.some(Boolean);
+  }
+
+  async function profileValue(parameterCategory, parameterName) {
+    try { return String((await obs.call('GetProfileParameter', { parameterCategory, parameterName })).parameterValue || ''); }
+    catch (e) { return ''; }
+  }
+
+  // { base, output, fps, ok, locked, bitrate, rescale } or null when OBS
+  // does not answer. bitrate: the stream's, in kbps, 0 when OBS keeps it
+  // where obs-websocket cannot read (Advanced output mode). rescale: the size
+  // Advanced mode scales the stream to, when that is under 1920x1080.
+  async function videoStatus() {
+    if (!connected) return null;
+    let v;
+    try { v = await obs.call('GetVideoSettings'); } catch (e) { return null; }
+    const low = videoLow(v);
+    const out = {
+      base: { w: v.baseWidth, h: v.baseHeight }, output: { w: v.outputWidth, h: v.outputHeight },
+      fps: Math.round(fpsOf(v) * 100) / 100,
+      ok: !(low.base || low.output || low.fps),
+      locked: await outputRunning(),
+      bitrate: 0, rescale: '',
+    };
+    if ((await profileValue('Output', 'Mode')) === 'Advanced') {
+      // RescaleFilter replaced the Rescale checkbox in OBS 30.1; 0 is off.
+      const [filter, on, res] = await Promise.all(['RescaleFilter', 'Rescale', 'RescaleRes'].map((n) => profileValue('AdvOut', n)));
+      const size = /^(\d+)x(\d+)$/.exec(res);
+      const scaled = filter ? filter !== '0' : on === 'true';
+      if (scaled && size && (Number(size[1]) < VIDEO.w || Number(size[2]) < VIDEO.h)) out.rescale = res;
+    } else {
+      out.bitrate = Number(await profileValue('SimpleOutput', 'VBitrate')) || 0;
+    }
+    return out;
+  }
+
+  // Raises whichever of canvas, output size and frame rate is under
+  // 1920x1080 at 60, and leaves the rest. A canvas that grew is followed by
+  // refit(). { changed, refitted, video }, or { blocked: 'live' } when OBS
+  // refuses because an output is running.
+  async function raiseVideo() {
+    if (!connected) throw softError('Not connected to OBS');
+    const v = await obs.call('GetVideoSettings');
+    const low = videoLow(v);
+    const want = {};
+    if (low.base) Object.assign(want, { baseWidth: VIDEO.w, baseHeight: VIDEO.h });
+    if (low.base || low.output) Object.assign(want, { outputWidth: VIDEO.w, outputHeight: VIDEO.h });
+    if (low.fps) Object.assign(want, { fpsNumerator: VIDEO.fps, fpsDenominator: 1 });
+    if (!Object.keys(want).length) return { changed: false, refitted: 0, video: await videoStatus() };
+    try {
+      await obs.call('SetVideoSettings', want);
+    } catch (e) {
+      // 500: OutputRunning. Any output counts, a plugin's included.
+      if (e && e.code === 500) return { changed: false, blocked: 'live', video: { ...(await videoStatus()), locked: true } };
+      throw softError(scrub(e && e.message ? e.message : String(e), ''));
+    }
+    const refitted = low.base ? await refit() : 0;
+    return { changed: true, refitted, video: await videoStatus() };
+  }
+
+  // After the canvas changes size: each of the app's pages rendered at the
+  // new size and laid over the whole canvas, each camera over its scene. A
+  // camera's window over the game is placed every time it is shown. Returns
+  // how many pages were resized; a scene that is not built is skipped.
+  async function refit() {
+    const base = await videoBase();
+    const size = { width: base.w, height: base.h };
+    let n = 0;
+    for (const t of scenes) {
+      try {
+        const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: t.input });
+        await obs.call('SetInputSettings', { inputName: t.input, inputSettings: size, overlay: true });
+        await fitItem(t.scene, sceneItemId, base);
+        n++;
+      } catch (e) { continue; }
+      if (!t.camera) continue;
+      try {
+        const input = cameraInput(t.camera);
+        const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: input });
+        if (linkKind(cameraLink(t.camera)) === 'page') await obs.call('SetInputSettings', { inputName: input, inputSettings: size, overlay: true });
+        await coverItem(t.scene, sceneItemId, { x: 0, y: 0, w: base.w, h: base.h });
+      } catch (e) { /* no camera source in this scene */ }
+    }
+    return n;
   }
 
   // Stretch a scene item over the whole canvas. Non-fatal if it fails.
@@ -384,23 +529,94 @@ function createObs(opts = {}) {
     return CAMERA_KINDS.find((k) => kinds.includes(k)) || '';
   }
 
+  // Takes an input out of OBS by removing its item from every scene: OBS
+  // lets go of an input when its last item goes. RemoveInput is not used.
+  // Measured in OBS 32: it only marks the source, and a scene drops its
+  // items of a marked source only as it is drawn, so an item in any scene
+  // that is not on program (a camera's hidden window in the Scoreboard
+  // scene) keeps the source alive under its name, where it can be neither
+  // made again nor added to a scene; one that was then offered to a scene
+  // stayed until OBS was closed.
+  async function removeInput(name) {
+    const list = (await obs.call('GetSceneList').catch(() => ({ scenes: [] }))).scenes || [];
+    for (const s of list) {
+      const items = (await obs.call('GetSceneItemList', { sceneName: s.sceneName }).catch(() => ({ sceneItems: [] }))).sceneItems || [];
+      for (const it of items.filter((x) => x.sourceName === name)) {
+        try { await obs.call('RemoveSceneItem', { sceneName: s.sceneName, sceneItemId: it.sceneItemId }); } catch (e) { /* non-fatal */ }
+      }
+    }
+  }
+
+  function netCameraSettings(link, base) {
+    if (linkKind(link) === 'stream') {
+      return {
+        is_local_file: false, input: link, input_format: '', looping: false,
+        // Kept open and running off air, so it is on the moment it is cut to.
+        restart_on_activate: false, close_when_inactive: false, clear_on_media_end: false,
+        buffering_mb: 0, reconnect_delay_sec: 2, hw_decode: true,
+        // RTSP over TCP: UDP between campus networks is often dropped.
+        ffmpeg_options: /^rtsps?:/i.test(link) ? 'rtsp_transport=tcp' : '',
+      };
+    }
+    // reroute_audio: the page's sound goes to OBS's mixer (where it is muted
+    // below), not out of the PC's speakers into Desktop Audio.
+    return { url: link, width: base.w, height: base.h, css: NET_CAMERA_CSS, shutdown: false, restart_when_active: false, reroute_audio: true };
+  }
+
   // The camera input, at the bottom of its own scene. 'created', 'exists',
-  // or 'manual' when this OBS has no camera input kind.
+  // or 'manual' when this OBS has no camera input kind. The input of the
+  // other sort, left from before the camera's link was set or cleared, goes.
   async function ensureCamera(t, base, existingInputs) {
+    const link = cameraLink(t.camera);
+    const sort = linkKind(link);
     const input = cameraInput(t.camera);
+    for (const other of Object.values(CAMERA_INPUTS).map((name) => name(t.camera)).filter((n) => n !== input && existingInputs.has(n))) {
+      await removeInput(other);
+      existingInputs.delete(other);
+    }
     let sceneItemId;
     let made = 'exists';
-    if (!existingInputs.has(input)) {
-      const kind = await cameraKind();
-      if (!kind) return 'manual';
-      ({ sceneItemId } = await obs.call('CreateInput', { sceneName: t.scene, inputName: input, inputKind: kind, inputSettings: {}, sceneItemEnabled: true }));
+    const create = async () => {
+      const kind = sort === 'page' ? 'browser_source' : sort === 'stream' ? 'ffmpeg_source' : await cameraKind();
+      if (!kind) return false;
+      const request = { sceneName: t.scene, inputName: input, inputKind: kind, inputSettings: link ? netCameraSettings(link, base) : {}, sceneItemEnabled: true };
+      // An input whose items have just gone is let go of within a moment.
+      for (let attempt = 1; ; attempt++) {
+        try { ({ sceneItemId } = await obs.call('CreateInput', request)); break; } catch (e) {
+          if (attempt >= 4) throw softError(/already exists/i.test(e.message || '') ? `OBS still holds a removed source named ${input}. Restart OBS, then build scenes.` : (e.message || 'OBS did not create the camera source'));
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
       existingInputs.add(input);
       made = 'created';
+      if (link) { try { await obs.call('SetInputMute', { inputName: input, inputMuted: true }); } catch (e) { /* non-fatal */ } }
+      return true;
+    };
+    if (!existingInputs.has(input)) {
+      if (!(await create())) return 'manual';
     } else {
+      if (link) {
+        // A changed link reloads the page. The same link is left alone, so
+        // a rebuild never drops a camera that is connected.
+        const have = (await obs.call('GetInputSettings', { inputName: input }).catch(() => ({ inputSettings: {} }))).inputSettings || {};
+        const want = netCameraSettings(link, base);
+        if (Object.keys(want).some((k) => have[k] !== want[k])) {
+          await obs.call('SetInputSettings', { inputName: input, inputSettings: want, overlay: true });
+        }
+      }
       try {
         ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: input }));
       } catch (e) {
-        ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: input, sceneItemEnabled: true }));
+        try {
+          ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: input, sceneItemEnabled: true }));
+        } catch (e2) {
+          // OBS still lists an input it has been told to remove while an
+          // item of it is left in some scene, and will not add it to
+          // another. It is cleared out and made again.
+          await removeInput(input);
+          existingInputs.delete(input);
+          if (!(await create())) return 'manual';
+        }
       }
     }
     await coverItem(t.scene, sceneItemId, { x: 0, y: 0, w: base.w, h: base.h }).catch(() => {});
@@ -441,14 +657,39 @@ function createObs(opts = {}) {
     return true;
   }
 
-  // Each camera as OBS has it: whether its input exists, the device it is
-  // set to and the devices this PC offers.
+  // One camera's input and items, as a build makes them, without a build:
+  // for a link set or cleared in the panel. Nothing happens until the
+  // camera's scene has been built.
+  async function applyCamera(id) {
+    if (!connected) return 'offline';
+    const t = scenes.find((s) => s.camera === id);
+    if (!t) return 'no-scene';
+    const sceneNames = new Set(((await obs.call('GetSceneList')).scenes || []).map((s) => s.sceneName));
+    if (!sceneNames.has(t.scene)) return 'no-scene';
+    const existingInputs = new Set(((await obs.call('GetInputList')).inputs || []).map((i) => i.inputName));
+    const made = await ensureCamera(t, await videoBase(), existingInputs);
+    const sb = entryForKey('scoreboard');
+    if (made !== 'manual' && sb && sceneNames.has(sb.scene)) await ensureCameraWindow(sb, id, existingInputs).catch(() => {});
+    return made;
+  }
+
+  // Each camera as OBS has it: whether its input exists, and for a capture
+  // device the device it is set to and the devices this PC offers.
   async function cameraStatus(cameras) {
     const out = [];
     for (const c of cameras || []) {
       const input = cameraInput(c.id);
       const row = { id: c.id, label: c.label, input, exists: false, device: '', devices: [], window: false };
-      if (connected) {
+      row.kind = linkKind(cameraLink(c.id));
+      if (connected && cameraLink(c.id)) {
+        try {
+          await obs.call('GetInputSettings', { inputName: input });
+          row.exists = true;
+          // A stream's state as OBS has it: playing, opening, buffering, error.
+          if (row.kind === 'stream') row.media = String((await obs.call('GetMediaInputStatus', { inputName: input }).catch(() => ({}))).mediaState || '');
+          try { await obs.call('GetSceneItemId', { sceneName: entryForKey('scoreboard').scene, sourceName: input }); row.window = true; } catch (e) { /* no window yet */ }
+        } catch (e) { /* the input isn't built yet */ }
+      } else if (connected) {
         try {
           const s = await obs.call('GetInputSettings', { inputName: input });
           const prop = CAMERA_DEVICE_PROP[String(s.inputKind || '').replace(/_v\d+$/, '')] || CAMERA_DEVICE_PROP[s.inputKind] || 'video_device_id';
@@ -466,6 +707,7 @@ function createObs(opts = {}) {
   }
   async function setCameraDevice(id, device) {
     if (!connected) throw softError('Not connected to OBS');
+    if (cameraLink(id)) throw softError('This camera uses a link, not a device');
     const input = cameraInput(id);
     const s = await obs.call('GetInputSettings', { inputName: input });
     const prop = CAMERA_DEVICE_PROP[String(s.inputKind || '').replace(/_v\d+$/, '')] || CAMERA_DEVICE_PROP[s.inputKind] || 'video_device_id';
@@ -568,6 +810,7 @@ function createObs(opts = {}) {
     if (!connected) throw softError('Not connected to OBS');
     const collection = await useCollection();
     scenes = sceneEntries(prefix, buildOpts);
+    setCameraLinks(buildOpts);
     const base = await videoBase();
     const overlayBase = getOverlayBase();
 
@@ -644,8 +887,11 @@ function createObs(opts = {}) {
     }
 
     // Each camera: its input in its own scene, and its window over the game.
+    // cameraSources: what each camera is in OBS, for the build result.
     const cameras = {};
+    const cameraSources = {};
     for (const t of scenes.filter((s) => s.camera)) {
+      cameraSources[t.camera] = { input: cameraInput(t.camera), kind: linkKind(cameraLink(t.camera)) };
       cameras[t.camera] = await ensureCamera(t, base, existingInputs).catch(() => 'manual');
       if (cameras[t.camera] !== 'manual') await ensureCameraWindow(entryForKey('scoreboard'), t.camera, existingInputs).catch(() => {});
     }
@@ -700,7 +946,7 @@ function createObs(opts = {}) {
       try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
     }
     await refreshProgram();
-    return { built, removed, reloaded, ordering, moved, gameCapture, cameras, collection, collectionName };
+    return { built, removed, reloaded, ordering, moved, gameCapture, cameras, cameraSources, collection, collectionName };
   }
 
   // The league's stinger. obs-websocket can't create a transition, so the
@@ -837,21 +1083,36 @@ function createObs(opts = {}) {
 
   // A richer status that hits OBS live. Safe when disconnected.
   async function inspect() {
-    if (!connected) return { ...status(), exists: {}, stale: [], stinger: { found: false, current: false, name: stingerName } };
+    if (!connected) return { ...status(), exists: {}, stale: [], stinger: { found: false, current: false, name: stingerName }, video: null };
     await refreshProgram();
-    const [have, stinger] = await Promise.all([scenesExist(), stingerStatus()]);
-    return { ...status(), exists: have.exists, stale: have.stale, stinger };
+    const [have, stinger, video] = await Promise.all([scenesExist(), stingerStatus(), videoStatus()]);
+    return { ...status(), exists: have.exists, stale: have.stale, stinger, video };
   }
 
   // Which scenes this match uses, without touching OBS. The server sets it
   // at start-up and whenever the game or the picked scenes change; the next
   // build brings OBS in line.
-  function setLayout(buildOpts) { scenes = sceneEntries(prefix, buildOpts || {}); }
+  function setLayout(buildOpts) { scenes = sceneEntries(prefix, buildOpts || {}); setCameraLinks(buildOpts); }
+
+  // Reloads the browser source of each scene named (by key): a page OBS
+  // opened while the app was not running sits on Chromium's error page and
+  // never loads by itself. Returns the inputs reloaded.
+  async function reloadPages(keys) {
+    if (!connected) return [];
+    const done = [];
+    for (const t of scenes.filter((s) => (keys || []).includes(s.key))) {
+      try {
+        await obs.call('PressInputPropertiesButton', { inputName: t.input, propertyName: 'refreshnocache' });
+        done.push(t.input);
+      } catch (e) { /* the scene has not been built */ }
+    }
+    return done;
+  }
 
   return {
     connect, disconnect, status, inspect, buildScenes, setupStinger, stingerStatus,
-    switchTo, programShot, setMusic, setLayout,
-    setCameraWindow, cameraStatus, setCameraDevice,
+    switchTo, programShot, setMusic, setLayout, reloadPages, raiseVideo,
+    setCameraWindow, cameraStatus, setCameraDevice, applyCamera,
     isConnected: () => connected,
   };
 }

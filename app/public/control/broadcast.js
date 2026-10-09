@@ -4,9 +4,10 @@
 //
 // The server's broadcast.js owns everything shown here and sends it to every
 // panel and scene as one `bx` message. This page draws that and posts
-// changes to /api/bx/*: this week's other matches (typed in, or read from
-// followed LeagueOS seasons), the ticker, pop-ups, the lower third and the
-// cameras.
+// changes to /api/bx/*: this week's other matches (read from followed
+// LeagueOS schools and seasons, or typed in), the ticker, pop-ups, the lower
+// third and the cameras. It also fills the Match page's list of matches
+// offered from the league feed.
 (function () {
   if (!BRAND.broadcast) return;
 
@@ -161,34 +162,151 @@
   });
 
   // --- League feed -----------------------------------------------------------------
+  // A followed school is one row that opens to its seasons. Seasons followed
+  // one by one are listed, folded into one row past FOLD of them.
+  const FOLD = 6;
+  const openGroups = new Set();
+  let followSig = '';
+  function seasonRow(f) {
+    const row = el('div', 'lib-row');
+    // The season's own name tells two divisions of one game apart.
+    const name = el('span', 'lib-name', [f.name || f.game, f.school ? '' : f.league].filter(Boolean).join(' · '));
+    name.title = f.host;
+    const meta = el('span', 'lib-meta' + (f.error ? ' error' : ''));
+    meta.textContent = f.error ? `Read failed: ${f.error}` : f.checkedAt ? `${f.count} in range · read ${clockTime(new Date(f.checkedAt))}` : 'Reading';
+    row.append(name, meta);
+    if (!f.school) row.appendChild(button('Remove', 'btn-secondary lib-del', () => call('DELETE', `/api/bx/follows/${encodeURIComponent(f.id)}`)));
+    return row;
+  }
+  function group(key, title, list, error, onRemove) {
+    const d = el('details', 'bx-follow-group');
+    d.open = openGroups.has(key);
+    d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); });
+    const failed = list.filter((f) => f.error).length;
+    const pending = list.filter((f) => !f.checkedAt).length;
+    const count = list.reduce((n, f) => n + f.count, 0);
+    const meta = el('span', 'lib-meta' + (error || failed ? ' error' : ''));
+    meta.textContent = error ? `Lookup failed: ${error}`
+      : [`${list.length} season${list.length === 1 ? '' : 's'}`, pending ? `reading ${pending}` : `${count} in range`, failed ? `${failed} failed` : ''].filter(Boolean).join(' · ');
+    const sum = el('summary');
+    sum.append(el('span', 'lib-name', title), meta);
+    if (onRemove) sum.appendChild(button('Remove', 'btn-secondary lib-del', (e) => { e.preventDefault(); onRemove(); }));
+    d.appendChild(sum);
+    list.forEach((f) => d.appendChild(seasonRow(f)));
+    return d;
+  }
   function renderFollows() {
     const box = $id('bxFollowList');
+    const none = !bx.follows.length && !bx.schools.length;
+    $id('bxDefaultBtn').hidden = !bx.defaultFeed;
+    $id('bxClearBtn').disabled = none;
+    const sig = JSON.stringify([bx.follows, bx.schools]);
+    if (sig === followSig) return;
+    followSig = sig;
     box.textContent = '';
-    if (!bx.follows.length) { box.appendChild(el('div', 'lib-empty', 'No seasons followed.')); return; }
-    bx.follows.forEach((f) => {
-      const row = el('div', 'lib-row');
-      const name = el('span', 'lib-name', [f.game || f.name, f.league].filter(Boolean).join(' · '));
-      name.title = f.host;
-      const meta = el('span', 'lib-meta' + (f.error ? ' error' : ''));
-      meta.textContent = f.error ? `Read failed: ${f.error}` : f.checkedAt ? `${f.count} in range · read ${clockTime(new Date(f.checkedAt))}` : 'Reading';
-      row.append(name, meta, button('Remove', 'btn-secondary lib-del', () => call('DELETE', `/api/bx/follows/${encodeURIComponent(f.id)}`)));
-      box.appendChild(row);
+    if (none) { box.appendChild(el('div', 'lib-empty', 'Nothing followed.')); return; }
+    bx.schools.forEach((s) => {
+      const mine = bx.follows.filter((f) => f.school === s.id);
+      box.appendChild(group('school:' + s.id, [s.name, s.league].filter(Boolean).join(' · '), mine, s.error,
+        () => call('DELETE', `/api/bx/schools/${encodeURIComponent(s.id)}`)));
     });
+    const loose = bx.follows.filter((f) => !f.school || !bx.schools.some((s) => s.id === f.school));
+    if (loose.length > FOLD) box.appendChild(group('loose', 'Seasons', loose, '', null));
+    else loose.forEach((f) => box.appendChild(seasonRow(f)));
   }
-  async function follow() {
-    const input = $id('bxFollowUrl');
-    const st = $id('bxFollowStatus');
-    const url = input.value.trim();
-    if (!url) return;
-    st.classList.remove('error');
-    st.textContent = 'Reading the league site…';
-    const r = await post('/api/bx/follows', { url });
-    if (r.error) { st.textContent = r.error; st.classList.add('error'); return; }
-    st.textContent = r.added ? `Following: ${r.seasons.join(', ')}.` : 'Already followed.';
-    input.value = '';
+
+  const followStatus = $id('bxFollowStatus');
+  function setFollowStatus(text, error) {
+    followStatus.textContent = text || '';
+    followStatus.classList.toggle('error', !!error);
+  }
+  // A link that names many seasons is not followed until one of these is
+  // pressed.
+  function askFollow(url, r) {
+    const box = $id('bxFollowConfirm');
+    box.textContent = '';
+    box.hidden = false;
+    const done = () => { box.hidden = true; box.textContent = ''; };
+    box.appendChild(el('span', '', `${r.count} seasons at ${r.host}.`));
+    if (r.ownLink) box.appendChild(button(`${BRAND.shortName} teams only`, 'btn-accent', () => { done(); sendFollow(r.ownLink, false); }));
+    box.appendChild(button(`Follow all ${r.count}`, 'btn-secondary', () => { done(); sendFollow(url, true); }));
+    box.appendChild(button('Cancel', 'btn-secondary', done));
+  }
+  async function sendFollow(url, all) {
+    setFollowStatus('Reading the league site…');
+    const r = await post('/api/bx/follows', { url, all });
+    if (r.error) { setFollowStatus(r.error, true); return; }
+    if (r.confirm) { setFollowStatus(''); askFollow(url, r); return; }
+    const n = r.seasons.length;
+    setFollowStatus(!r.added ? 'Already followed.' : r.school ? `${r.school}: ${n} season${n === 1 ? '' : 's'}.` : `Following: ${r.seasons.slice(0, 4).join(', ')}${n > 4 ? `, ${n - 4} more` : ''}.`);
+    $id('bxFollowUrl').value = '';
+  }
+  function follow() {
+    const url = $id('bxFollowUrl').value.trim();
+    $id('bxFollowConfirm').hidden = true;
+    if (url) sendFollow(url, false);
   }
   $id('bxFollowBtn').addEventListener('click', follow);
   $id('bxFollowUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') follow(); });
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  $id('bxClearBtn').addEventListener('click', async () => {
+    $id('bxFollowConfirm').hidden = true;
+    const r = await call('DELETE', '/api/bx/follows');
+    if (r.error) { setFollowStatus(r.error, true); return; }
+    setFollowStatus('');
+    toast(`Feed cleared: ${plural(r.removed.follows.length, 'season')}`, 'Undo', () => post('/api/bx/follows/restore', r.removed));
+  });
+  $id('bxDefaultBtn').addEventListener('click', async (e) => {
+    $id('bxFollowConfirm').hidden = true;
+    const scopeWas = bx ? bx.settings.scope : 'all';
+    e.target.disabled = true;
+    setFollowStatus('Reading the league site…');
+    const r = await post('/api/bx/follows/default');
+    e.target.disabled = false;
+    if (r.error) { setFollowStatus(r.error, true); return; }
+    setFollowStatus('');
+    const had = r.removed.follows.length;
+    if (had) {
+      toast(`Feed replaced: ${plural(had, 'season')} removed`, 'Undo', async () => {
+        await call('DELETE', '/api/bx/follows');
+        await post('/api/bx/follows/restore', r.removed);
+        set({ scope: scopeWas });
+      });
+    }
+  });
+
+  // --- Match page: matches offered from the feed ---------------------------------------
+  // The feed's matches that are still to play or under way, soonest first.
+  // Import reads the match from its own page, the same as a pasted link.
+  const PICK_MAX = 8;
+  let pickSig = '';
+  function renderFeedPick() {
+    const wrap = $id('feedPick');
+    if (!wrap || !bx) return;
+    const open = bx.matches.filter((m) => m.src === 'league' && m.link && m.state !== 'final');
+    // The home team's own matches, when the feed has any.
+    const list = open.some((m) => m.home) ? open.filter((m) => m.home) : open;
+    const shown = list.slice(0, PICK_MAX);
+    wrap.hidden = !shown.length;
+    const sig = JSON.stringify(shown.map((m) => [m.id, m.start, m.state, m.onStream, m.a.name, m.b.name]));
+    if (sig === pickSig) return;
+    pickSig = sig;
+    $id('feedPickNote').textContent = list.length > shown.length ? `next ${shown.length} of ${list.length} this week` : 'this week';
+    const box = $id('feedPickList');
+    box.textContent = '';
+    shown.forEach((m) => {
+      const row = el('div', 'feed-pick-row' + (m.state === 'live' ? ' live' : '') + (m.onStream ? ' set' : ''));
+      const what = el('div', 'feed-pick-what');
+      what.append(el('b', '', `${m.a.name} vs ${m.b.name}`), el('small', '', [m.game, m.round, m.state === 'live' ? 'In progress' : ''].filter(Boolean).join(' · ')));
+      const btn = button(m.onStream ? 'Import again' : 'Import', m.onStream ? 'btn-secondary' : 'btn-accent', () => {
+        $id('neccUrlInput').value = m.link;
+        $id('neccFetchBtn').click();
+      });
+      row.append(el('span', 'feed-pick-when', whenText(m.start)), what, btn);
+      box.appendChild(row);
+    });
+  }
 
   // --- Settings: scope, ticker, pop-ups, camera window --------------------------------
   const set = (patch) => post('/api/bx/settings', patch);
@@ -278,43 +396,88 @@
     if (!Array.isArray(cams.cameras)) cams = { connected: false, cameras: [] };
     renderCams();
   }
+  // A camera with a link is a network camera (a browser source in OBS);
+  // without one it is a capture device picked from OBS's list.
+  const LIVE_TEXT = { live: 'Live', idle: 'No signal', up: 'Link answers', down: 'Link not reachable' };
+  async function setCamLink(id, body) {
+    const r = await post(`/api/bx/cameras/${id}/link`, body);
+    if (r.error) toast(`Link not set: ${r.error}`);
+    refreshCams();
+  }
   function renderCams() {
     const box = $id('bxCamList');
     if (!bx) return;
-    // A device list being used is not rebuilt under the pointer.
-    if (box.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+    // A field or device list in use is not rebuilt under the pointer.
+    if (box.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement.tagName)) return;
     box.textContent = '';
     bx.cams.forEach((c) => {
-      const info = cams.cameras.find((x) => x.id === c.id) || { exists: false, devices: [], device: '', window: false };
+      const info = cams.cameras.find((x) => x.id === c.id) || { exists: false, devices: [], device: '', window: false, live: null };
+      const net = !!c.link;
       const row = el('div', 'bx-cam' + (c.pip ? ' on' : ''));
       const head = el('div', 'bx-cam-head');
       head.append(el('b', '', c.label));
-      const status = !cams.connected ? 'OBS not connected' : !info.exists ? 'Source missing. Build scenes.' : !info.device ? 'No device selected' : '';
-      head.appendChild(el('span', 'bx-cam-status' + (status ? ' warn' : ''), status || `${BRAND.obsPrefix}-cam-${c.id}`));
+      const inObs = !cams.connected ? 'OBS not connected' : !info.exists ? 'Source missing. Build scenes.' : '';
+      if (net) {
+        const live = info.link === c.link ? info.live : null;
+        if (live) {
+          const s = el('span', 'bx-cam-status ' + (live.state === 'live' ? 'ok' : live.state === 'up' ? '' : 'warn'), LIVE_TEXT[live.state] || '');
+          if (live.detail) s.title = live.detail;
+          head.appendChild(s);
+        }
+        if (inObs) head.appendChild(el('span', 'bx-cam-status warn', inObs));
+      } else {
+        const status = inObs || (!info.device ? 'No device selected' : '');
+        head.appendChild(el('span', 'bx-cam-status' + (status ? ' warn' : ''), status || `${BRAND.obsPrefix}-cam-${c.id}`));
+      }
+
+      const linkRow = el('div', 'bx-cam-row');
+      const link = el('input', 'bx-cam-link');
+      link.type = 'text';
+      link.value = c.link || '';
+      link.placeholder = 'Network camera link. Empty: capture device on this PC';
+      link.setAttribute('aria-label', `${c.label} network link`);
+      link.spellcheck = false;
+      link.addEventListener('change', () => { if (link.value.trim() !== (c.link || '')) setCamLink(c.id, { url: link.value.trim() }); });
+      link.addEventListener('keydown', (e) => { if (e.key === 'Enter') link.blur(); });
+      linkRow.appendChild(link);
+      if (c.defaultLink && c.link !== c.defaultLink) {
+        const def = button('Default link', 'btn-secondary', () => setCamLink(c.id, { default: true }));
+        def.title = c.defaultLink;
+        linkRow.appendChild(def);
+      }
+
       const controls = el('div', 'bx-cam-row');
-      const sel = el('select');
-      sel.setAttribute('aria-label', `${c.label} device`);
-      sel.appendChild(new Option(info.devices.length ? 'Select a device' : 'No devices listed', ''));
-      info.devices.forEach((d) => sel.appendChild(new Option(d.name, d.value)));
-      // A device OBS has set but no longer lists (unplugged) stays visible.
-      if (info.device && !info.devices.some((d) => d.value === info.device)) sel.appendChild(new Option('Not connected: ' + info.device.split(':')[0], info.device));
-      sel.value = info.device || '';
-      sel.disabled = !cams.connected || !info.exists;
-      sel.addEventListener('change', async () => {
-        const r = await post(`/api/bx/cameras/${c.id}/device`, { device: sel.value });
-        if (r.error) toast(`Device not set: ${r.error}`);
-        refreshCams();
-      });
+      if (!net) {
+        const sel = el('select');
+        sel.setAttribute('aria-label', `${c.label} device`);
+        sel.appendChild(new Option(info.devices.length ? 'Select a device' : 'No devices listed', ''));
+        info.devices.forEach((d) => sel.appendChild(new Option(d.name, d.value)));
+        // A device OBS has set but no longer lists (unplugged) stays visible.
+        if (info.device && !info.devices.some((d) => d.value === info.device)) sel.appendChild(new Option('Not connected: ' + info.device.split(':')[0], info.device));
+        sel.value = info.device || '';
+        sel.disabled = !cams.connected || !info.exists;
+        sel.addEventListener('change', async () => {
+          const r = await post(`/api/bx/cameras/${c.id}/device`, { device: sel.value });
+          if (r.error) toast(`Device not set: ${r.error}`);
+          refreshCams();
+        });
+        controls.appendChild(sel);
+      }
       const win = button(c.pip ? 'Hide window' : 'Show window', c.pip ? 'btn-accent' : 'btn-secondary', () => post('/api/bx/cam', { id: c.id, pip: !c.pip }));
       win.title = 'Camera window over the game, on the Scoreboard scene';
       const air = button('Put scene on air', 'btn-secondary', () => switchScene('cam-' + c.id));
       air.disabled = !cams.connected;
-      controls.append(sel, win, air);
-      row.append(head, controls);
+      controls.append(win, air);
+      row.append(head, linkRow, controls);
       box.appendChild(row);
     });
-    $id('bxCamStatus').textContent = cams.connected ? '' : 'Device lists and camera windows need OBS.';
+    $id('bxCamStatus').textContent = cams.connected ? '' : 'Camera sources, device lists and camera windows need OBS.';
   }
+  // A network camera's signal is checked while the page is open.
+  setInterval(() => {
+    const page = document.querySelector('.page[data-page="broadcast"]');
+    if (bx && page && !page.hidden && !document.hidden && bx.cams.some((c) => c.link)) refreshCams();
+  }, 10000);
   $id('bxCamRefresh').addEventListener('click', refreshCams);
   $id('bxPageBtn').addEventListener('click', refreshCams);
 
@@ -332,6 +495,7 @@
     if (!bx) return;
     renderMatches();
     renderFollows();
+    renderFeedPick();
     renderSettings();
     renderLower();
     renderCams();

@@ -42,16 +42,18 @@
   <main class="page-col" id="pageCol">
 
     <!-- ============================ MATCH ============================ -->
-    <!-- Setting up a match, one step at a time: the game, the teams, the
-         details, then building the scenes in OBS. -->
+    <!-- Setting up a match. Step 1 reads it from a LeagueOS match link (game,
+         teams, rosters, start time, series length); the steps after it set
+         the same things by hand or correct them. Then the scene build. -->
     <div class="page" data-page="match" hidden>
 
       <div class="match-top">
         <ol class="stepper" id="stepper">
-          <li><button type="button" data-step="game"><b>1</b><span>Game</span></button></li>
-          <li><button type="button" data-step="teams"><b>2</b><span>Teams</span></button></li>
-          <li><button type="button" data-step="details"><b>3</b><span>Details</span></button></li>
-          <li><button type="button" data-step="build"><b>4</b><span>Scenes</span></button></li>
+          <li><button type="button" data-step="link"><b>1</b><span>Match</span></button></li>
+          <li><button type="button" data-step="game"><b>2</b><span>Game</span></button></li>
+          <li><button type="button" data-step="teams"><b>3</b><span>Teams</span></button></li>
+          <li><button type="button" data-step="details"><b>4</b><span>Details</span></button></li>
+          <li><button type="button" data-step="build"><b>5</b><span>Scenes</span></button></li>
         </ol>
         <div class="saved-match">
           <select id="matchSelect" aria-label="Saved matches"><option value="">No saved matches</option></select>
@@ -60,8 +62,38 @@
         </div>
       </div>
 
-      <!-- Step 1: Game -->
-      <section class="card step-card" data-step="game">
+      <!-- Step 1: Match link -->
+      <section class="card step-card" data-step="link">
+        <div class="card-head"><h2>Match</h2></div>
+        <!-- Without the broadcast package this field sits in the Teams step
+             (control.js, LINK_FIRST). -->
+        <div class="field" id="linkField">
+          <label for="neccUrlInput"><span class="lbl">{{league}} match link (LeagueOS)
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Sets the game, both teams with rosters, the start time, the series length and the {{league}} graphic links.">i</span>
+          </span></label>
+          <div class="input-row">
+            <input type="text" id="neccUrlInput" placeholder="{{importHint}}">
+            <button id="neccFetchBtn" class="btn-accent" type="button">Import</button>
+          </div>
+          <div class="status-line" id="neccStatus"></div>
+        </div>
+        <div id="feedPick" hidden>
+          <div class="sub-head">League feed <span class="muted-note" id="feedPickNote"></span></div>
+          <div class="feed-pick" id="feedPickList"></div>
+        </div>
+        <div class="sub-head">Current match</div>
+        <div class="match-now" id="matchNow"></div>
+        <div class="step-foot">
+          <button class="btn-secondary" type="button" data-next="game">Manual setup</button>
+          <span class="step-foot-end">
+            <button class="btn-secondary" type="button" data-next="details" id="linkDetailsBtn">Details</button>
+            <button class="btn-accent" type="button" data-next="build" id="linkBuildBtn">Next: Scenes</button>
+          </span>
+        </div>
+      </section>
+
+      <!-- Step 2: Game -->
+      <section class="card step-card" data-step="game" hidden>
         <div class="card-head"><h2>Game</h2></div>
         <p class="card-text">Sets the scoreboard preset and the highlight video.</p>
         <div class="game-grid" id="gameGrid"></div>
@@ -73,12 +105,12 @@
         </div>
         <div class="status-line" id="gameMontageStatus"></div>
         <div class="step-foot">
-          <span></span>
+          <button class="btn-secondary" type="button" data-next="link" id="gameBackBtn">Back</button>
           <button class="btn-accent" type="button" data-next="teams">Next: Teams</button>
         </div>
       </section>
 
-      <!-- Step 2: Teams -->
+      <!-- Step 3: Teams -->
       <section class="card step-card" data-step="teams" hidden>
         <div class="card-head"><h2>Teams</h2></div>
         <div class="matchup" id="matchup">
@@ -88,25 +120,14 @@
         </div>
 
         <div class="segmented team-src" id="teamSrc" role="tablist">
-          <button class="seg-btn" type="button" data-src="import">Match link</button>
+          <button class="seg-btn" type="button" data-src="import" id="importSrcBtn" hidden>Match link</button>
           <button class="seg-btn" type="button" data-src="library" id="libSrcBtn">Team library</button>
           <button class="seg-btn" type="button" data-src="manual">Manual</button>
         </div>
 
-        <div class="team-pane" data-src="import">
-          <div class="field">
-            <label for="neccUrlInput"><span class="lbl">{{league}} match link (LeagueOS)
-              <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Imports both teams with rosters, the start time, the series length and the {{league}} graphic links.">i</span>
-            </span></label>
-            <div class="input-row">
-              <input type="text" id="neccUrlInput" placeholder="{{importHint}}">
-              <button id="neccFetchBtn" class="btn-accent" type="button">Import</button>
-            </div>
-            <div class="status-line" id="neccStatus"></div>
-          </div>
-        </div>
+        <div class="team-pane" data-src="import" id="importPane" hidden></div>
 
-        <div class="team-pane" data-src="library" hidden>
+        <div class="team-pane" data-src="library">
           <div class="pick-for">
             <span class="lbl">Assign to</span>
             <div class="segmented" id="pickFor">
@@ -129,7 +150,7 @@
         </div>
       </section>
 
-      <!-- Step 3: Details -->
+      <!-- Step 4: Details -->
       <section class="card step-card" data-step="details" hidden>
         <div class="card-head"><h2>Match details</h2></div>
 
@@ -180,7 +201,7 @@
         </div>
       </section>
 
-      <!-- Step 4: Build -->
+      <!-- Step 5: Build -->
       <section class="card step-card" data-step="build" hidden>
         <div class="card-head"><h2>OBS scenes</h2></div>
         <p class="card-text">Creates or updates the <b id="collectionName">{{short}} Stream</b> scene collection: one scene per overlay.
@@ -342,11 +363,32 @@
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Source for the ticker, the This Week scene, the other-matches cards and score pop-ups. The match on stream is excluded from pop-ups.">i</span>
             <span class="card-hint" id="bxWeek"></span>
           </div>
+          <div class="sub-head first">League feed
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="LeagueOS links read for this week's matches. School or team link: the seasons that school's teams play in, kept current as seasons start and end. Season or match link: that season. League home page: every running season. An imported match's season is added. Read every 90 seconds while a match is due or in progress, otherwise every 15 minutes.">i</span>
+          </div>
+          <div class="input-row">
+            <input type="text" id="bxFollowUrl" placeholder="LeagueOS link: school, team, season or match">
+            <button class="btn-accent" type="button" id="bxFollowBtn">Follow</button>
+          </div>
+          <div class="status-line" id="bxFollowStatus"></div>
+          <div class="bx-confirm" id="bxFollowConfirm" hidden></div>
+          <div class="bx-list" id="bxFollowList"></div>
+          <div class="field-row bx-feed-bar">
+            <label style="flex:0 0 260px"><span class="lbl">Feed scope</span>
+              <select id="bxScope"><option value="all">Every match in followed seasons</option><option value="home">{{short}} matches only</option></select>
+            </label>
+            <div class="push-row">
+              <button class="btn-secondary" type="button" id="bxDefaultBtn" title="Replaces every followed link with {{short}}'s {{league}} teams. Feed scope: {{short}} matches only." hidden>Default feed</button>
+              <button class="btn-secondary btn-quiet-danger" type="button" id="bxClearBtn" title="Removes every followed link and the matches read from them.">Clear all</button>
+            </div>
+          </div>
+
+          <div class="sub-head">Matches</div>
           <div class="bx-list" id="bxMatchList"></div>
           <div class="push-row" style="margin-top:10px">
-            <button class="btn-secondary" type="button" id="bxAddBtn">Add match</button>
             <button class="btn-secondary" type="button" id="bxRefreshBtn">Refresh league feed</button>
             <button class="btn-secondary" type="button" id="bxRestoreBtn" hidden>Restore removed</button>
+            <button class="btn-secondary" type="button" id="bxAddBtn">Add match manually</button>
           </div>
 
           <div class="bx-form" id="bxForm" hidden>
@@ -370,20 +412,6 @@
             <div class="status-line" id="bxfStatus"></div>
           </div>
 
-          <div class="sub-head">League feed
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="LeagueOS seasons read for this week's matches. A league home page follows every running season; a season or match link follows one. An imported match's season is followed automatically. Read every 90 seconds while a match is due or in progress, otherwise every 15 minutes.">i</span>
-          </div>
-          <div class="bx-list" id="bxFollowList"></div>
-          <div class="input-row" style="margin-top:8px">
-            <input type="text" id="bxFollowUrl" placeholder="https://league.v1.leagueos.gg/...">
-            <button class="btn-secondary" type="button" id="bxFollowBtn">Follow</button>
-          </div>
-          <div class="status-line" id="bxFollowStatus"></div>
-          <div class="field-row" style="margin-top:10px">
-            <label style="flex:0 0 260px"><span class="lbl">Feed scope</span>
-              <select id="bxScope"><option value="all">Every match in followed seasons</option><option value="home">{{short}} matches only</option></select>
-            </label>
-          </div>
         </section>
 
         <section class="card" id="bxTickerCard">
@@ -453,7 +481,7 @@
         <section class="card" id="bxCamCard">
           <div class="card-head">
             <h2>Cameras</h2>
-            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="One OBS Video Capture Device per camera, used by its own scene and by its window in the Scoreboard scene. Created by a scene build.">i</span>
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="One OBS source per camera, used by its own scene and by its window in the Scoreboard scene. With a link: a browser source showing that page, muted. Without: a Video Capture Device. Created by a scene build; a changed link is applied at once.">i</span>
           </div>
           <div class="bx-list" id="bxCamList"></div>
           <div class="field-row" style="margin-top:12px">
@@ -461,7 +489,7 @@
               <select id="bxPipPos"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option></select></label>
             <label class="grow"><span class="lbl">Window size</span>
               <select id="bxPipSize"><option value="s">Small (384 x 216)</option><option value="m">Medium (480 x 270)</option><option value="l">Large (640 x 360)</option></select></label>
-            <button class="btn-secondary" type="button" id="bxCamRefresh">Refresh devices</button>
+            <button class="btn-secondary" type="button" id="bxCamRefresh">Refresh</button>
           </div>
           <div class="status-line" id="bxCamStatus"></div>
         </section>
@@ -527,7 +555,7 @@
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Game Capture source, mode: any fullscreen application, placed under the scoreboard.">i</span></label>
           <label class="checkbox"><input type="checkbox" id="orderScenesInput" checked> Sort app scenes in stream order
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="obs-websocket cannot reorder scenes. A build recreates out-of-order app scenes at the bottom of the list with their items, filters and transition override. Scene hotkeys are not carried over. Skipped while streaming or recording.">i</span></label>
-          <label class="checkbox"><input type="checkbox" id="studioModeInput" checked> Enable Studio Mode on build</label>
+          <label class="checkbox"><input type="checkbox" id="studioModeInput"> Enable Studio Mode on build</label>
           <div class="push-row" style="margin-top:12px">
             <button id="obsBuildBtn" class="btn-secondary" type="button">Build scenes</button>
           </div>
@@ -755,7 +783,7 @@
         <p>Creates the scene collection <b id="wizCollection">{{short}} Stream</b>: one scene per overlay.
           Other scene collections are not modified.</p>
         <label class="checkbox"><input type="checkbox" id="wizGameCapture" checked> Add a game capture to the Scoreboard scene</label>
-        <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizStudioMode" checked> Enable Studio Mode</label>
+        <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizStudioMode"> Enable Studio Mode</label>
         <div class="push-row" style="margin-top:14px">
           <button class="btn-accent" type="button" id="wizBuildBtn">Build scenes</button>
         </div>
@@ -792,7 +820,7 @@
 
       <div class="wiz-step" data-step="done" hidden>
         <h3>Setup complete</h3>
-        <p><b>Match</b>: game, teams, start time, scene build. <b>Live</b>: score, scene text, rosters. Scenes are switched in OBS.</p>
+        <p><b>Match</b>: {{league}} match link or manual setup, then the scene build. <b>Live</b>: score, scene text, rosters. Scenes are switched in OBS.</p>
         <p class="card-text">Every step is also available under Settings.</p>
         <div class="wiz-foot">
           <button class="btn-secondary" type="button" data-wiz="back">Back</button>

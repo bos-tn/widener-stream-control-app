@@ -1120,10 +1120,14 @@
     return m && m.have ? '/montages/' + encodeURIComponent(m.file) : '';
   }
 
-  // With the broadcast package only the two scenes with a video panel play
-  // the video. Every other scene's page leaves it alone, so OBS isn't
-  // decoding it behind a scene that never shows it.
-  function clipWanted(state){ return !BX || ['starting-soon', 'post-match'].includes(lockedView || state.mode); }
+  // Only the two scenes with a video panel load the video. Every other
+  // scene's page leaves it alone, so OBS isn't holding a connection and a
+  // decoder for it behind a scene that never shows it.
+  function clipWanted(state){
+    if(state.montage === false) return false;
+    const view = lockedView || state.mode;
+    return !view || view === 'starting-soon' || view === 'post-match';
+  }
 
   // While a montage downloads, a page opened outside OBS (?backdrop=1) says
   // so. On stream the placeholder keeps its usual wording.
@@ -1136,36 +1140,172 @@
     return placeholderSubDefault;
   }
 
-  function resumeClip(){
-    if(videoEl && videoEl.paused) videoEl.play().catch(() => {});
+  // --- The video panel's player ------------------------------------------------
+  // OBS hides a scene's page while the scene is off air, and Chromium then
+  // pauses a silent video by itself. Measured in OBS 32 (CEF 127, hardware
+  // acceleration on), cutting between the scenes a few hundred times:
+  //  - play() on a hidden page whose video was paused mid-buffer leaves it
+  //    marked as playing, with data buffered and no frame ever decoded
+  //    again, also after the page is shown. Every state message used to call
+  //    play(), so a score or scene change during the match could do this.
+  //  - Resuming a video that had played and was paused while hidden stops
+  //    the same way on about one show in seven.
+  //  - A video built as the page shows never stopped, but up to one in five
+  //    took 1.3 to 2 s to start (the seek to where the last one left off).
+  //  - A video built while the page is hidden, left paused and played when
+  //    the page shows starts at once; about one in thirty stopped as above.
+  // So: when the page hides, the video that was playing is removed and a new
+  // one is prepared at its position, paused. When the page shows, that one
+  // is played. play() is never called on a hidden page. While the page
+  // shows, a check runs four times a second, and a video that has data and
+  // still shows no new frame is rebuilt at the same position.
+  const CLIP_CHECK_MS = 250;
+  const CLIP_STUCK_MS = 700;      // has data, no new frame for this long
+  const CLIP_LOAD_MS = 8000;      // nothing buffered yet: a slow source, given longer
+  const CLIP_GIVE_UP = 3;         // rebuilds in a row before the panel says so
+  let clipSrc = '';
+  let clipTimer = 0;
+  let clipSeen = { t: -1, at: 0 };  // the position last seen, and when it last changed
+  let clipAt = { src: '', t: 0 };   // where the video was when the page hid
+  let clipFails = 0;                // rebuilds in a row that did not get it moving
+  let clipBroken = false;
+  let clipArmed = false;            // the video was built off air and has not played yet
+
+  function clipShowing(){ return !document.hidden; }
+  // OBS writes a page's console errors to its log, under the source's name.
+  function clipNote(text){ try { console.error('[highlight video] ' + text); } catch(e){} }
+  function clipHasData(v){
+    try {
+      for(let i = 0; i < v.buffered.length; i++){
+        if(v.buffered.start(i) <= v.currentTime + 0.1 && v.buffered.end(i) > v.currentTime + 0.5) return true;
+      }
+    } catch(e){}
+    return false;
   }
-  document.addEventListener('visibilitychange', () => { if(!document.hidden) resumeClip(); });
+  function setClipBroken(broken){
+    if(broken === clipBroken) return;
+    clipBroken = broken;
+    if(placeholder){
+      placeholder.style.display = broken || !clipSrc ? '' : 'none';
+      placeholderTitle.textContent = broken ? 'Clip failed to load' : 'Video';
+    }
+    // The broadcast package shows its artwork in place of a dead panel.
+    if(BX && lastState) BX.onState(lastState, lockedView || lastState.mode);
+  }
+
+  function dropClip(){
+    const v = videoEl;
+    if(!v) return;
+    videoEl = null;
+    clipArmed = false;
+    // Emptying the source gives the decoder and the connection back at once.
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch(e){}
+    v.remove();
+  }
+  function buildClip(at, hold){
+    dropClip();
+    const v = document.createElement('video');
+    v.loop = true; v.muted = true; v.playsInline = true; v.preload = 'auto';
+    if(at > 0) v.addEventListener('loadedmetadata', () => {
+      try { v.currentTime = at < (v.duration || 0) - 1 ? at : 0; } catch(e){}
+    }, { once: true });
+    v.src = clipSrc;
+    montage.appendChild(v);
+    videoEl = v;
+    clipSeen = { t: -1, at: performance.now() };
+    if(hold) clipArmed = true; else playClip();
+  }
+  function rebuildClip(why){
+    const v = videoEl;
+    const at = v && !v.error && Number.isFinite(v.currentTime) ? v.currentTime : 0;
+    clipFails++;
+    clipNote('rebuilt at ' + at.toFixed(1) + ' s: ' + why);
+    if(clipFails >= CLIP_GIVE_UP) setClipBroken(true);
+    buildClip(at);
+  }
+  function playClip(){
+    const v = videoEl;
+    if(!v || !v.paused) return;
+    const p = v.play();
+    if(p && p.catch) p.catch(() => {});
+  }
+
+  function checkClip(){
+    clipTimer = 0;
+    const v = videoEl;
+    if(!v || !clipSrc || !clipShowing()) return;
+    const now = performance.now();
+    // Each failed rebuild doubles the wait, up to 16 times.
+    const patience = Math.min(16, 1 << clipFails);
+    if(v.error){
+      if(now - clipSeen.at >= CLIP_STUCK_MS * patience) rebuildClip('load error ' + v.error.code);
+    } else if(v.currentTime !== clipSeen.t){
+      // Moving. Seen on two checks in a row, it counts as playing again.
+      if(clipSeen.t >= 0 && !v.seeking){ clipFails = 0; setClipBroken(false); }
+      clipSeen = { t: v.currentTime, at: now };
+    } else {
+      playClip();
+      // The stall has data buffered past the position and is not seeking.
+      // Anything else is a source that is slow to answer (Chromium reports
+      // the network idle while it waits), and rebuilding that only starts
+      // the wait again.
+      const loading = v.seeking || v.readyState < 2 || !clipHasData(v);
+      if(now - clipSeen.at >= (loading ? CLIP_LOAD_MS : CLIP_STUCK_MS) * patience){
+        rebuildClip(loading ? 'no data for ' + Math.round((now - clipSeen.at) / 1000) + ' s' : 'no new frame for ' + Math.round(now - clipSeen.at) + ' ms');
+      }
+    }
+    clipTimer = setTimeout(checkClip, CLIP_CHECK_MS);
+  }
+
+  // Brings the player in line with what should be playing (clipSrc) and
+  // whether this page is on screen. Safe to call at any time.
+  function syncClip(){
+    clearTimeout(clipTimer);
+    clipTimer = 0;
+    if(clipAt.src !== clipSrc) clipAt = { src: clipSrc, t: 0 };
+    if(!clipSrc){
+      dropClip();
+      clipFails = 0;
+      clipBroken = false;
+      if(placeholder){ placeholder.style.display = ''; placeholderTitle.textContent = 'Video'; }
+      return;
+    }
+    if(placeholder && !clipBroken) placeholder.style.display = 'none';
+    if(!clipShowing()){
+      // The video that was playing goes, and a new one is prepared at its
+      // position, loaded and paused, to start the moment the page shows.
+      if(videoEl && !clipArmed){
+        if(!videoEl.error && videoEl.currentTime > 0) clipAt.t = videoEl.currentTime;
+        dropClip();
+      }
+      if(videoEl && (videoEl.error || videoEl.getAttribute('src') !== clipSrc)) dropClip();
+      if(!videoEl) buildClip(clipAt.t, true);
+      return;
+    }
+    if(videoEl && videoEl.getAttribute('src') !== clipSrc){
+      clipFails = 0;
+      setClipBroken(false);
+      dropClip();
+    }
+    // No video yet, or one that failed to load: this runs on every message
+    // from the server, so a video lost to a restart of the app comes back.
+    if(!videoEl || videoEl.error) buildClip(clipAt.t);
+    if(clipArmed){ clipArmed = false; clipSeen = { t: -1, at: performance.now() }; }
+    playClip();
+    clipTimer = setTimeout(checkClip, CLIP_CHECK_MS);
+  }
+  document.addEventListener('visibilitychange', syncClip);
+  // OBS's own events for the source, in case a build of it leaves the page's
+  // visibility alone.
+  window.addEventListener('obsSourceVisibleChanged', syncClip);
+  window.addEventListener('obsSourceActiveChanged', syncClip);
 
   function applyClip(src){
-    if(src){
-      if(!videoEl){
-        videoEl = document.createElement('video');
-        videoEl.autoplay = true; videoEl.loop = true; videoEl.muted = true; videoEl.playsInline = true;
-        videoEl.addEventListener('error', () => {
-          if(placeholder){
-            placeholder.style.display = '';
-            placeholderTitle.textContent = 'Clip failed to load';
-          }
-        });
-        // Chromium pauses muted autoplay video while the page is hidden (OBS
-        // reports a browser source hidden when its scene is off program) and
-        // doesn't always resume it, which froze the montage on the first
-        // frame after a scene switch. Nothing here ever wants it paused.
-        videoEl.addEventListener('pause', () => { if(!document.hidden) resumeClip(); });
-        montage.appendChild(videoEl);
-      }
-      if(videoEl.getAttribute('src') !== src) videoEl.src = src;
-      resumeClip();
-      if(placeholder) placeholder.style.display = 'none';
-    } else {
-      if(videoEl){ videoEl.remove(); videoEl = null; }
-      if(placeholder) placeholder.style.display = '';
-    }
+    const was = clipSrc;
+    clipSrc = src || '';
+    // A message that changes nothing leaves a running video and its check alone.
+    if(clipSrc === was && videoEl && !videoEl.error && (clipShowing() ? clipTimer : clipArmed)) return;
+    syncClip();
   }
 
   function renderRosterTeam(key, team){
@@ -2166,7 +2306,7 @@
         if(url && neccIframe.src !== url) loadNecc(url);
         if(!url && neccIframe.getAttribute('src') !== 'about:blank'){ neccIframe.src = 'about:blank'; neccLoading.classList.remove('active'); }
       } else {
-        placeholderTitle.textContent = 'Video';
+        placeholderTitle.textContent = clipBroken ? 'Clip failed to load' : 'Video';
         content.style.display = isRoster ? 'none' : '';
         rosterView.classList.toggle('active', isRoster);
         // For a theme that lays the text out differently beside the video.
@@ -2490,6 +2630,8 @@
     get view(){ return lockedView || (lastState && lastState.mode) || ''; },
     get countdownEnd(){ return countdownEnd; },
     get series(){ return rlSeriesData; },
+    // Whether the video panel has something to play.
+    get clip(){ return !!clipSrc && !clipBroken; },
     lockedView, montage, icons,
     mediaUrl, safeColor, inkFor, clampInt, mk, pad, fitTeamName, shrinkToFit, shortTeamName, matchNameSizes, recordText, mapName,
     backdrop: document.body.dataset.backdrop === '1',
@@ -2499,7 +2641,8 @@
   // state; a locked page picks out its own view.
   (function connect(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', role: 'overlay' })));
+    // A scene's page names its scene, so the server knows which ones are loaded.
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', role: 'overlay', view: lockedView || '', necc: lockedNeccType })));
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -2507,8 +2650,11 @@
         if (msg.type === 'montages') {
           montageStatus = msg.montages || {};
           if (lastState) {
+            const had = !!clipSrc;
             applyClip(clipWanted(lastState) ? clipFor(lastState) : '');
             placeholderSub.textContent = placeholderNote(lastState);
+            // A video that has just finished downloading gets its panel.
+            if (BX && had !== !!clipSrc) BX.onState(lastState, lockedView || lastState.mode);
           }
         }
         if (msg.type === 'rl') { rlSnap = msg.rl; renderRl(); }

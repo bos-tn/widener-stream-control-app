@@ -286,16 +286,75 @@ async function seasonStandings(hostname, leagueId, seasonId) {
 // season, stage or match link names one season of it.
 
 const LINK_ID = /^[a-z0-9]{12,40}$/i;
-const LINK_KIND = { matches: 'match', seasons: 'season', stages: 'stage' };
+const LINK_KIND = { matches: 'match', seasons: 'season', stages: 'stage', groups: 'school', teams: 'team' };
 // LeagueOS season and stage states: 0 draft, 1 upcoming, 2 in progress,
 // 3 complete, 4 disabled.
 const STATE_DRAFT = 0;
 const STATE_RUNNING = [1, 2];
 const STATE_DISABLED = 4;
 
+const seasonRow = (s) => ({
+  id: s.id, name: s.name || '', activity: String(s.stdAct || '').toLowerCase(),
+  start: (Number(s.dateStart) || 0) * 1000, end: (Number(s.dateEnd) || 0) * 1000,
+});
+
+// The running seasons a school's teams play in: { school: { id, name, tag },
+// teams: [{ id, name, activity, division, seasonId }], seasons }. A big
+// league runs one season per game and division (NECC: about sixty at once),
+// and a school has a team in a handful of them.
+//
+// LeagueOS has no "matches of this school" call. A team record carries its
+// game and its division's name, and a season is named after both
+// ("Rocket League | Division III"), so a team's season is the running one of
+// its game whose name holds the division. A team that does not match that
+// way is looked up in the rosters of its game's running seasons.
+async function schoolSeasons(hostname, leagueId, schoolId, only) {
+  const headers = () => buildHeaders(hostname, leagueId);
+  const school = (await fetchJSON(`${API}/league/groups/${schoolId}`, headers())).data || {};
+  const listed = (await fetchJSON(`${API}/league/groups/${schoolId}/teams`, headers())).data || [];
+  const teams = (Array.isArray(listed) ? listed : listed.results || []).filter((t) => {
+    const ld = (t.leagueData || {})[leagueId] || {};
+    return t && t.id && !t.hidden && (!only || only.includes(t.id)) && String(ld.division || '').toUpperCase() !== 'INACTIVE';
+  });
+  const running = (await fetchPaged('/league/seasons', hostname, leagueId)).filter((s) => STATE_RUNNING.includes(s.state));
+  const rosterIds = {};
+  const inSeason = async (seasonId, teamId) => {
+    if (!rosterIds[seasonId]) {
+      const rows = await fetchPaged(`/league/seasons/${seasonId}/rosters`, hostname, leagueId);
+      rosterIds[seasonId] = new Set(rows.map((r) => r.sourceId || r.id));
+    }
+    return rosterIds[seasonId].has(teamId);
+  };
+  const out = [];
+  for (const t of teams) {
+    const activity = String(t.stdAct || '').toLowerCase();
+    const division = String(((t.leagueData || {})[leagueId] || {}).division || '').trim();
+    const sameGame = running.filter((s) => String(s.stdAct || '').toLowerCase() === activity);
+    // "Division I" must not find "Division II" or "Division IV".
+    const named = division
+      ? sameGame.filter((s) => new RegExp('(^|[^a-z0-9])' + division.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])', 'i').test(s.name || ''))
+      : [];
+    let season = named.length === 1 ? named[0] : null;
+    if (!season) {
+      for (const s of (named.length ? named : sameGame).slice(0, 12)) {
+        if (await inSeason(s.id, t.id).catch(() => false)) { season = s; break; }
+      }
+    }
+    out.push({ id: t.id, name: t.name || '', activity, division, seasonId: season ? season.id : '' });
+  }
+  const ids = new Set(out.map((t) => t.seasonId).filter(Boolean));
+  return {
+    school: { id: schoolId, name: school.name || '', tag: school.clanTag || '' },
+    teams: out,
+    seasons: running.filter((s) => ids.has(s.id)).map(seasonRow),
+  };
+}
+
 // { hostname, leagueId, seasons: [{ id, name, activity, start, end }] } for a
 // LeagueOS link. A league home page gives every season that is upcoming or
-// running; a season, stage or match link gives that one season.
+// running; a season, stage or match link gives that one season; a school or
+// team link gives the seasons that school's teams (or that team) play in,
+// with `school`: { id, name, tag, teamId }.
 async function resolveLeagueLink(input) {
   let u;
   try { u = new URL(String(input).trim()); } catch (e) { throw new Error('That does not look like a valid URL.'); }
@@ -324,16 +383,24 @@ async function resolveLeagueLink(input) {
     leagueId = d.leagueId || '';
   }
   if (!leagueId) throw new Error(`No LeagueOS league found for ${hostname}.`);
+  if (!seasonId && !ids.stage && (ids.school || ids.team)) {
+    let schoolId = ids.school || '';
+    if (!schoolId) {
+      const t = (await fetchJSON(`${API}/league/teams/${ids.team}`, buildHeaders(hostname, leagueId))).data || {};
+      schoolId = (t.parent && t.parent.id) || '';
+      if (!schoolId) throw new Error('That team has no school on the league site.');
+    }
+    const r = await schoolSeasons(hostname, leagueId, schoolId, ids.team ? [ids.team] : null);
+    if (!r.seasons.length) throw new Error(`${r.school.name || 'That school'} has no team in a running season.`);
+    return { hostname, leagueId, seasons: r.seasons, school: { ...r.school, teamId: ids.team || '' } };
+  }
   if (!seasonId && ids.stage) {
     const s = (await fetchJSON(`${API}/league/stages/${ids.stage}`, buildHeaders(hostname, leagueId))).data || {};
     seasonId = s.seasonId || '';
   }
   // An overlay link has no league host of its own; the season's pages do.
   const seasons = await fetchPaged('/league/seasons', hostname, leagueId);
-  const row = (s) => ({
-    id: s.id, name: s.name || '', activity: String(s.stdAct || '').toLowerCase(),
-    start: (Number(s.dateStart) || 0) * 1000, end: (Number(s.dateEnd) || 0) * 1000,
-  });
+  const row = seasonRow;
   const picked = seasonId ? seasons.filter((s) => s.id === seasonId) : seasons.filter((s) => STATE_RUNNING.includes(s.state));
   if (!picked.length) throw new Error(seasonId ? 'That season is not listed by the league.' : 'The league has no season that is upcoming or running.');
   return { hostname, leagueId, seasons: picked.map(row) };
@@ -407,4 +474,4 @@ async function seasonMatches(hostname, leagueId, seasonId, range, cache) {
   };
 }
 
-module.exports = { importMatch, parseMatchUrl, listSeasons, pickSeason, seasonStandings, resolveLeagueLink, seasonMatches };
+module.exports = { importMatch, parseMatchUrl, listSeasons, pickSeason, seasonStandings, resolveLeagueLink, seasonMatches, schoolSeasons };

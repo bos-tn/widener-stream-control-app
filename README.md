@@ -59,6 +59,16 @@ and transition override. Scene hotkeys are not copied. Sorting is skipped while
 OBS is streaming or recording, and when a scene to be moved contains a group or
 is nested in another scene.
 
+Video settings: the Build step's checklist lists OBS's canvas size, output size
+and frame rate. Under 1920x1080 at 60 fps (59.94 passes), **Set 1080p60** raises
+whichever of the three is under and leaves the rest. After a canvas change the
+app's browser sources and camera sources are resized to the new canvas. OBS
+accepts a video change only while no output is running (stream, recording,
+virtual camera, replay buffer). The bitrate is not changed. Listed when they
+apply, both set in OBS Settings > Output: a stream bitrate under 6000 kbps at
+1080p60 (Simple output mode; Advanced mode's bitrate cannot be read), and a
+stream rescale under 1920x1080 (Advanced output mode).
+
 The app switches scenes itself only for the Rocket League Stats auto-cut and
 for **Put on air** in the panel. All other switching is done in OBS.
 
@@ -72,7 +82,7 @@ Settings, Setup, **Run setup** (opens automatically on first run).
    automatically.
 2. **Scene collection.** Creates `Widener Stream` and switches OBS to it.
    Options: game capture on the Scoreboard scene (Game Capture, mode: any
-   fullscreen application), Studio Mode.
+   fullscreen application, on by default), Studio Mode (off by default).
 3. **Stinger transition.** obs-websocket cannot create transitions. In OBS,
    with the app's scene collection open: Scene Transitions dock > + > Stinger,
    named exactly `Widener Stinger` (LotE: `LotE Stinger`). Then **Configure
@@ -85,24 +95,31 @@ switches are unavailable.
 
 ## Match setup
 
-Match page, four steps.
+Match page, five steps. Step 1 sets up the whole match from a link; steps 2
+to 4 set the same fields by hand or correct them. A profile without the
+broadcast package (LotE) has no step 1: its four steps start at Game, and the
+match link is the **Match link** source of the Teams step.
 
-1. **Game.** Sets the scoreboard preset (series length, unit, position, score
+1. **Match.** A LeagueOS match page URL and **Import**: the game with its
+   scoreboard preset, both teams with rosters, the start time, the series
+   length and the league graphic links. Both teams are saved to the team
+   library. With the broadcast package, **League feed** lists this week's
+   matches still to play from the followed links (the home team's, when the
+   feed has any), each with **Import**. **Current match** shows what is set.
+   **Manual setup** opens step 2.
+2. **Game.** Sets the scoreboard preset (series length, unit, position, score
    source) and the highlight video. **Other** takes a custom name. On a league
    profile it also selects which standings are read.
-2. **Teams.**
-   - **Match link**: a LeagueOS match page URL. Imports both teams with
-     rosters, the start time, the series length and the league graphic links.
-     Both teams are saved to the team library.
+3. **Teams.**
    - **Team library** (LotE: **LotE schools**): assign a saved team to Team A
      or Team B.
    - **Manual**: names, short names, colours, logos, players.
    The Starting Soon subtitle defaults to `Team A vs Team B` (with a home
    team set: `vs Opponent`).
-3. **Details.** Start time (set time or duration), series length, round,
+4. **Details.** Start time (set time or duration), series length, round,
    Starting Soon subtitle, next match line, optional scenes, video override,
    video panel, music.
-4. **Scenes.** Checklist (OBS, game, teams, start time, stinger), then **Build
+5. **Scenes.** Checklist (OBS, game, teams, start time, stinger), then **Build
    scenes**. Rebuild after changing the game or the optional scenes. A match
    can be saved here and loaded from the list at the top of the page.
 
@@ -111,7 +128,12 @@ Match page, four steps.
 - **On air**: program scene and a periodic program screenshot (Settings,
   Display).
 - **Score**: +1 series win per team, +/− corrections, Swap sides, Reset score
-  (two clicks). Crew battles add stock controls.
+  (two clicks). Crew battles add stock controls and, under each team's stock
+  counter, **Player order**: the roster in the order its players take the
+  stage, each marked Out, On stage (with stocks left), Next or Bench. Drag a
+  row to move a player; the scoreboard and the roster follow on drop. Stocks
+  are lost down the order, so the player in the On stage row is the one whose
+  stocks the counter takes.
 - **Scoreboard settings**: score source (Manual or live game data), series
   unit, position, Rocket League options, stock counter. The top bar sits
   against the top edge of the screen. A team name too long for its box is
@@ -138,9 +160,9 @@ Scoreboard has none. Changes apply immediately.
 
 Widener draws the Rocket League Stats background at 50% opacity.
 
-## Broadcast package (Widener, test branch)
+## Broadcast package (Widener)
 
-Branch `test/widener-broadcast`, version `2.2.0-design.1`. Not released. A
+Since v2.2.0. A
 profile with a `broadcast` block in `profile.json` gets a second overlay
 layer (`public/overlay-assets/bx.js`, `bx.css`) that redraws the full-screen
 scenes and adds scenes, a ticker, pop-ups, a lower third and cameras. LotE has
@@ -168,16 +190,30 @@ or removes them.
 
 ### Broadcast page
 
-- **Matches this week**: Monday to Sunday. Rows come from followed LeagueOS
-  seasons and from **Add match**. Per row: score steppers, Upcoming / Live /
-  Final, a note, **Pop up**, **Remove**. A changed league row is marked
-  Corrected until the league's own score changes; **Use league score**
-  discards the change.
-- **League feed**: paste a LeagueOS link and **Follow**. A league home page
-  follows every running season; a season or match link follows one. An
-  imported match's season is followed automatically. Read every 90 s while a
-  match is due or in progress, otherwise every 15 min. Scope: every match, or
-  the home team's only.
+- **League feed**: a LeagueOS link and **Follow**.
+  - School or team page: the seasons that school's teams (or that team) play
+    in. The list is looked up again every 6 hours and on **Refresh league
+    feed**, so a new season is added and a finished one dropped.
+  - Season, stage or match page: that season.
+  - League home page: every running season. Above 8 seasons nothing is
+    followed until **Follow all** is pressed; on the profile's own league
+    **<home team> teams only** follows the school instead.
+  - A followed school is one row that opens to its seasons. More than 6
+    seasons followed one by one fold into one row.
+  - **Feed scope**: every match in the followed seasons, or the home team's
+    only.
+  - **Clear all** removes every followed link and the matches read from them
+    (typed-in matches stay). **Default feed** replaces them with the
+    profile's own feed (`broadcast.follow` in `profile.json`; Widener: its
+    NECC school page, home team's matches only). Both have **Undo**.
+  - A new install starts on the default feed. An install that already follows
+    something keeps it.
+  - Seasons are read two at a time, every 90 s while a match is due or in
+    progress, otherwise every 15 min. Team logos are downloaded once.
+- **Matches**: Monday to Sunday, from the league feed and from **Add match
+  manually**. Per row: score steppers, Upcoming / Live / Final, a note, **Pop
+  up**, **Remove**. A changed league row is marked Corrected until the
+  league's own score changes; **Use league score** discards the change.
 - **Ticker**: on full-screen scenes, camera scenes, gameplay. Lines are
   appended after the matches.
 - **Pop-ups**: league feed changes, score changes made on the page (sent 2.5 s
@@ -186,16 +222,40 @@ or removes them.
   full-screen and camera scenes pop-ups use the top right.
 - **Lower third**: name, label, second line, mark (profile or a team),
   seconds (0: until **Hide**). A player chip fills the fields.
-- **Cameras**: device per camera, **Show window** (camera over the game on
-  the Scoreboard scene), **Put scene on air**, window position and size.
+- **Cameras**: per camera a network address or a device, its signal,
+  **Show window** (camera over the game on the Scoreboard scene), **Put
+  scene on air**, window position and size.
 
 ### Cameras in OBS
 
-A build creates one Video Capture Device source per camera (`WU-cam-crowd`,
-`WU-cam-room`), places it under the overlay page in its own scene, and adds a
-hidden copy to the Scoreboard scene under the scoreboard page. Select the
-device on the Broadcast page or in the source's properties. **Show window**
-enables the copy at the window's position; the overlay draws the frame.
+A build creates one source per camera, places it under the overlay page in
+its own scene, and adds a hidden copy to the Scoreboard scene under the
+scoreboard page. **Show window** enables the copy at the window's position;
+the overlay draws the frame. The source depends on the camera's address
+(Broadcast, Cameras):
+
+| Address | OBS source | Notes |
+| --- | --- | --- |
+| Web page (`http://`, `https://`) | Browser source `WU-netcam-<id>` | A MediaMTX WebRTC page (`http://host:8889/path/`) or any page that fills itself with the picture. Restyled: no background, no status text, picture cropped to fill. Kept loaded off air. |
+| Stream (`rtsp://`, `rtmp://`, `srt://`, `.m3u8`) | Media source `WU-stream-<id>` | RTSP over TCP, no buffering, reconnect after 2 s. |
+| None | Video Capture Device `WU-cam-<id>` | Device selected on the Broadcast page or in the source's properties. |
+
+- An address with no scheme is RTSP on port 554 or 8554, otherwise a web page.
+- Network sources are created muted, with their sound routed to OBS's mixer.
+- A changed address is applied to OBS at once when the camera's scene exists.
+  A camera has one source at a time; changing its sort removes the other.
+- **Signal**: Live, No signal, Link answers, Link not reachable. A MediaMTX
+  page and an RTSP address are asked whether the camera is publishing (no
+  session is opened); any other page is only checked for an answer. Checked
+  every 10 s while the Broadcast page is open.
+- **Defaults**: `profiles/<id>/local.json`,
+  `{ "cameras": { "<camera id>": "<address>" } }`. The file is not in the
+  repository (`.gitignore`): the addresses are on the organisation's own
+  network. It applies to dev runs only: the installer build leaves it out
+  (`build/dist.js`), so an installed app starts with no addresses and the
+  operator enters them once (kept in the data folder across updates). A
+  `url` on a camera in `profile.json` is a default that ships, for an address
+  that may be public. **Default link** on a camera goes back to its default.
 
 ### Review without OBS
 
@@ -209,13 +269,16 @@ The showcase page shows every scene as a live tile, with buttons for pop-ups,
 the lower third, camera windows and demo matches. It uses its own data folder
 (`app/data/design`).
 
-Not yet run against a real OBS, a real camera or a live league score change.
+Run in OBS 32: the scene pages, the highlight video, and network cameras
+(both scenes, both windows, cutting to and from them, changing a camera's
+address and sort). Not yet run: a capture-device camera, the stinger, a live
+league score change.
 
 ## Profiles
 
 | | Widener | LotE |
 | --- | --- | --- |
-| Scene layout | Broadcast package (test branch); base layout without it | Own layout (`theme.css`): masthead, left text column, matchup row with records |
+| Scene layout | Broadcast package; base layout without it | Own layout (`theme.css`): masthead, left text column, matchup row with records |
 | League scenes | None | Standings, Head to Head |
 | Standings source | None | `lote.v1.leagueos.gg` |
 | Headline font | Kanit | Zentras (default) or Pink Blue |
@@ -374,6 +437,8 @@ OBS: Docks > Custom Browser Docks, URL `http://localhost:4310/control`.
 | Banner: OBS not connected | Start OBS. Check Tools > WebSocket Server Settings > Enable WebSocket server. Click Connect. |
 | Scene marked "Not in OBS", or a notice lists missing or unused scenes | **Build scenes**. Check that OBS has the app's scene collection open. |
 | Scenes not in stream order | **Build scenes** while OBS is not streaming or recording. The build result states why sorting was skipped. |
+| Video row: "Locked while OBS is streaming or recording" | OBS takes no video change while an output runs: stream, recording, virtual camera, replay buffer. Stop it, then **Set 1080p60**. |
+| Stream is under 1080p with the Video row green | Advanced output mode rescales the stream: OBS Settings > Output > Streaming > Rescale Output. The checklist lists it. |
 | Configure stinger reports no such transition | The name is case-sensitive (`Widener Stinger`, `LotE Stinger`) and transitions are stored per scene collection. |
 | A scene shows an old version after an update | **Build scenes** reloads every browser source. Otherwise refresh the source in OBS. |
 | Scoreboard scene shows no game | Set the `WU-game-capture` source to the game window, or run the game fullscreen. |
@@ -384,9 +449,14 @@ OBS: Docks > Custom Browser Docks, URL `http://localhost:4310/control`.
 | Match import fails | LeagueOS changed or is unreachable. Enter teams manually or load a saved match. |
 | League graphic scene is empty | Import the match. The graphic links come from the import. |
 | Rocket League: waiting | Score card > Connect to Rocket League, then restart the game. |
-| Camera scene or window is black | Broadcast > Cameras: select a device. "Source missing" means the scenes need a build. |
+| Camera scene or window is black | Broadcast > Cameras. A network camera: check its signal; "No signal" means the camera is not publishing, "Link not reachable" that this PC cannot reach its address. A device camera: select a device. "Source missing" means the scenes need a build. |
+| Camera address not applied: "OBS still holds a removed source" | A source of that name was removed in OBS while a copy of it sat in another scene. Restart OBS, then **Build scenes**. |
 | Camera window shows a frame with no picture | OBS is not connected, or the Scoreboard scene has no copy of the camera source: **Build scenes**. |
 | League feed row: Read failed | LeagueOS changed or is unreachable. The last matches read stay in the list; add or correct matches by hand. |
+| League feed: dozens of seasons followed | A league home page was followed. **Default feed**, or **Clear all** and follow the school's page. |
+| Highlight video panel shows the mascot | No video for the game, the video is not downloaded yet, or it failed three times in a row. Settings, Game highlight videos shows the download state. |
+| Scenes blank after OBS was opened before the app | The app reloads a scene source whose page has not loaded about 4 s after it connects to OBS. If OBS is not connected, connect it. |
+| OBS log: `[highlight video] rebuilt at ...` | The video stopped decoding and was rebuilt at the same position. Logged under the scene source's name. |
 | Rocket League boost shows a dash | Boost is only sent while spectating. |
 | Panel unreachable from another computer | By design. The server accepts local connections only. |
 
@@ -405,8 +475,8 @@ npm run dist          # every profile's installer
 npm run dist:lote     # one profile's installer
 npm run icons         # app icons from profiles/<id>/icon-source.png
 npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
-npm run design        # test branch: demo server, http://localhost:4313/showcase
-npm run test:broadcast    # test branch: checks against a mock OBS
+npm run design        # demo server for the broadcast package, http://localhost:4313/showcase
+npm run test:broadcast    # checks against a mock OBS
 ```
 
 ### Profile files
@@ -415,7 +485,7 @@ npm run test:broadcast    # test branch: checks against a mock OBS
 
 | File | Contents |
 | --- | --- |
-| `profile.json` | Names, port, OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (test branch: `scenes`, `cameras` with id, label, title, subtitle), defaults, installer identity (app id, package name, artifact name, update channel) |
+| `profile.json` | Names, port, OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (optional: `scenes`, `cameras` with id, label, title, subtitle and optional `url`, `follow`), defaults, installer identity (app id, package name, artifact name, update channel) |
 | `games.json` | Games: id, name, scoreboard preset, highlight video, `leagueActivity` (LeagueOS activity ids), `scoreName` |
 | `teams.json` | Optional member schools (id, name, short name, colours, logo), preloaded into the team library |
 | `assets/` | Logo, panel logo, mascot, watermark, stinger video, `teams/` logos, `fonts/` |

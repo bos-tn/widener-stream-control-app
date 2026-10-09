@@ -11,10 +11,11 @@ const { build, Platform } = require('electron-builder');
 const pkg = require('../package.json');
 const { listProfiles, loadProfile } = require('../profile');
 
-async function buildProfile(id) {
+// What electron-builder is given for one profile.
+function profileConfig(id) {
   const p = loadProfile(id);
   const base = pkg.build;
-  const config = {
+  return {
     ...base,
     appId: p.build.appId || base.appId,
     productName: p.appName,
@@ -25,7 +26,9 @@ async function buildProfile(id) {
     // name, so upgrading keeps its settings, teams and saved matches).
     extraMetadata: { streamProfile: id, ...(p.build.packageName ? { name: p.build.packageName } : {}) },
     directories: { ...base.directories, output: `dist/${id}` },
-    files: [...base.files.filter((f) => !f.startsWith('profiles/')), `profiles/${id}/**/*`],
+    // local.json (network camera addresses, see profile.js) stays on the PC
+    // it was written on: an installer goes to a public release.
+    files: [...base.files.filter((f) => !f.startsWith('profiles/')), `profiles/${id}/**/*`, `!profiles/${id}/local.json`],
     win: { ...base.win, icon: `profiles/${id}/icons/icon.ico` },
     nsis: { ...base.nsis, artifactName: p.build.artifactName || `${id}-Stream-Control-Setup-\${version}.\${ext}` },
     // The channel names the update file: latest.yml, lote.yml, ... Every
@@ -33,6 +36,11 @@ async function buildProfile(id) {
     // version, and each app reads only its own file.
     publish: (base.publish || []).map((pub) => ({ ...pub, channel: p.build.channel || 'latest' })),
   };
+}
+
+async function buildProfile(id) {
+  const p = loadProfile(id);
+  const config = profileConfig(id);
   // Written out whole and passed as a file: given as an object, electron-
   // builder merges it into package.json's "build" (and folds a publish list
   // into its first entry, which breaks it), so a profile's files and channel
@@ -56,11 +64,15 @@ async function buildProfile(id) {
   });
 }
 
-(async () => {
-  const wanted = process.argv.slice(2);
-  const ids = wanted.length ? wanted : listProfiles();
-  for (const id of ids) await buildProfile(id);
-})().catch((e) => {
-  console.error(e && e.message ? e.message : e);
-  process.exit(1);
-});
+module.exports = { profileConfig };
+
+if (require.main === module) {
+  (async () => {
+    const wanted = process.argv.slice(2);
+    const ids = wanted.length ? wanted : listProfiles();
+    for (const id of ids) await buildProfile(id);
+  })().catch((e) => {
+    console.error(e && e.message ? e.message : e);
+    process.exit(1);
+  });
+}

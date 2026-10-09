@@ -33,7 +33,10 @@ function createMockObs(port = 4466, opts = {}) {
     transitionSettings: {},
     studioMode: false,
     streaming: false,
-    kinds: ['browser_source', 'ffmpeg_source', 'game_capture', 'dshow_input', 'image_source', 'color_source'],
+    video: { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 },
+    // The profile's settings a test reads: 'Category/Name' -> string.
+    profile: { 'Output/Mode': 'Simple', 'SimpleOutput/VBitrate': '6000' },
+    kinds:['browser_source', 'ffmpeg_source', 'game_capture', 'dshow_input', 'image_source', 'color_source'],
     calls: [],
   };
   let nextItemId = 1;
@@ -45,6 +48,13 @@ function createMockObs(port = 4466, opts = {}) {
   const scene = (name) => coll().scenes.find((s) => s.name === name);
   function fail(code, comment) { const e = new Error(comment); e.code = code; return e; }
   function need(sc, name) { if (!sc) throw fail(600, `No source was found by the name of \`${name}\`.`); return sc; }
+  // A removed input goes for good once no scene holds an item of it.
+  function prune() {
+    Object.keys(state.inputs).filter((n) => state.inputs[n].removed).forEach((n) => {
+      const held = Object.values(state.collections).some((c) => c.scenes.some((s) => s.items.some((it) => it.source === n)));
+      if (!held) delete state.inputs[n];
+    });
+  }
   // A scene's items bottom first, each with its index.
   const itemList = (sc) => sc.items.map((it, i) => ({
     sceneItemId: it.id, sourceName: it.source, sceneItemIndex: i, sceneItemEnabled: it.enabled, sceneItemLocked: it.locked,
@@ -57,7 +67,22 @@ function createMockObs(port = 4466, opts = {}) {
 
   const handlers = {
     GetVersion: () => ({ obsVersion: '32.0.0', obsWebSocketVersion: '5.6.0', rpcVersion: 1 }),
-    GetVideoSettings: () => ({ baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080 }),
+    GetVideoSettings: () => ({ ...state.video }),
+    // As OBS does it: refused while an output is running, and a size or a
+    // frame rate is given whole or not at all.
+    SetVideoSettings: (d) => {
+      if (state.streaming) throw fail(500, 'Video settings cannot be changed while an output is active.');
+      [['baseWidth', 'baseHeight'], ['outputWidth', 'outputHeight'], ['fpsNumerator', 'fpsDenominator']].forEach(([a, b]) => {
+        if ((d[a] === undefined) !== (d[b] === undefined)) throw fail(300, `\`${a}\` and \`${b}\` must be set together.`);
+        if (d[a] !== undefined) Object.assign(state.video, { [a]: d[a], [b]: d[b] });
+      });
+    },
+    GetProfileParameter: ({ parameterCategory, parameterName }) => {
+      const v = state.profile[`${parameterCategory}/${parameterName}`];
+      return { parameterValue: v === undefined ? null : v, defaultParameterValue: null };
+    },
+    GetVirtualCamStatus: () => ({ outputActive: false }),
+    GetReplayBufferStatus: () => { throw fail(604, 'Replay buffer is not available.'); },
     GetSceneCollectionList: () => ({ currentSceneCollectionName: state.current, sceneCollections: Object.keys(state.collections) }),
     SetCurrentSceneCollection: ({ sceneCollectionName }) => {
       if (!state.collections[sceneCollectionName]) throw fail(600, 'No scene collection by that name');
@@ -83,6 +108,7 @@ function createMockObs(port = 4466, opts = {}) {
     RemoveScene: ({ sceneName }) => {
       need(scene(sceneName), sceneName);
       coll().scenes = coll().scenes.filter((s) => s.name !== sceneName);
+      prune();
       if (coll().program === sceneName && coll().scenes.length) setProgram(coll().scenes[0].name);
     },
     SetSceneName: ({ sceneName, newSceneName }) => {
@@ -110,10 +136,26 @@ function createMockObs(port = 4466, opts = {}) {
       sc.items.push({ id, source: inputName, enabled: sceneItemEnabled !== false, locked: false, blend: 'OBS_BLEND_NORMAL', transform: {} });
       return { sceneItemId: id };
     },
+    // As OBS does it: the input is marked removed, and a scene only drops
+    // its items of it as that scene is drawn (here: the program scene).
+    // Until the last item is gone the input is still listed, its name is
+    // taken, and it cannot be added to a scene.
     RemoveInput: ({ inputName }) => {
-      if (!state.inputs[inputName]) throw fail(600, 'No input by that name');
-      delete state.inputs[inputName];
-      Object.values(state.collections).forEach((c) => c.scenes.forEach((s) => { s.items = s.items.filter((it) => it.source !== inputName); }));
+      if (!state.inputs[inputName] || state.inputs[inputName].removed) throw fail(600, 'No input by that name');
+      state.inputs[inputName].removed = true;
+      const prog = scene(coll().program);
+      if (prog) prog.items = prog.items.filter((it) => it.source !== inputName);
+      prune();
+    },
+    RemoveSceneItem: ({ sceneName, sceneItemId }) => {
+      const sc = need(scene(sceneName), sceneName);
+      if (!sc.items.some((it) => it.id === sceneItemId)) throw fail(600, 'No scene items were found in the specified scene by that ID.');
+      const gone = sc.items.find((it) => it.id === sceneItemId).source;
+      sc.items = sc.items.filter((it) => it.id !== sceneItemId);
+      // An input is let go of when its last item goes.
+      const held = Object.values(state.collections).some((c) => c.scenes.some((s) => s.items.some((it) => it.source === gone)));
+      if (state.inputs[gone] && !held) delete state.inputs[gone];
+      prune();
     },
     SetInputName: ({ inputName, newInputName }) => {
       if (!state.inputs[inputName]) throw fail(600, 'No input by that name');
@@ -171,6 +213,7 @@ function createMockObs(port = 4466, opts = {}) {
     CreateSceneItem: ({ sceneName, sourceName, sceneItemEnabled }) => {
       const sc = need(scene(sceneName), sceneName);
       if (!state.inputs[sourceName] && !scene(sourceName)) throw fail(600, 'No source by that name');
+      if ((state.inputs[sourceName] || {}).removed) throw fail(600, 'Failed to create the scene item.');
       const id = nextItemId++;
       sc.items.push({ id, source: sourceName, enabled: sceneItemEnabled !== false, locked: false, blend: 'OBS_BLEND_NORMAL', transform: {} });
       return { sceneItemId: id };
