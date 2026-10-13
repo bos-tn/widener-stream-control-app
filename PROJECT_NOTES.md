@@ -2532,7 +2532,7 @@ new state fields.
   `tasklist` for a running instance and ask before killing it** if you need
   to rebuild.
 
-## After v2.2.0: on-air fixes (both profiles, unreleased)
+## v2.2.1: on-air fixes (both profiles)
 
 - **Rocket League stats when players leave.** `rlstats.js` keeps a roster of
   everyone seen in the match; once the game has a winner, players who drop out
@@ -2551,6 +2551,32 @@ new state fields.
   removes them). Neither is checked against a real OBS yet.
 - The scoreboard (standard and RL boards) sits `--sb-gap` (16px) below the top
   edge in `overlay.html`, for the game's boost meters. Adjust that one value.
+
+### Release checks (2026-10-12)
+
+- Commit `b60232e` on `master`, annotated tag `v2.2.1`. Both installers
+  built from a temp copy of the committed tree (outside OneDrive, junction
+  to `app/node_modules`, LotE's two fonts copied in, no `local.json`).
+  Each update file matched its installer (sha512, size); each
+  `app-update.yml` named its channel (`latest`, `lote`).
+- Packaged smoke tests (scratch script: the server run out of `app.asar` by
+  the build's own exe against the source tree's mock OBS, whose collection
+  was seeded with a v2.2.0-style `Scoreboard` scene). **Widener 17, LotE 18**:
+  `dev/`, `build/`, the other league's profile and `local.json` not shipped;
+  the version; the overlay's gap and the panel's new options served; music
+  default 18; the old scene renamed in place with no duplicate; game audio
+  added; caster mics in every scene but Starting Soon and Be Right Back,
+  removed again when unticked; a second build changes nothing; Studio Mode
+  untouched. The leaver fix was checked against a fake game feed on the
+  source `rlstats.js` (same file), not in the packaged run.
+- Published as a draft with six files, upload digests matched the local
+  installers, then published and marked Latest (2026-10-13 01:33 UTC).
+- The updater, without installing: run as 2.2.0, both channels report
+  `update-available` with 2.2.1, the right installer, size; run as 2.2.1,
+  both report `update-not-available`.
+- Both installers are in the user's Downloads folder.
+- **Not done:** the audio sources and the scene rename in a real OBS; an
+  install from an installed 2.2.0 copy.
 
 ## Known gaps / things not yet done
 
