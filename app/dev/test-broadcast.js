@@ -97,7 +97,7 @@ function openPage(role) {
     check('connects to the mock', st.connected === true, st);
     const b1 = await send('/api/obs/build-scenes');
     check('build succeeds', !b1.error, b1);
-    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Match Preview', 'WU: Bracket', 'WU: Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Be Right Back', 'WU: Post-Match'];
+    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Match Preview', 'WU: Bracket', 'WU: Gameplay/Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Be Right Back', 'WU: Post-Match'];
     check('scenes in stream order', JSON.stringify(mock.sceneNames()) === JSON.stringify(want), mock.sceneNames());
     check('collection created', b1.collection === 'created' && mock.state.current === 'Widener Stream', [b1.collection, mock.state.current]);
     check('cameras reported created', b1.cameras && b1.cameras.crowd === 'created' && b1.cameras.room === 'created', b1.cameras);
@@ -117,9 +117,20 @@ function openPage(role) {
     check('camera fills the canvas', crowd[0].sceneItemTransform.boundsWidth === 1920 && crowd[0].sceneItemTransform.boundsType === 'OBS_BOUNDS_SCALE_OUTER' && crowd[0].sceneItemTransform.cropToBounds === true, crowd[0].sceneItemTransform);
     check('camera page url', mock.state.inputs['WU-src-cam-crowd'].settings.url === `http://localhost:${PORT}/overlay?view=cam-crowd`, mock.state.inputs['WU-src-cam-crowd'].settings.url);
     check('This Week page url', mock.state.inputs['WU-src-schedule'].settings.url === `http://localhost:${PORT}/overlay?view=schedule`);
-    const sb = mock.items('WU: Scoreboard');
-    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-src-scoreboard']), sb.map((i) => i.sourceName));
+    const sb = mock.items('WU: Gameplay/Scoreboard');
+    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-audio', 'WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-src-scoreboard']), sb.map((i) => i.sourceName));
     check('camera windows start hidden', sb.filter((i) => /cam/.test(i.sourceName)).every((i) => i.sceneItemEnabled === false), sb.map((i) => i.sceneItemEnabled));
+
+    check('game sound is added to the Scoreboard scene', b1.gameAudio === 'created-empty' && mock.state.inputs['WU-game-audio'].kind === 'wasapi_process_output_capture', b1.gameAudio);
+    check('caster mics are off unless ticked', b1.casterMics === 'skipped' && !mock.state.inputs['WU-caster-mic-1'], b1.casterMics);
+    await send('/api/prefs', { casterMics: true });
+    const bm = await send('/api/obs/build-scenes');
+    const micScenes = (n) => mock.sceneNames().filter((s) => mock.items(s).some((i) => i.sourceName === n));
+    check('caster mics are built on request', bm.casterMics === 'created' && mock.state.inputs['WU-caster-mic-2'].kind === 'wasapi_input_capture', bm.casterMics);
+    check('mics sit in every scene but Starting Soon and Be Right Back', micScenes('WU-caster-mic-1').length === mock.sceneNames().length - 2 && !micScenes('WU-caster-mic-1').includes('WU: Be Right Back') && !micScenes('WU-caster-mic-1').includes('WU: Starting Soon'), micScenes('WU-caster-mic-1'));
+    await send('/api/prefs', { casterMics: false });
+    const bn = await send('/api/obs/build-scenes');
+    check('unticked, a build takes the mics out', bn.casterMics === 'removed' && micScenes('WU-caster-mic-1').length === 0, [bn.casterMics, micScenes('WU-caster-mic-1')]);
 
     let cams = await j('/api/bx/cameras');
     check('camera status lists devices', cams.connected && cams.cameras[0].exists && cams.cameras[0].devices.length === 3 && cams.cameras[0].window === true, cams.cameras[0]);
@@ -129,7 +140,7 @@ function openPage(role) {
     check('device is set in OBS', setDev.ok && mock.state.inputs['WU-cam-crowd'].settings.video_device_id === dev && cams.cameras[0].device === dev, cams.cameras[0].device);
 
     // --- Camera windows: the scenes hear first, OBS a moment later -------------
-    const item = () => mock.items('WU: Scoreboard').find((i) => i.sourceName === 'WU-cam-room');
+    const item = () => mock.items('WU: Gameplay/Scoreboard').find((i) => i.sourceName === 'WU-cam-room');
     await send('/api/bx/cam', { id: 'room', pip: true });
     const bxNow = await j('/api/bx');
     check('scenes are told at once', bxNow.cams.find((c) => c.id === 'room').pip === true && !!bxNow.layout.pip.room, bxNow.layout.pip);
@@ -151,7 +162,7 @@ function openPage(role) {
     await send('/api/remote/cam/room/off');
     await send('/api/remote/cam/crowd/toggle');
     await wait(650);
-    check('remote routes hide the windows', mock.items('WU: Scoreboard').filter((i) => /cam/.test(i.sourceName)).every((i) => !i.sceneItemEnabled));
+    check('remote routes hide the windows', mock.items('WU: Gameplay/Scoreboard').filter((i) => /cam/.test(i.sourceName)).every((i) => !i.sceneItemEnabled));
 
     // --- On air follows OBS ------------------------------------------------------
     mock.cutTo('WU: Crowd Cam');
@@ -163,7 +174,7 @@ function openPage(role) {
     check('switch to Matchup', sw.switched && mock.state.collections[mock.state.current].program === 'WU: Matchup', sw);
 
     // --- Rebuilds ------------------------------------------------------------------
-    const shape = () => JSON.stringify([mock.sceneNames(), Object.keys(mock.state.inputs).sort(), mock.items('WU: Scoreboard').map((i) => i.sourceName)]);
+    const shape = () => JSON.stringify([mock.sceneNames(), Object.keys(mock.state.inputs).sort(), mock.items('WU: Gameplay/Scoreboard').map((i) => i.sourceName)]);
     const before = shape();
     const b2 = await send('/api/obs/build-scenes');
     check('second build is idempotent', before === shape() && b2.cameras.crowd === 'exists' && b2.ordering === 'ordered', [b2.cameras, b2.ordering]);
@@ -181,7 +192,7 @@ function openPage(role) {
     await update({ game: 'rl', scoreboard: { style: 'rl' } });
     await send('/api/obs/build-scenes');
     const names5 = mock.sceneNames();
-    check('stats scene sits after Scoreboard', names5.indexOf('WU: Rocket League Stats') === names5.indexOf('WU: Scoreboard') + 1 && names5.indexOf('WU: Crowd Cam') === names5.indexOf('WU: Scoreboard') + 2, names5);
+    check('stats scene sits after Scoreboard', names5.indexOf('WU: Rocket League Stats') === names5.indexOf('WU: Gameplay/Scoreboard') + 1 && names5.indexOf('WU: Crowd Cam') === names5.indexOf('WU: Gameplay/Scoreboard') + 2, names5);
     check('layout reserves the Rocket League corners', (await j('/api/bx')).layout.reserved['bottom-right'] === 236);
 
     // --- Video settings ------------------------------------------------------------
@@ -320,13 +331,13 @@ function openPage(role) {
     const pageSettings = mock.state.inputs['WU-netcam-room'].settings;
     check('it shows the link, restyled, sound through OBS', pageSettings.url === pageUrl('live') && /#message/.test(pageSettings.css) && /object-fit: cover/.test(pageSettings.css) && pageSettings.reroute_audio === true && pageSettings.shutdown === false, pageSettings);
     check('camera scene: the page source under the overlay', JSON.stringify(sceneItems('WU: Comp Room')) === JSON.stringify(['WU-netcam-room', 'WU-src-cam-room']), sceneItems('WU: Comp Room'));
-    check('scoreboard: its window is there, off', mock.items('WU: Scoreboard').some((i) => i.sourceName === 'WU-netcam-room' && i.sceneItemEnabled === false) && !sceneItems('WU: Scoreboard').includes('WU-cam-room'), sceneItems('WU: Scoreboard'));
+    check('scoreboard: its window is there, off', mock.items('WU: Gameplay/Scoreboard').some((i) => i.sourceName === 'WU-netcam-room' && i.sceneItemEnabled === false) && !sceneItems('WU: Gameplay/Scoreboard').includes('WU-cam-room'), sceneItems('WU: Gameplay/Scoreboard'));
     check('status: a page, built, sending', room.kind === 'page' && room.exists && room.window && room.link === pageUrl('live') && room.live && room.live.state === 'live', room);
     check('the panel and scenes are told the link', (await j('/api/bx')).cams.find((c) => c.id === 'room').link === pageUrl('live'));
 
     await send('/api/bx/cam', { id: 'room', pip: true });
     await wait(700);
-    const netWin = mock.items('WU: Scoreboard').find((i) => i.sourceName === 'WU-netcam-room');
+    const netWin = mock.items('WU: Gameplay/Scoreboard').find((i) => i.sourceName === 'WU-netcam-room');
     check('its window opens over the game', netWin.sceneItemEnabled === true && netWin.sceneItemTransform.boundsWidth > 0 && netWin.sceneItemTransform.cropToBounds === true, netWin);
     await send('/api/bx/cam', { id: 'room', pip: false });
     await wait(700);

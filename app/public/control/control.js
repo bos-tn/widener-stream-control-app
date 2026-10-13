@@ -255,13 +255,15 @@ const NECC_TYPES = [
 ];
 let prefs = {
   neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
-  setupDone: false, guideV2: false, gameCapture: true, studioMode: false, orderScenes: true,
+  setupDone: false, guideV2: false, gameCapture: true, gameAudio: true, casterMics: false, studioMode: false, orderScenes: true,
 };
 let prefsLoaded = false;
 
 function applyPrefs(p) {
   prefs = { ...prefs, ...(p || {}) };
   ['gameCaptureInput', 'wizGameCapture'].forEach((id) => { $id(id).checked = prefs.gameCapture; });
+  ['gameAudioInput', 'wizGameAudio'].forEach((id) => { $id(id).checked = prefs.gameAudio; });
+  ['casterMicsInput', 'wizCasterMics'].forEach((id) => { $id(id).checked = prefs.casterMics; });
   ['studioModeInput', 'wizStudioMode'].forEach((id) => { $id(id).checked = prefs.studioMode; });
   $id('orderScenesInput').checked = prefs.orderScenes;
   renderNeccTypeList();
@@ -281,7 +283,7 @@ async function loadPrefs() {
   maybeAutoWizard();
 }
 
-[['gameCaptureInput', 'gameCapture'], ['wizGameCapture', 'gameCapture'], ['studioModeInput', 'studioMode'], ['wizStudioMode', 'studioMode'], ['orderScenesInput', 'orderScenes']]
+[['gameCaptureInput', 'gameCapture'], ['wizGameCapture', 'gameCapture'], ['gameAudioInput', 'gameAudio'], ['wizGameAudio', 'gameAudio'], ['casterMicsInput', 'casterMics'], ['wizCasterMics', 'casterMics'], ['studioModeInput', 'studioMode'], ['wizStudioMode', 'studioMode'], ['orderScenesInput', 'orderScenes']]
   .forEach(([id, key]) => $id(id).addEventListener('change', (e) => savePrefs({ [key]: e.target.checked })));
 
 // The scenes beyond the base ones: the league's own (from the League page),
@@ -1123,9 +1125,17 @@ function buildResultHtml(res) {
   if (res.gameCapture === 'created') lines.push(`<li class="ok">Game capture added: <b>${esc(prefix)}-game-capture</b> (mode: any fullscreen application).</li>`);
   else if (res.gameCapture === 'exists') lines.push('<li class="ok">Game capture present.</li>');
   else if (res.gameCapture === 'manual') lines.push(`<li class="warn">Game Capture is unavailable in this OBS. Add the game manually:
-    <ol><li>Select the <b>${esc(prefix)}: Scoreboard</b> scene.</li>
+    <ol><li>Select the <b>${esc(prefix)}: Gameplay/Scoreboard</b> scene.</li>
     <li><b>Sources</b> &gt; <b>+</b> &gt; <b>Window Capture</b> or <b>Display Capture</b>. Select the game.</li>
     <li>Place it below <b>${esc(prefix)}-src-scoreboard</b>.</li></ol></li>`);
+  if (res.gameAudio === 'created') lines.push(`<li class="ok">Game audio added: <b>${esc(prefix)}-game-audio</b> (Application Audio Capture).</li>`);
+  else if (res.gameAudio === 'created-empty') lines.push(`<li class="warn">Game audio added: <b>${esc(prefix)}-game-audio</b>. Pick the game's window in its OBS properties.</li>`);
+  else if (res.gameAudio === 'exists') lines.push('<li class="ok">Game audio present.</li>');
+  else if (res.gameAudio === 'manual') lines.push(`<li class="warn">Application Audio Capture is unavailable in this OBS (Windows, OBS 28 or later). Add the game's sound manually to the <b>${esc(prefix)}: Gameplay/Scoreboard</b> scene.</li>`);
+  if (res.casterMics === 'created') lines.push(`<li class="warn">Caster microphones added: <b>${esc(prefix)}-caster-mic-1</b> and <b>-2</b>, on the default input device. Pick each one's device in its OBS properties.</li>`);
+  else if (res.casterMics === 'exists') lines.push('<li class="ok">Caster microphones present.</li>');
+  else if (res.casterMics === 'removed') lines.push('<li class="ok">Caster microphones removed.</li>');
+  else if (res.casterMics === 'manual') lines.push('<li class="warn">No audio input capture source type in this OBS. Add the caster microphones manually.</li>');
   Object.keys(res.cameras || {}).forEach((id) => {
     // A network camera is a browser or media source and has no device.
     const { input, kind } = (res.cameraSources || {})[id] || { input: `${prefix}-cam-${id}`, kind: 'device' };

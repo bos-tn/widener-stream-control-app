@@ -36,7 +36,7 @@ function createMockObs(port = 4466, opts = {}) {
     video: { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 },
     // The profile's settings a test reads: 'Category/Name' -> string.
     profile: { 'Output/Mode': 'Simple', 'SimpleOutput/VBitrate': '6000' },
-    kinds:['browser_source', 'ffmpeg_source', 'game_capture', 'dshow_input', 'image_source', 'color_source'],
+    kinds:['browser_source', 'ffmpeg_source', 'game_capture', 'dshow_input', 'wasapi_input_capture', 'wasapi_process_output_capture', 'image_source', 'color_source'],
     calls: [],
   };
   let nextItemId = 1;

@@ -340,12 +340,12 @@
   /* Flat panel colours shared by every scoreboard part (v0.11.0 cleanup:
      the earlier gradients, glows and deep soft shadows read as blurry over
      gameplay). */
-  .sb-view{ --sb-panel:var(--brand-panel, rgba(9,19,40,.96)); --sb-dark:var(--brand-panel-dark, #050b1a); }
+  .sb-view{ --sb-panel:var(--brand-panel, rgba(9,19,40,.96)); --sb-dark:var(--brand-panel-dark, #050b1a); --sb-gap:16px; }
   .sb{
     --a:var(--brand-team-a, #0054B8); --b:var(--brand-team-b, #F0B310); --a-ink:#fff; --b-ink:#111;
-    /* Flush with the top edge: no gap of game above it, and less of the
+    /* A small gap (--sb-gap) stays above it for the boost meters, and less of the
        game covered. */
-    position:absolute; top:0; left:50%; transform:translateX(-50%);
+    position:absolute; top:var(--sb-gap); left:50%; transform:translateX(-50%);
     display:grid; grid-template-columns:470px 96px 190px 96px 470px; grid-template-rows:76px auto;
     font-family:'Inter', system-ui, sans-serif; color:var(--text);
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.4));
@@ -492,7 +492,7 @@
   .sb-view.rl .rl-only{ display:block; }
   .rl-only{ --rl-ink:var(--brand-ink-dark, #071022); --rl-white:#f3f6fb; }
 
-  .rlb{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:640px;
+  .rlb{ position:absolute; top:var(--sb-gap); left:50%; transform:translateX(-50%); width:640px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); animation: rlb-in .5s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rlb-in{ from{ opacity:0; transform:translate(-50%,-24px) } to{ opacity:1; transform:translate(-50%,0) } }
   .rlb-top{ height:34px; display:flex; align-items:center; justify-content:center; gap:14px;
@@ -552,7 +552,7 @@
   .rl-p.dead{ opacity:.4; }
 
   /* Goal banner under the board. */
-  .rl-goal{ position:absolute; top:168px; left:50%; display:flex; align-items:stretch; height:50px;
+  .rl-goal{ position:absolute; top:calc(168px + var(--sb-gap)); left:50%; display:flex; align-items:stretch; height:50px;
     transform:translateX(-50%); filter:drop-shadow(0 4px 10px rgba(0,0,0,.45));
     opacity:0; transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); pointer-events:none; }
   .rl-goal.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -1858,11 +1858,11 @@
       const row = el.children[i];
       const known = p.boost !== null && p.boost !== undefined;
       row.querySelector('.rl-p-name').textContent = p.name;
-      row.querySelector('.rl-p-num').textContent = known ? String(p.boost) : '\u2013';
+      row.querySelector('.rl-p-num').textContent = known ? String(p.boost) : '0';
       row.querySelector('.rl-p-bar b').style.width = (known ? p.boost : 0) + '%';
       row.classList.toggle('full', p.boost === 100);
       row.classList.toggle('target', p.key === targetKey);
-      row.classList.toggle('dead', !!p.demolished);
+      row.classList.toggle('dead', !!p.demolished || !!p.left);
     });
   }
 
@@ -1911,7 +1911,7 @@
     box.classList.toggle('full', boost === 100);
     box.classList.toggle('boosting', !!tp.boosting);
     box.classList.toggle('sonic', !!tp.supersonic);
-    $('#rlb-num').textContent = known ? String(boost) : '\u2013';
+    $('#rlb-num').textContent = known ? String(boost) : '0';
     const fill = $('#rlg-fill');
     fill.style.strokeDasharray = (boost * 0.75) + ' 100';
     fill.classList.toggle('zero', boost <= 0);
@@ -2017,7 +2017,7 @@
     grid.style.top = top + 'px';
     const n = L.players.length + R.players.length;
     const cw = Math.min(236, Math.floor(1360 / Math.max(1, n)));
-    grid.style.gridTemplateColumns = `repeat(${L.players.length}, ${cw}px) 380px repeat(${R.players.length}, ${cw}px)`;
+    grid.style.gridTemplateColumns = (L.players.length ? `repeat(${L.players.length}, ${cw}px) ` : '') + '380px' + (R.players.length ? ` repeat(${R.players.length}, ${cw}px)` : '');
     const total = (players, k) => players.reduce((a, p) => a + (Number(p[k]) || 0), 0);
     const colour = (n2, col) => { n2.style.setProperty('--c', col); return n2; };
     const head = (p, col) => {

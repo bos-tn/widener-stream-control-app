@@ -32,7 +32,8 @@ const BASE_VIEWS = {
   roster: { label: 'Rosters', src: 'roster' },
   // Transparent: the game capture sits under the browser source. It was
   // Smash-only in v0.8.0; the legacy names are renamed in place on a build.
-  scoreboard: { label: 'Scoreboard', src: 'scoreboard', legacy: 'Smash Scoreboard', legacySrc: 'smash' },
+  // Named Smash Scoreboard in v0.8.0 and Scoreboard until v2.2.0.
+  scoreboard: { label: 'Gameplay/Scoreboard', src: 'scoreboard', legacy: [{ label: 'Scoreboard', src: 'scoreboard' }, { label: 'Smash Scoreboard', src: 'smash' }] },
   brb: { label: 'Be Right Back', src: 'brb' },
   'post-match': { label: 'Post-Match', src: 'post-match' },
 };
@@ -88,7 +89,7 @@ function sceneEntries(prefix, opts) {
     return {
       key: view, view,
       scene: `${prefix}: ${v.label}`, input: `${prefix}-src-${v.src}`,
-      legacy: v.legacy ? { scene: `${prefix}: ${v.legacy}`, input: `${prefix}-src-${v.legacySrc}` } : null,
+      legacy: v.legacy ? v.legacy.map((l) => ({ scene: `${prefix}: ${l.label}`, input: `${prefix}-src-${l.src}` })) : null,
     };
   };
   const list = [base('starting-soon')];
@@ -145,6 +146,8 @@ function createObs(opts = {}) {
   const stingerName = opts.stingerName || `${prefix} Stinger`;
   const musicInput = `${prefix}: Music`;
   const captureInput = `${prefix}-game-capture`;
+  const gameAudioInput = `${prefix}-game-audio`;
+  const micInput = (n) => `${prefix}-caster-mic-${n}`;
   // A camera is one input: a capture device, or with a link a browser
   // source (a page) or a media source (a stream). Each sort has its own
   // name, so changing a camera from one to another never asks OBS for a
@@ -192,7 +195,7 @@ function createObs(opts = {}) {
   let fadeTimer = null;
 
   function entryForScene(name) {
-    return scenes.find((s) => s.scene === name || (s.legacy && s.legacy.scene === name)) || null;
+    return scenes.find((s) => s.scene === name || (s.legacy && s.legacy.some((l) => l.scene === name))) || null;
   }
   function entryForKey(key) { return scenes.find((s) => s.key === key) || null; }
 
@@ -502,6 +505,70 @@ function createObs(opts = {}) {
     // Bottom of the scene, under the transparent scoreboard.
     try { await obs.call('SetSceneItemIndex', { sceneName, sceneItemId, sceneItemIndex: 0 }); } catch (e) { /* non-fatal */ }
     return made;
+  }
+
+  // The game's own sound in the Scoreboard scene: an Application Audio
+  // Capture (Windows, OBS 28+), so the game is heard there and the music and
+  // the casters are not fed back through it. Pointed at the game's window
+  // when the app knows it (win is "title:class:exe"); otherwise the operator
+  // picks the window in OBS. A source that exists is left as it is.
+  async function ensureGameAudio(sceneName, existingInputs, win) {
+    const kinds = await obs.call('GetInputKindList', { unversioned: true }).catch(() => ({ inputKinds: [] }));
+    if (!(kinds.inputKinds || []).includes('wasapi_process_output_capture')) return 'manual';
+    if (!existingInputs.has(gameAudioInput)) {
+      await obs.call('CreateInput', {
+        sceneName, inputName: gameAudioInput, inputKind: 'wasapi_process_output_capture',
+        // priority 2: match the program (the exe), whatever the window's title says.
+        inputSettings: win ? { window: win, priority: 2 } : {}, sceneItemEnabled: true,
+      });
+      existingInputs.add(gameAudioInput);
+      // Bottom of the scene, out of the way of the pictures above it.
+      try {
+        const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName, sourceName: gameAudioInput });
+        await obs.call('SetSceneItemIndex', { sceneName, sceneItemId, sceneItemIndex: 0 });
+      } catch (e) { /* non-fatal */ }
+      return win ? 'created' : 'created-empty';
+    }
+    try { await obs.call('GetSceneItemId', { sceneName, sourceName: gameAudioInput }); }
+    catch (e) { await obs.call('CreateSceneItem', { sceneName, sourceName: gameAudioInput, sceneItemEnabled: true }); }
+    return 'exists';
+  }
+
+  // Two caster microphones (audio input captures on the default device; the
+  // operator picks each one's device in OBS), in the scenes where the casters
+  // talk: every app scene except Starting Soon and Be Right Back. Unticked,
+  // a build takes them out again.
+  const MIC_COUNT = 2;
+  const MIC_SCENES_OFF = ['starting-soon', 'brb'];
+  async function ensureCasterMics(existingInputs) {
+    const kinds = (await obs.call('GetInputKindList', { unversioned: true }).catch(() => ({ inputKinds: [] }))).inputKinds || [];
+    const kind = ['wasapi_input_capture', 'coreaudio_input_capture', 'pulse_input_capture'].find((k) => kinds.includes(k));
+    if (!kind) return 'manual';
+    const targets = scenes.filter((t) => !MIC_SCENES_OFF.includes(t.key));
+    let made = 'exists';
+    for (let n = 1; n <= MIC_COUNT; n++) {
+      const name = micInput(n);
+      if (!existingInputs.has(name)) {
+        await obs.call('CreateInput', { sceneName: targets[0].scene, inputName: name, inputKind: kind, inputSettings: { device_id: 'default' }, sceneItemEnabled: true });
+        existingInputs.add(name);
+        made = 'created';
+      }
+      for (const t of targets) {
+        try { await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: name }); }
+        catch (e) { await obs.call('CreateSceneItem', { sceneName: t.scene, sourceName: name, sceneItemEnabled: true }); }
+      }
+    }
+    return made;
+  }
+  async function removeCasterMics(existingInputs) {
+    let any = false;
+    for (let n = 1; n <= MIC_COUNT; n++) {
+      if (!existingInputs.has(micInput(n))) continue;
+      await removeInput(micInput(n));
+      existingInputs.delete(micInput(n));
+      any = true;
+    }
+    return any ? 'removed' : 'skipped';
   }
 
   // --- Cameras (broadcast package) -----------------------------------------------
@@ -822,15 +889,15 @@ function createObs(opts = {}) {
     // Names first, so the order below is judged on the scenes as they are
     // now called: v0.8's Smash Scoreboard, and a move that was cut short.
     for (const t of scenes) {
-      if (t.legacy) {
-        if (!existingScenes.has(t.scene) && existingScenes.has(t.legacy.scene)) {
-          await obs.call('SetSceneName', { sceneName: t.legacy.scene, newSceneName: t.scene });
-          existingScenes.delete(t.legacy.scene);
+      for (const old of t.legacy || []) {
+        if (!existingScenes.has(t.scene) && existingScenes.has(old.scene)) {
+          await obs.call('SetSceneName', { sceneName: old.scene, newSceneName: t.scene });
+          existingScenes.delete(old.scene);
           existingScenes.add(t.scene);
         }
-        if (!existingInputs.has(t.input) && existingInputs.has(t.legacy.input)) {
-          await obs.call('SetInputName', { inputName: t.legacy.input, newInputName: t.input });
-          existingInputs.delete(t.legacy.input);
+        if (!existingInputs.has(t.input) && existingInputs.has(old.input)) {
+          await obs.call('SetInputName', { inputName: old.input, newInputName: t.input });
+          existingInputs.delete(old.input);
           existingInputs.add(t.input);
         }
       }
@@ -885,6 +952,15 @@ function createObs(opts = {}) {
       const sb = entryForKey('scoreboard');
       gameCapture = await ensureGameCapture(sb.scene, existingInputs).catch(() => 'manual');
     }
+
+    // The game's sound, and the casters' microphones.
+    let gameAudio = 'skipped';
+    if (buildOpts.gameAudio !== false) {
+      gameAudio = await ensureGameAudio(entryForKey('scoreboard').scene, existingInputs, buildOpts.gameAudioWindow || '').catch(() => 'manual');
+    }
+    let casterMics = 'skipped';
+    if (buildOpts.casterMics === true) casterMics = await ensureCasterMics(existingInputs).catch(() => 'manual');
+    else casterMics = await removeCasterMics(existingInputs).catch(() => 'skipped');
 
     // Each camera: its input in its own scene, and its window over the game.
     // cameraSources: what each camera is in OBS, for the build result.
@@ -946,7 +1022,7 @@ function createObs(opts = {}) {
       try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
     }
     await refreshProgram();
-    return { built, removed, reloaded, ordering, moved, gameCapture, cameras, cameraSources, collection, collectionName };
+    return { built, removed, reloaded, ordering, moved, gameCapture, gameAudio, casterMics, cameras, cameraSources, collection, collectionName };
   }
 
   // The league's stinger. obs-websocket can't create a transition, so the
@@ -1042,7 +1118,7 @@ function createObs(opts = {}) {
       const sceneList = await obs.call('GetSceneList');
       const have = new Set((sceneList.scenes || []).map((s) => s.sceneName));
       const exists = {};
-      scenes.forEach((t) => { exists[t.key] = have.has(t.scene) || !!(t.legacy && have.has(t.legacy.scene)); });
+      scenes.forEach((t) => { exists[t.key] = have.has(t.scene) || !!(t.legacy && t.legacy.some((l) => have.has(l.scene))); });
       return { exists, stale: staleEntries().filter((t) => have.has(t.scene)).map((t) => t.scene) };
     } catch (e) { return { exists: {}, stale: [] }; }
   }
@@ -1058,7 +1134,8 @@ function createObs(opts = {}) {
       try {
         const list = await obs.call('GetSceneList');
         const names = new Set((list.scenes || []).map((x) => x.sceneName));
-        if (!names.has(t.scene) && names.has(t.legacy.scene)) sceneName = t.legacy.scene;
+        const old = t.legacy.find((l) => names.has(l.scene));
+        if (!names.has(t.scene) && old) sceneName = old.scene;
       } catch (e) { /* use the current name */ }
     }
     try {

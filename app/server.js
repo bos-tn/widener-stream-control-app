@@ -604,7 +604,7 @@ function createServer(port, opts = {}) {
   // Scoreboard scene gets a game capture, whether setup turns on OBS Studio
   // Mode, and whether the setup guide has run.
   const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
-  const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'studioMode', 'orderScenes'];
+  const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'gameAudio', 'casterMics', 'studioMode', 'orderScenes'];
   const onlyLeagueScenes = (list) => PROFILE.leagueScenes.filter((s) => list.includes(s));
   function panelPrefs() {
     const p = appSettings.panel || {};
@@ -616,6 +616,10 @@ function createServer(port, opts = {}) {
       // The v2 setup guide (OBS scenes and the stinger) has run on this PC.
       guideV2: p.guideV2 === true,
       gameCapture: p.gameCapture !== false,
+      // The game's own sound in the Scoreboard scene (on), and two caster
+      // microphones in the scenes (off until ticked).
+      gameAudio: p.gameAudio !== false,
+      casterMics: p.casterMics === true,
       // Off until the operator ticks it (on by default before v2.2.0).
       studioMode: p.studioMode === true,
       // A build puts the app's scenes in stream order in OBS's list.
@@ -652,6 +656,11 @@ function createServer(port, opts = {}) {
       // Which cameras are network cameras, and where (see broadcast.js).
       cameraLinks: bx ? bx.cameraLinks() : {},
       gameCapture: prefs.gameCapture,
+      gameAudio: prefs.gameAudio,
+      // Rocket League's window, for the application audio capture; other
+      // games are picked in OBS.
+      gameAudioWindow: state.scoreboard.style === 'rl' ? 'Rocket League (64-bit, DX11, Cooked):LaunchUnrealUWindowsClient:RocketLeague.exe' : '',
+      casterMics: prefs.casterMics,
       studioMode: prefs.studioMode,
       orderScenes: prefs.orderScenes,
     };
@@ -684,7 +693,7 @@ function createServer(port, opts = {}) {
     return {
       enabled: m.enabled !== false,
       file: typeof m.file === 'string' ? m.file : '',
-      volume: Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) : 55,
+      volume: Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) : 18,
     };
   }
   // A custom file that has gone missing falls back to the included track,

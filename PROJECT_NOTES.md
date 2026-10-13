@@ -2532,6 +2532,26 @@ new state fields.
   `tasklist` for a running instance and ask before killing it** if you need
   to rebuild.
 
+## After v2.2.0: on-air fixes (both profiles, unreleased)
+
+- **Rocket League stats when players leave.** `rlstats.js` keeps a roster of
+  everyone seen in the match; once the game has a winner, players who drop out
+  of the feed stay in the snapshot (boost 0, `left`) and in the `matchEnded`
+  record, so the stats scene never loses them. The stats grid no longer writes
+  `repeat(0, ...)` when a side has no players.
+- Boost shows `0`, not a dash, when the feed has no boost value.
+- Default music volume is 18 (was 55).
+- The Scoreboard scene is named `<prefix>: Gameplay/Scoreboard`. A build renames
+  `<prefix>: Scoreboard` and v0.8's `Smash Scoreboard` in place (`legacy` in
+  `obs.js` is now a list).
+- Scene build options: `gameAudio` (on; `<prefix>-game-audio`, Application Audio
+  Capture on the Gameplay/Scoreboard scene, aimed at Rocket League's exe when
+  the board is the RL style) and `casterMics` (off; two audio input captures
+  in every scene except Starting Soon and Be Right Back; a build with it off
+  removes them). Neither is checked against a real OBS yet.
+- The scoreboard (standard and RL boards) sits `--sb-gap` (16px) below the top
+  edge in `overlay.html`, for the game's boost meters. Adjust that one value.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was

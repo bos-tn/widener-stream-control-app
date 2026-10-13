@@ -43,7 +43,7 @@ Scenes, in the order they are created and sorted in OBS:
 | Head to Head | Both teams compared from the standings | Profile has league scenes and it is ticked |
 | Standings | League table for the match's game | Profile has league scenes and it is ticked |
 | League graphics | One scene per LeagueOS overlay (match preview, match rosters, bracket, season header, match progress, match activity) | Ticked under Match, Details |
-| Scoreboard | Scoreboard over a game capture | Always |
+| Gameplay/Scoreboard | Scoreboard over a game capture, with the game's sound (Application Audio Capture) | Always |
 | Rocket League Stats | Per-game and series stats | Score source is live game data |
 | Be Right Back | Headline, subtitle | Always |
 | Post-Match | Title, subtitle, badge, own countdown, video panel | Always |
@@ -81,8 +81,13 @@ Settings, Setup, **Run setup** (opens automatically on first run).
    password is stored in the app's data folder. The app reconnects
    automatically.
 2. **Scene collection.** Creates `Widener Stream` and switches OBS to it.
-   Options: game capture on the Scoreboard scene (Game Capture, mode: any
-   fullscreen application, on by default), Studio Mode (off by default).
+   Options: game capture and game sound on the Gameplay/Scoreboard scene
+   (Game Capture, mode: any fullscreen application; Application Audio
+   Capture, pointed at Rocket League when that is the match's game; both on
+   by default), caster microphones (`<prefix>-caster-mic-1` and `-2`, default
+   input device, in every scene except Starting Soon and Be Right Back; off
+   by default, removed again by a build with it unticked), Studio Mode (off
+   by default).
 3. **Stinger transition.** obs-websocket cannot create transitions. In OBS,
    with the app's scene collection open: Scene Transitions dock > + > Stinger,
    named exactly `Widener Stinger` (LotE: `LotE Stinger`). Then **Configure

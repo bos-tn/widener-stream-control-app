@@ -553,6 +553,10 @@
           <div class="sub-head">Scenes</div>
           <label class="checkbox"><input type="checkbox" id="gameCaptureInput" checked> Add a game capture to the Scoreboard scene
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Game Capture source, mode: any fullscreen application, placed under the scoreboard.">i</span></label>
+          <label class="checkbox"><input type="checkbox" id="gameAudioInput" checked> Add game sound to the Scoreboard scene
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Application Audio Capture source (Windows, OBS 28 or later). Pointed at Rocket League when that is the match's game; otherwise pick the window in its OBS properties.">i</span></label>
+          <label class="checkbox"><input type="checkbox" id="casterMicsInput"> Add caster microphones to the scenes
+            <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Two audio input sources, caster-mic-1 and caster-mic-2, on the default input device, in every scene except Starting Soon and Be Right Back. Pick each one's device in its OBS properties. Unticked, a build removes them.">i</span></label>
           <label class="checkbox"><input type="checkbox" id="orderScenesInput" checked> Sort app scenes in stream order
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="obs-websocket cannot reorder scenes. A build recreates out-of-order app scenes at the bottom of the list with their items, filters and transition override. Scene hotkeys are not carried over. Skipped while streaming or recording.">i</span></label>
           <label class="checkbox"><input type="checkbox" id="studioModeInput"> Enable Studio Mode on build</label>
@@ -600,7 +604,7 @@
           </div>
           <div class="field">
             <label for="musicVolume"><span class="lbl">Volume <b id="musicVolumeText"></b></span>
-              <input type="range" id="musicVolume" min="0" max="100" step="1" value="55">
+              <input type="range" id="musicVolume" min="0" max="100" step="1" value="18">
             </label>
           </div>
           <div class="status-line" id="musicStatus"></div>
@@ -783,6 +787,8 @@
         <p>Creates the scene collection <b id="wizCollection">{{short}} Stream</b>: one scene per overlay.
           Other scene collections are not modified.</p>
         <label class="checkbox"><input type="checkbox" id="wizGameCapture" checked> Add a game capture to the Scoreboard scene</label>
+        <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizGameAudio" checked> Add game sound to the Scoreboard scene</label>
+        <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizCasterMics"> Add caster microphones</label>
         <label class="checkbox" style="margin-top:8px"><input type="checkbox" id="wizStudioMode"> Enable Studio Mode</label>
         <div class="push-row" style="margin-top:14px">
           <button class="btn-accent" type="button" id="wizBuildBtn">Build scenes</button>

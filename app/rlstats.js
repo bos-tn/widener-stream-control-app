@@ -228,6 +228,15 @@ function createRlStats(opts = {}) {
   let fresh = true;
   let clockMax = 0;
   let endedAt = 0;
+  // Every player seen this match, by key, with their last numbers. Players
+  // who leave when the game ends drop out of the feed's list, and the final
+  // record and the board must still have them.
+  let roster = new Map();
+  function withLeavers(players) {
+    const here = new Set(players.map((p) => p.key));
+    const gone = [...roster.values()].filter((p) => !here.has(p.key)).map((p) => ({ ...p, boost: 0, boosting: false, supersonic: false, left: true }));
+    return players.concat(gone).sort((a, b) => a.team - b.team || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  }
   function starting(why) {
     if (started) return;
     if (why !== 'countdown' && why !== 'round' && Date.now() - endedAt < INFER_AFTER_END_MS) return;
@@ -293,6 +302,7 @@ function createRlStats(opts = {}) {
     clearTimeout(staleTimer);
     if (!snap.inMatch) return;
     snap = blank(snap.status);
+    roster = new Map();
     emitNow();
   }
 
@@ -330,6 +340,9 @@ function createRlStats(opts = {}) {
       score: num(p.Score), goals: num(p.Goals), assists: num(p.Assists), saves: num(p.Saves),
       shots: num(p.Shots), demos: num(p.Demos), touches: num(p.Touches),
     })).sort((a, b) => a.team - b.team || a.key.localeCompare(b.key, undefined, { numeric: true }));
+    // Remember who is here; once the game has a winner, keep those who leave.
+    players.forEach((p) => roster.set(p.key, p));
+    const shown = g.bHasWinner ? withLeavers(players) : players;
     snap = {
       ...snap,
       inMatch: true,
@@ -340,7 +353,7 @@ function createRlStats(opts = {}) {
       winner: g.bHasWinner ? (teams.findIndex((t) => t.name === g.Winner)) : -1,
       arena: String(g.Arena || ''),
       teams,
-      players,
+      players: shown,
       target: g.bHasTarget && g.Target ? playerKey(g.Target) : null,
       spectating,
     };
@@ -389,7 +402,7 @@ function createRlStats(opts = {}) {
         // post-game stats screen and the series overview.
         onEvent({
           type: 'matchEnded', winner: winner === 0 || winner === 1 ? winner : -1, guid: d.MatchGuid || '',
-          teams: snap.teams, players: snap.players, arena: snap.arena, overtime: snap.overtime,
+          teams: snap.teams, players: withLeavers(snap.players), arena: snap.arena, overtime: snap.overtime,
         });
         // The next start signal belongs to the next game.
         started = false; fresh = false; clockMax = 0; endedAt = Date.now();
@@ -400,6 +413,7 @@ function createRlStats(opts = {}) {
       // its first kickoff countdown has begun.
       case 'MatchCreated': case 'MatchInitialized':
         snap = blank(snap.status);
+        roster = new Map();
         emitNow();
         onEvent({ type: 'matchStart' });
         started = false; clockMax = 0;
