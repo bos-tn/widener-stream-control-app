@@ -2630,6 +2630,36 @@ recording showed 20 such frames in two bursts 7.1 s apart.
 - LotE loads `bx.css` too but has no broadcast layer, so nothing changes
   there.
 
+### Release checks (2026-10-14)
+
+- Commit `654be8a` on `master`, annotated tag `v2.2.2`. Before the commit:
+  no tracked file holds a camera host or stream path from the internal note,
+  and `local.json` is gitignored.
+- Both installers built from a temp copy of the tagged tree (`git archive`,
+  outside OneDrive, junction to `app/node_modules` removed before the copy
+  was deleted, LotE's two fonts copied in, no `local.json`). Each update file
+  matched its installer (sha512, size); each `app-update.yml` named its
+  channel (`latest`, `lote`).
+- Packaged smoke tests (scratch script: the server run out of `app.asar` by
+  the build's own exe with `ELECTRON_RUN_AS_NODE=1`, a temp data folder,
+  the source tree's mock OBS). **Widener 24, LotE 26**: the version and
+  profile; `dev/`, `build/`, the other league's profile and `local.json` not
+  shipped; LotE's two fonts shipped; no camera address in a shipped text
+  file; the update channel; `bx.css` served with the transform glint, no
+  `left` keyframes and `will-change` on both masthead halves; four scene
+  pages and the panel (`/control/`) served; the broadcast layer on for
+  Widener, off for LotE (`/api/bx` 404); a scene build in `Widener Stream`
+  (eleven scenes in stream order) and `LotE Stream` (nine, no camera
+  scenes), Rosters' page URL, Studio Mode untouched.
+- Published as a draft with six files, each upload matched its local file by
+  size and sha256, then published and marked Latest (2026-10-14 21:19 UTC).
+- The updater, without installing: run as 2.2.0 and as 2.2.1, both channels
+  report `update-available` with 2.2.2, the right installer, size and
+  sha512; run as 2.2.2, both report `update-not-available`.
+- Both installers are in the user's Downloads folder.
+- **Not done:** an install from an installed 2.2.1 copy; the installed 2.2.2
+  build on air (the fix itself was checked in the portable OBS rig).
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
