@@ -85,10 +85,15 @@ body.enter .bx-root [data-in="grow"]{ animation-name:bx-in-grow; }
 .bx-root[data-kind="cam"][data-backdrop="1"] .bx-camfill{ display:grid; }
 
 /* Masthead: the brand plate and the game on the left, the round and the
-   time of day on the right, a gold rule under both. */
+   time of day on the right, a gold rule under both.
+
+   Each half is kept on its own compositor layer. Over an animated scene
+   background the plates are composited anyway, and in OBS's Chromium (CEF
+   127) a plate whose layer is rebuilt every frame drew its clip-path angle
+   about 8 px out of place on alternate frames. */
 .bx-mast{ position:absolute; left:0; right:0; top:0; height:92px; display:none; }
 .bx-root[data-kind="full"] .bx-mast{ display:block; }
-.bx-mast-left, .bx-mast-right{ position:absolute; top:0; height:80px; display:flex; }
+.bx-mast-left, .bx-mast-right{ position:absolute; top:0; height:80px; display:flex; will-change:transform; }
 .bx-mast-left{ left:0; }
 .bx-mast-right{ right:0; }
 .bx-mast-brand{ display:flex; align-items:center; gap:18px; padding:0 62px 0 48px;
@@ -111,10 +116,13 @@ body.enter .bx-root [data-in="grow"]{ animation-name:bx-in-grow; }
   font:800 28px/1 var(--bx-head); letter-spacing:.04em; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .bx-mast-line{ position:absolute; left:0; right:0; top:80px; height:4px; overflow:hidden; transform-origin:left center;
   background:linear-gradient(90deg, var(--bx-gold) 0, var(--bx-gold) 30%, rgba(240,179,16,.28) 100%); }
-.bx-mast-line::after{ content:""; position:absolute; top:0; bottom:0; width:260px;
+/* The glint moves by transform, which the compositor runs on its own. Moving
+   it by left repainted and re-layered the masthead every frame, and the brand
+   plate twitched while the glint passed under it. */
+.bx-mast-line::after{ content:""; position:absolute; top:0; bottom:0; left:0; width:260px;
   background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.95), rgba(255,255,255,0));
-  animation:bx-glint 7s linear 2s infinite; }
-@keyframes bx-glint{ 0%{ left:-300px } 45%, 100%{ left:2000px } }
+  transform:translateX(-300px); animation:bx-glint 7s linear 2s infinite; }
+@keyframes bx-glint{ 0%{ transform:translateX(-300px) } 45%, 100%{ transform:translateX(2000px) } }
 
 /* Rail: the ticker along the bottom, or the socials when it is off. */
 .bx-rail{ position:absolute; left:0; right:0; bottom:0; height:60px; display:none; align-items:stretch; background:var(--bx-ink); }

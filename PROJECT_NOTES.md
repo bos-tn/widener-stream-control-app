@@ -2578,6 +2578,58 @@ new state fields.
 - **Not done:** the audio sources and the scene rename in a real OBS; an
   install from an installed 2.2.0 copy.
 
+## v2.2.2: masthead brand plate twitch (Widener)
+
+Seen on the 2026-10-13 stream, Rosters scene: the blue brand plate behind
+"Widener Esports" flashed to a squared-off top corner with its angle about
+8 px to the right, on and off for about 0.6 s, every 7 s. The user's screen
+recording showed 20 such frames in two bursts 7.1 s apart.
+
+### Cause (`bx.css`, masthead)
+
+- The gold rule's glint (`.bx-mast-line::after`) was animated by `left`, so
+  Chromium repainted and re-ran layerization on every frame of the sweep.
+- Over an animated scene background (every Widener background animates on
+  the compositor) the masthead plates are composited ("Overlaps other
+  composited content"). The brand plate's `clip-path: polygon()` is then
+  drawn by a separate synthesized mask layer (465x80 plate, 469x84 mask).
+- While the glint passed under the plate (left -300 to about 300 px), CDP's
+  `LayerTree` showed the layer set changing every frame: the plate merged
+  with the rule's strip (465x84, 471x84, 496x84, then into a larger layer)
+  with no mask layer, then split back. The clock plate went through the same
+  flip when the glint reached it. On some frames the plate's angle was drawn
+  with the mask about 8 px out of place, which is the twitch.
+
+### Reproduced (portable OBS 32.0.4, CEF 127, see design.2 for the rig)
+
+- One browser source on `/overlay?view=<view>` from `npm run design`,
+  recorded at 1080p; each frame's plate edge measured with ffmpeg. Test CSS
+  went in through the browser source's `css` setting.
+- Rosters: 18 glitched frames per 16 s at 30 fps, 35 at 60 fps, with browser
+  hardware acceleration on and off, and with each of the 8 backgrounds.
+  Starting Soon (with and without its video), This Week, Matchup, Be Right
+  Back and Post-Match showed none with the demo data. They have the same
+  masthead, so other content could still set it off.
+- Hiding parts of Rosters one at a time: only removing the background stopped
+  it. Freezing the Shutters slats also stopped it.
+
+### Fix
+
+- The glint moves by `transform: translateX(-300px)` to `translateX(2000px)`
+  with `left: 0`. A transform animation runs on the compositor: no repaint,
+  no re-layerization. The base transform also keeps it off the rule during
+  the animation's 2 s delay.
+- `.bx-mast-left` and `.bx-mast-right` have `will-change: transform`, so each
+  half is one stable layer and the plates' clip-paths are drawn inside it
+  instead of by mask layers.
+- Either change alone stopped the glitch. With both, in the rig with the
+  edited file: Rosters 0 of 476 frames at 30 fps and 0 of 955 at 60 fps, no
+  layer change during a 10 s `LayerTree` log, the glint at the same x on the
+  same frames as before (0, 97, 243 ... 1848 px every 6 frames, 7 s cycle).
+  `npm run test:broadcast` 116 passed.
+- LotE loads `bx.css` too but has no broadcast layer, so nothing changes
+  there.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
