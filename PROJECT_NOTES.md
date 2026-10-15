@@ -2660,7 +2660,7 @@ recording showed 20 such frames in two bursts 7.1 s apart.
 - **Not done:** an install from an installed 2.2.1 copy; the installed 2.2.2
   build on air (the fix itself was checked in the portable OBS rig).
 
-## Unreleased (after v2.2.2)
+## v2.2.3: Live page without the program screenshot, Post-Match title, forfeits, scenes that moved
 
 ### Live page: no program screenshot
 
