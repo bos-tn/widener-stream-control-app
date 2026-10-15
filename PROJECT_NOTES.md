@@ -2660,6 +2660,18 @@ recording showed 20 such frames in two bursts 7.1 s apart.
 - **Not done:** an install from an installed 2.2.1 copy; the installed 2.2.2
   build on air (the fix itself was checked in the portable OBS rig).
 
+## Unreleased: no program screenshot on the Live page
+
+The user asked for the Live page's picture of the broadcast to go: with OBS
+connected it isn't needed, and it lagged (a 480 px JPEG of program from
+`GetSourceScreenshot`, polled every 2.5 s).
+
+- Removed the `.onair-shot` box in the On air card, the Settings > Display
+  checkbox (`shotInput`, localStorage `stream-onair-shot`, now unused),
+  `pollShot` in control.js, `GET /api/obs/program-shot`, `obs.programShot`
+  and the mock's `GetSourceScreenshot`.
+- The On air card keeps the program scene name and its sub-line.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was

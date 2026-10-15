@@ -1231,12 +1231,9 @@ $id('matchDeleteBtn').addEventListener('click', async () => {
 
 // --- Live page: on air --------------------------------------------------------------
 //
-// What OBS has on program, from the server (which follows OBS's events),
-// with an optional small picture of it.
+// What OBS has on program, from the server (which follows OBS's events).
 
 let onAir = { key: '', view: '', necc: '', scene: '' };
-const SHOT_KEY = 'stream-onair-shot';
-const shotInput = $id('shotInput');
 
 // "LotE: Standings" -> "Standings".
 function shortScene(name) { return String(name).replace(/^[^:]+:\s*/, ''); }
@@ -1268,21 +1265,6 @@ function renderOnAir() {
   });
   renderRlScreenBtns();
 }
-
-let shotTimer = 0;
-async function pollShot() {
-  clearTimeout(shotTimer);
-  const want = shotInput.checked && currentPage === 'live' && obsStatus && obsStatus.connected && !document.hidden;
-  $id('onairShotBox').hidden = !want;
-  if (!want) return;
-  try {
-    const r = await getJson('/api/obs/program-shot?width=480');
-    if (r.image) $id('onairShot').src = r.image;
-  } catch (e) { /* next round */ }
-  shotTimer = setTimeout(pollShot, 2500);
-}
-shotInput.addEventListener('change', () => { lsSet(SHOT_KEY, shotInput.checked ? 'on' : 'off'); pollShot(); });
-document.addEventListener('visibilitychange', pollShot);
 
 // --- Live page: score ---------------------------------------------------------------
 //
@@ -2338,7 +2320,6 @@ function setPage(name) {
   lsSet(PAGE_KEY, name);
   $id('pageCol').scrollTop = 0;
   if (name === 'match') showStep(currentStep);
-  pollShot();
 }
 document.querySelectorAll('.page-btn').forEach((b) => b.addEventListener('click', () => setPage(b.dataset.page)));
 
@@ -2569,9 +2550,7 @@ function renderObsStatus(st) {
   renderOnAir();
   renderSceneList();
   renderRlStatus();
-  if (connected !== shotWasConnected) { shotWasConnected = connected; pollShot(); }
 }
-let shotWasConnected = false;
 
 // Status plus which scenes exist in OBS and the stinger.
 async function refreshObs(inspect) {
@@ -2957,7 +2936,6 @@ buildScoreSide('B');
 renderLibrary();
 applyCollapsed();
 setTextSize(lsGet(TEXT_KEY) || 'normal');
-shotInput.checked = lsGet(SHOT_KEY) !== 'off';
 showTeamSrc(lsGet(SRC_KEY) || (LINK_FIRST || BRAND.leagueTeams ? 'library' : 'import'));
 setPickFor('A');
 currentStep = [new URLSearchParams(location.search).get('step'), lsGet(STEP_KEY)].find((x) => STEPS.includes(x)) || STEPS[0];

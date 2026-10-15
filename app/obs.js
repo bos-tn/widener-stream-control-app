@@ -1147,17 +1147,6 @@ function createObs(opts = {}) {
     }
   }
 
-  // A small JPEG of what is on program, for the panel's thumbnail.
-  async function programShot(width = 480) {
-    if (!connected || !currentScene) return null;
-    try {
-      const r = await obs.call('GetSourceScreenshot', {
-        sourceName: currentScene, imageFormat: 'jpg', imageWidth: width, imageCompressionQuality: 70,
-      });
-      return r.imageData || null;
-    } catch (e) { return null; }
-  }
-
   // A richer status that hits OBS live. Safe when disconnected.
   async function inspect() {
     if (!connected) return { ...status(), exists: {}, stale: [], stinger: { found: false, current: false, name: stingerName }, video: null };
@@ -1188,7 +1177,7 @@ function createObs(opts = {}) {
 
   return {
     connect, disconnect, status, inspect, buildScenes, setupStinger, stingerStatus,
-    switchTo, programShot, setMusic, setLayout, reloadPages, raiseVideo,
+    switchTo, setMusic, setLayout, reloadPages, raiseVideo,
     setCameraWindow, cameraStatus, setCameraDevice, applyCamera,
     isConnected: () => connected,
   };

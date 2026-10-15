@@ -620,8 +620,6 @@ code.path{ word-break:break-all; }
 .onair-lbl{ font-size:.72rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--tally-live); }
 .onair-card.off .onair-lbl{ color:var(--muted); }
 .onair-head b{ font-size:1.15rem; }
-.onair-shot{ margin-top:12px; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:#000; border:2px solid var(--tally-live); }
-.onair-shot img{ width:100%; height:100%; object-fit:contain; display:block; }
 .onair-sub{ font-size:.8rem; color:var(--muted); margin-top:8px; }
 .onair-sub:empty{ display:none; }
 

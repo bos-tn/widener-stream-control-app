@@ -268,7 +268,6 @@ function createMockObs(port = 4466, opts = {}) {
       state.currentTransition = transitionName;
     },
     SetCurrentSceneTransitionSettings: ({ transitionSettings }) => { state.transitionSettings = { ...state.transitionSettings, ...transitionSettings }; },
-    GetSourceScreenshot: () => ({ imageData: 'data:image/jpeg;base64,' }),
   };
 
   const wss = new WebSocketServer({ port, handleProtocols: (protocols) => (protocols.has('obswebsocket.msgpack') ? 'obswebsocket.msgpack' : protocols.has('obswebsocket.json') ? 'obswebsocket.json' : false) });

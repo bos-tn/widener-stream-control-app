@@ -130,8 +130,7 @@ match link is the **Match link** source of the Teams step.
 
 ## Live page
 
-- **On air**: program scene and a periodic program screenshot (Settings,
-  Display).
+- **On air**: the scene OBS has on program.
 - **Score**: +1 series win per team, +/− corrections, Swap sides, Reset score
   (two clicks). Crew battles add stock controls and, under each team's stock
   counter, **Player order**: the roster in the order its players take the

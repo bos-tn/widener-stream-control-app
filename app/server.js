@@ -1393,12 +1393,6 @@ function createServer(port, opts = {}) {
     catch (err) { res.status(502).json({ error: err.message || 'OBS did not take the video settings' }); }
   });
 
-  // A small picture of what OBS has on program, for the panel.
-  app.get('/api/obs/program-shot', async (req, res) => {
-    noStore(res);
-    res.json({ image: await obs.programShot(Number(req.query.width) || 480), onAir });
-  });
-
   // Put one of the app's scenes on program: { key } (a view, or necc:<type>).
   app.post('/api/obs/switch', async (req, res) => {
     const r = await obs.switchTo(String((req.body || {}).key || ''));
