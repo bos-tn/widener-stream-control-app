@@ -218,6 +218,8 @@ or removes them.
   manually**. Per row: score steppers, Upcoming / Live / Final, a note, **Pop
   up**, **Remove**. A changed league row is marked Corrected until the
   league's own score changes; **Use league score** discards the change.
+  A forfeit recorded by the league shows as W and FF on every scene (the row
+  is tagged with the team that forfeited); byes are left out.
 - **Ticker**: on full-screen scenes, camera scenes, gameplay. Lines are
   appended after the matches.
 - **Pop-ups**: league feed changes, score changes made on the page (sent 2.5 s

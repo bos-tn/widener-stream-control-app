@@ -329,18 +329,32 @@
       tile.appendChild(h('b', 'in', ch));
     });
   }
-  function drawCount(r, label, doneText) {
+  // keep: with nothing to show, the countdown still holds its space (label
+  // included, unseen), because the columns it sits in are centred. Post-Match
+  // gets its end from the server as OBS puts it on program, after the page is
+  // already showing, so without the space the title would move up when the
+  // time appears (and down again at zero).
+  function drawCount(r, label, doneText, keep) {
     if (!r || !r.count) return;
     const end = O.countdownEnd;
     let diff = end - new Date();
     if (isNaN(diff)) diff = 0;
     const done = diff <= 0;
+    const empty = done && !doneText;
+    const blank = empty && !!keep;
+    const arriving = r.count.classList.contains('blank') && !empty;
+    if (!empty) r.count.dataset.seen = '1';
     // At zero the words that take the digits' place stand alone.
-    r.countLabel.textContent = done ? '' : label;
+    r.countLabel.textContent = done && !blank ? '' : label;
     r.countDone.textContent = doneText || '';
-    r.count.hidden = done && !doneText;
+    r.count.hidden = empty && !keep;
+    r.count.classList.toggle('blank', blank);
     r.count.classList.toggle('done', done);
     r.count.classList.toggle('last', !done && diff <= 10500);
+    // A time that arrives after the countdown's entrance has played slides in.
+    if (arriving && !document.hidden && !r.count.getAnimations().some((a) => a.playState === 'running')) {
+      r.count.animate([{ opacity: 0, transform: 'translateY(44px)' }, {}], { duration: 800, easing: 'cubic-bezier(.22,1,.36,1)' });
+    }
     if (done) return;
     const hrs = Math.floor(diff / 3.6e6);
     const m = Math.floor((diff % 3.6e6) / 6e4);
@@ -350,8 +364,13 @@
   function tickCount() {
     if (!state || !O) return;
     if (view === 'starting-soon') drawCount(sections['starting-soon'].r, 'Match starts in', 'Starting shortly');
-    if (view === 'post-match') drawCount(sections['post-match'].r, 'Stream ends in', '');
-    if (view === 'versus') drawCount(sections.versus.r, 'Starts in', '');
+    if (view === 'post-match') drawCount(sections['post-match'].r, 'Stream ends in', '', true);
+    // Matchup: a time that has shown keeps its space when it runs out, until
+    // the scene next goes on air. One already past when it does is left out.
+    if (view === 'versus') drawCount(sections.versus.r, 'Starts in', '', sections.versus.r.count.dataset.seen === '1');
+  }
+  function forgetCounts() {
+    Object.values(sections).forEach((s) => { if (s.r && s.r.count) delete s.r.count.dataset.seen; });
   }
   setInterval(tickCount, 250);
 
@@ -392,6 +411,17 @@
     const rank = (m) => (m.state === 'live' ? 0 : isToday(m) ? 1 : 2);
     return bx.matches.filter((m) => !m.onStream).slice().sort((x, y) => rank(x) - rank(y));
   }
+  // A match's two numbers and who lost, for a row, the ticker and a pop-up.
+  // A forfeit (from the league) decides it whatever the score: the side that
+  // forfeited reads FF and the other W.
+  function outcome(m) {
+    const final = m.state === 'final';
+    if (final && m.ff) {
+      const aLost = m.ff === 'a' || m.ff === 'both', bLost = m.ff === 'b' || m.ff === 'both';
+      return { final, ff: true, aLost, bLost, a: aLost ? 'FF' : 'W', b: bLost ? 'FF' : 'W' };
+    }
+    return { final, ff: false, aLost: final && m.a.score < m.b.score, bLost: final && m.b.score < m.a.score, a: String(m.a.score), b: String(m.b.score) };
+  }
   function stateChip(m, big) {
     const chip = h('span', 'bx-mrow-state');
     const d = startOf(m);
@@ -415,9 +445,9 @@
     }
     const game = h('div', 'bx-mrow-game');
     game.append(h('span', '', big ? m.game : shortGame(m.game)), h('small', '', [m.league, big ? m.round : ''].filter(Boolean).join(' · ')));
-    const final = m.state === 'final';
-    const side = (t, k, other) => {
-      const el = h('div', 'bx-mrow-team ' + k + (final && t.score < other.score ? ' lost' : ''));
+    const o = outcome(m);
+    const side = (t, k, lost) => {
+      const el = h('div', 'bx-mrow-team ' + k + (lost ? ' lost' : ''));
       const img = h('img'); img.alt = '';
       setImg(img, t.logo ? O.mediaUrl(t.logo) : '');
       const name = h('span', '', t.name);
@@ -426,12 +456,10 @@
       if (k === 'a') el.append(name, img); else el.append(img, name);
       return el;
     };
-    const score = h('div', 'bx-mrow-score');
+    const score = h('div', 'bx-mrow-score' + (o.ff ? ' ff' : ''));
     if (m.state === 'upcoming') { score.classList.add('vs'); score.textContent = 'VS'; }
-    else {
-      score.append(h('b', final && m.a.score < m.b.score ? 'dim' : '', String(m.a.score)), h('i'), h('b', final && m.b.score < m.a.score ? 'dim' : '', String(m.b.score)));
-    }
-    row.append(game, side(m.a, 'a', m.b), score, side(m.b, 'b', m.a), stateChip(m, big));
+    else score.append(h('b', o.aLost ? 'dim' : '', o.a), h('i'), h('b', o.bLost ? 'dim' : '', o.b));
+    row.append(game, side(m.a, 'a', o.aLost), score, side(m.b, 'b', o.bLost), stateChip(m, big));
     return row;
   }
   // Names are fitted once their rows are in the page.
@@ -733,14 +761,14 @@
     others().forEach((m) => {
       const item = h('span', 'bx-tk');
       const d = startOf(m);
-      const final = m.state === 'final';
+      const o = outcome(m);
+      const final = o.final;
       const logo = (t) => { const img = h('img'); img.alt = ''; setImg(img, t.logo ? O.mediaUrl(t.logo) : ''); return img; };
       item.appendChild(h('span', 'bx-tk-game', shortGame(m.game)));
-      const aLost = final && m.a.score < m.b.score, bLost = final && m.b.score < m.a.score;
-      item.append(logo(m.a), h('span', 'bx-tk-name' + (aLost ? ' dim' : ''), shortTeam(m.a.name)));
+      item.append(logo(m.a), h('span', 'bx-tk-name' + (o.aLost ? ' dim' : ''), shortTeam(m.a.name)));
       if (m.state === 'upcoming') item.appendChild(h('span', 'bx-tk-vs', 'VS'));
-      else item.append(h('span', 'bx-tk-score' + (aLost ? ' dim' : ''), String(m.a.score)), h('span', 'bx-tk-vs', '–'), h('span', 'bx-tk-score' + (bLost ? ' dim' : ''), String(m.b.score)));
-      item.append(h('span', 'bx-tk-name' + (bLost ? ' dim' : ''), shortTeam(m.b.name)), logo(m.b));
+      else item.append(h('span', 'bx-tk-score' + (o.aLost ? ' dim' : ''), o.a), h('span', 'bx-tk-vs', '–'), h('span', 'bx-tk-score' + (o.bLost ? ' dim' : ''), o.b));
+      item.append(h('span', 'bx-tk-name' + (o.bLost ? ' dim' : ''), shortTeam(m.b.name)), logo(m.b));
       const st = h('span', 'bx-tk-state' + (final ? ' final' : m.state === 'live' ? ' live' : ''));
       st.textContent = final ? 'Final' : m.state === 'live' ? (m.note ? 'Live · ' + m.note : 'Live') : d ? dayWord(d) + ' ' + fmtTime(d) : 'Upcoming';
       item.appendChild(st);
@@ -762,6 +790,19 @@
     n.innerHTML = O.icons[x.key] || '';
     n.appendChild(h('span', '', '/' + x.handle));
     return n;
+  }
+  // The social box is as wide as its widest handle, so its edge and the crawl
+  // beside it don't move as the handles turn.
+  function sizeSocial() {
+    rail.social.style.minWidth = '';
+    let widest = 0;
+    socialList().forEach((x) => {
+      rail.social.textContent = '';
+      rail.social.appendChild(socialNode(x));
+      widest = Math.max(widest, rail.social.offsetWidth);
+    });
+    rail.social.textContent = '';
+    if (widest) rail.social.style.minWidth = widest + 'px';
   }
   function turnSocial() {
     const list = socialList();
@@ -795,6 +836,7 @@
       return;
     }
     socialAt = 0;
+    sizeSocial();
     turnSocial();
     socialTimer = setInterval(turnSocial, 6000);
     const track = rail.track;
@@ -906,9 +948,10 @@
     }
     head.appendChild(h('span', '', [shortGame(m.game), m.league].filter(Boolean).join(' · ')));
     const body = h('div', 'bx-alert-body');
-    const final = m.state === 'final';
-    const side = (t, k, other) => {
-      const box = h('div', 'bx-alert-team ' + k + (final && t.score < other.score ? ' lost' : ''));
+    const o = outcome(m);
+    const final = o.final;
+    const side = (t, k, lost) => {
+      const box = h('div', 'bx-alert-team ' + k + (lost ? ' lost' : ''));
       box.style.setProperty('--c', O.safeColor(t.color, k === 'a' ? BRAND.teamColors.A : BRAND.teamColors.B));
       const img = h('img'); img.alt = '';
       setImg(img, t.logo ? O.mediaUrl(t.logo) : '');
@@ -918,14 +961,14 @@
       box.append(img, name);
       return box;
     };
-    const score = h('div', 'bx-alert-score');
+    const score = h('div', 'bx-alert-score' + (o.ff ? ' ff' : ''));
     if (m.state === 'upcoming') { score.classList.add('vs'); score.textContent = 'VS'; }
     else {
       score.append(
-        h('b', (ev.changed === 'a' ? 'hit ' : '') + (final && m.a.score < m.b.score ? 'dim' : ''), String(m.a.score)), h('i'),
-        h('b', (ev.changed === 'b' ? 'hit ' : '') + (final && m.b.score < m.a.score ? 'dim' : ''), String(m.b.score)));
+        h('b', (ev.changed === 'a' ? 'hit ' : '') + (o.aLost ? 'dim' : ''), o.a), h('i'),
+        h('b', (ev.changed === 'b' ? 'hit ' : '') + (o.bLost ? 'dim' : ''), o.b));
     }
-    body.append(side(m.a, 'a', m.b), score, side(m.b, 'b', m.a));
+    body.append(side(m.a, 'a', o.aLost), score, side(m.b, 'b', o.bLost));
     const foot = h('div', 'bx-alert-foot');
     const d = startOf(m);
     const right = final ? 'Final' : m.state === 'live' ? (m.note ? 'Live · ' + m.note : 'Live') : d ? dayWord(d) + ' ' + fmtTime(d) : 'Upcoming';
@@ -1038,6 +1081,7 @@
         view = v;
         kind = kindOf(v);
         alsoState.page = 0; schState.page = 0;
+        forgetCounts();
       }
       drawView();
     },
@@ -1084,6 +1128,7 @@
     onEnter() {
       alsoState.page = 0; schState.page = 0;
       alsoState.sig = ''; schState.sig = '';
+      forgetCounts();
       drawView();
     },
   };

@@ -296,11 +296,14 @@ function createBroadcast(opts) {
       name: m.teams[i].name, tag: m.teams[i].tag, color: cleanColor(m.teams[i].color), logo: m.teams[i].logoUrl,
       score: useOv ? ov[i ? 'b' : 'a'] : base[i ? 'b' : 'a'],
     });
+    // A finished match a team forfeited: 'a', 'b' or 'both'. The forfeit
+    // decides it, whatever the score; a correction replaces it.
+    const ff = Array.isArray(m.ff) && !useOv && base.state === 'final' ? (m.ff[0] && m.ff[1] ? 'both' : m.ff[0] ? 'a' : m.ff[1] ? 'b' : '') : '';
     return {
       id, src: 'league', follow: follow.id, game: follow.game || follow.name, league: follow.league || '',
       round: m.round, start: new Date(m.start).toISOString(), state: useOv ? ov.state : base.state,
       a: t(0), b: t(1), note: useOv ? ov.note || '' : '', bestOf: m.bestOf || 0, corrected: !!useOv, link: m.link,
-      home: m.teams.some(isHome),
+      home: m.teams.some(isHome), ff,
     };
   }
 

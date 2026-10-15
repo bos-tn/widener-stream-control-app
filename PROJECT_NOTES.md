@@ -2660,7 +2660,9 @@ recording showed 20 such frames in two bursts 7.1 s apart.
 - **Not done:** an install from an installed 2.2.1 copy; the installed 2.2.2
   build on air (the fix itself was checked in the portable OBS rig).
 
-## Unreleased: no program screenshot on the Live page
+## Unreleased (after v2.2.2)
+
+### Live page: no program screenshot
 
 The user asked for the Live page's picture of the broadcast to go: with OBS
 connected it isn't needed, and it lagged (a 480 px JPEG of program from
@@ -2671,6 +2673,91 @@ connected it isn't needed, and it lagged (a 480 px JPEG of program from
   `pollShot` in control.js, `GET /api/obs/program-shot`, `obs.programShot`
   and the mock's `GetSourceScreenshot`.
 - The On air card keeps the program scene name and its sub-line.
+
+### Post-Match title held in place (Widener)
+
+Reported: cutting to Post-Match, "Thanks for Watching" sat centred, then
+jumped up when the time appeared. The end time (`postEnd`) is set by the
+server when OBS reports the scene on program, so the page (already showing,
+`shutdown: false`) still has the last stream's end, in the past, and
+`drawCount` hid the countdown (`display:none`). `.bx-hero-left` centres its
+column, so the new time moved the title up about 75 px at 1080p, and down
+again when the countdown reached zero.
+
+- `drawCount(r, label, doneText, keep)`: Post-Match passes `keep`, and an
+  empty countdown gets `.bx-count.blank` (`visibility:hidden`) instead of
+  `hidden`, so its 124 px stay. Starting Soon (always has its done text) and
+  Versus are unchanged.
+- A time that arrives after the countdown's own entrance animation has
+  finished slides in (`element.animate`, same motion as `data-in="up"`);
+  during the entrance the CSS animation still brings it in.
+- Checked with the server and mock OBS in a throwaway harness and the page
+  in the browser pane: switch to Post-Match with a stale end, run out a 2 s
+  countdown on air, switch away and back. The title's top stayed at one
+  value on every frame, with and without a series result. Not checked in
+  real OBS.
+
+### Forfeits in the match centre (Widener)
+
+Reported: a forfeited match showed on This Week and the ticker as Final 0-0
+with no winner. LeagueOS records a forfeit on the match, not the games:
+`forfeits: [teamId]` (a no-show is also in `noShows`), with every game
+empty. Both are on the stage match rows `seasonMatches` already reads. Seen
+on 2026-10-14 in NECC LoL VI and VALORANT VIII: single forfeits, a double
+forfeit, a 2-0 series then a forfeit, and a bye (`teamIds: ["BYE", id]`,
+both listed as forfeited, shown as "TBD").
+
+- `necc.js` `seasonMatches`: `ff: [a, b]` (forfeits or noShows); a match
+  with a `BYE` side is left out.
+- `broadcast.js` `fromLeague`: `ff: 'a' | 'b' | 'both' | ''`, only
+  for a final and not under an operator correction. A feed cached before
+  this has no `ff` until its next read (every season is read at start).
+- `bx.js` `outcome(m)`: one place for the two numbers and who lost. A
+  forfeit reads W and FF (whatever games were reported), the side that
+  forfeited is dimmed. Used by This Week and side-card rows, the ticker and
+  the pop-ups. `.bx-mrow-score.ff` is 30 px in the small rows so FF – FF
+  fits Be Right Back's 104 px column.
+- The panel's match list tags it ("ESU Warriors forfeited").
+
+### Scenes that moved on their own (Widener)
+
+Reported: the highlight video on Starting Soon / Post-Match moved up and
+down as the "Also today" card turned pages of 3, 2 or 1 rows (its column is
+centred; up to 78 px). An audit of every centred stack and right-anchored
+row in `bx.css` found more of the same. Fixed:
+
+- `.bx-also-rows` holds three rows' height on every page (Starting Soon,
+  Post-Match, Be Right Back).
+- `.bx-hero-right .bx-art` has the video's 36 px top margin (room for the
+  Highlights tag), so the column no longer moves 18 px when the video
+  finishes downloading or fails.
+- This Week rows start at the top (`.bx-sch-rows` was centred): a short last
+  page, or a match added or removed, no longer moves the other rows.
+- Matchup's countdown keeps its space (label included) when it runs out on
+  air, until the scene next goes on air (`dataset.seen`, `forgetCounts` in
+  `onEnter` and on a view change). One already past at entry is left out, as
+  before. Post-Match's blank countdown keeps its label too (same height in
+  both layouts).
+- The masthead clock is `min-width:134px`, right-aligned: Kanit ignores
+  `tabular-nums`, so the clock box went from 193 to 233 px through the day
+  and moved the game and "Best of" panels beside it every minute.
+- The rail's social box takes its widest handle's width (`sizeSocial`), so
+  handles of different lengths don't move its edge as they turn. (The
+  user's four handles are the same today.)
+- Checked and left: the scoreboard and RL board (fixed grid columns),
+  roster rows (computed), the pop-up (one size), Starting Soon's countdown
+  (always has its done text), LotE's countdown (left-aligned, last in its
+  column).
+- Verified with a throwaway server and a stand-in league feed (eleven
+  matches with each forfeit kind) in the browser pane at 1920x1080: every
+  forfeit row and the ticker read right; video top 199 px and card 674 px
+  through pages of 3, 2, 3 rows and the video/artwork swap; Be Right Back
+  artwork 230 px through its pages; This Week first row 256 px on pages of
+  7, 3 and 1; Matchup emblem 360 px as its countdown ran out; Post-Match
+  title 331 px through blank, time, blank; clock 236 px at all 1,440
+  minutes; social box 602 px for three handle lengths. The parser was run
+  against the two real NECC seasons above. `npm run test:broadcast` 116/116.
+  Not checked in real OBS.
 
 ## Known gaps / things not yet done
 

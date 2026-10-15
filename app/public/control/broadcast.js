@@ -54,6 +54,7 @@
     top.append(el('b', '', [m.game, m.league, m.round].filter(Boolean).join(' · ') || 'Match'), el('span', '', whenText(m.start)));
     const tags = [m.src === 'league' ? 'League feed' : 'Manual'];
     if (m.corrected) tags.push('Corrected');
+    if (m.ff) tags.push(m.ff === 'both' ? 'Both teams forfeited' : `${m[m.ff].name} forfeited`);
     if (m.onStream) tags.push('On stream');
     top.appendChild(el('em', '', tags.join(' · ')));
 

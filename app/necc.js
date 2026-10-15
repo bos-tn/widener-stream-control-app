@@ -417,10 +417,13 @@ function scheduleTeam(r) {
 
 // One season's matches between two times (ms): { seasonId, seasonName,
 // activity, matches }. A match is { id, round, start (ms), state, teams: [a,
-// b], wins: [a, b], games, link }. `state` is LeagueOS's own word
+// b], wins: [a, b], ff: [a, b], games, link }. `state` is LeagueOS's own word
 // (scheduled, checkingIn, inProgress, verifying, finished, cancelled, ...);
-// `wins` counts the games each team has won so far. `cache` keeps what
-// rarely changes (the season, its stages and their teams) between calls.
+// `wins` counts the games each team has won so far; `ff` is true for a team
+// that forfeited (LeagueOS's `forfeits`, where a no-show is listed too), even
+// after games were reported. A bye (one side is "BYE") is left out. `cache`
+// keeps what rarely changes (the season, its stages and their teams) between
+// calls.
 const SCHEDULE_CACHE_MS = 30 * 60 * 1000;
 async function seasonMatches(hostname, leagueId, seasonId, range, cache) {
   const c = cache || {};
@@ -451,7 +454,8 @@ async function seasonMatches(hostname, leagueId, seasonId, range, cache) {
       const start = (Number(m.date) || 0) * 1000;
       if (!start || start < from || start > to) return;
       const ids = Array.isArray(m.teamIds) ? m.teamIds : [];
-      if (ids.length !== 2) return;
+      if (ids.length !== 2 || ids.includes('BYE')) return;
+      const forfeited = new Set([...(Array.isArray(m.forfeits) ? m.forfeits : []), ...(Array.isArray(m.noShows) ? m.noShows : [])]);
       const wins = {};
       let games = 0;
       (m.games || []).forEach((g) => {
@@ -462,7 +466,7 @@ async function seasonMatches(hostname, leagueId, seasonId, range, cache) {
       out.push({
         id: m.id, round: m.roundName || '', stage: s.name || '', start, state: String(m.state || ''),
         teams: ids.map((id) => scheduleTeam(byId.get(id))),
-        wins: ids.map((id) => wins[id] || 0), games,
+        wins: ids.map((id) => wins[id] || 0), ff: ids.map((id) => forfeited.has(id)), games,
         bestOf: m.matchFormat === 'bestOf' ? Number(m.matchGameCount) || 0 : 0,
         link: m.urlV1 || `https://${hostname}/league/matches/${m.id}`,
       });

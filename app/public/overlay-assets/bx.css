@@ -111,7 +111,10 @@ body.enter .bx-root [data-in="grow"]{ animation-name:bx-in-grow; }
   clip-path:polygon(30px 0, 100% 0, calc(100% - 30px) 100%, 0 100%);
   font:700 19px/1 var(--bx-body); letter-spacing:.2em; text-transform:uppercase; white-space:nowrap; }
 .bx-mast-info:empty{ display:none; }
-.bx-mast-clock{ display:flex; align-items:center; padding:0 44px 0 58px; background:var(--bx-blue);
+/* Kanit's figures differ in width whatever font-variant-numeric says, so the
+   clock is as wide as its widest time (10:00 AM, 131 px of text) and the
+   panels beside it don't move as the minutes change. */
+.bx-mast-clock{ display:flex; align-items:center; justify-content:flex-end; min-width:134px; padding:0 44px 0 58px; background:var(--bx-blue);
   clip-path:polygon(30px 0, 100% 0, 100% 100%, 0 100%);
   font:800 28px/1 var(--bx-head); letter-spacing:.04em; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .bx-mast-line{ position:absolute; left:0; right:0; top:80px; height:4px; overflow:hidden; transform-origin:left center;
@@ -224,6 +227,9 @@ body.enter .bx-view.on .bx-title .w i{ animation:bx-word .9s var(--bx-ease) both
 /* Countdown: one tile per digit; a digit that changes rolls over. */
 .bx-count{ display:flex; align-items:flex-end; gap:26px; }
 .bx-count[hidden]{ display:none; }
+/* A countdown with nothing to show that keeps its space (drawCount's keep):
+   Post-Match before its end time arrives and after zero, Matchup after zero. */
+.bx-count.blank{ visibility:hidden; }
 .bx-count-label{ width:156px; padding-bottom:10px; font:700 17px/1.4 var(--bx-body); letter-spacing:.3em; text-transform:uppercase; color:var(--bx-muted); }
 .bx-count-label:empty{ display:none; }
 .bx-digits{ display:flex; align-items:center; gap:8px; }
@@ -285,7 +291,9 @@ body.enter .bx-view.on .bx-title .w i{ animation:bx-word .9s var(--bx-ease) both
 .bx-also-head span{ display:flex; gap:6px; }
 .bx-also-head span i{ width:22px; height:4px; background:rgba(234,242,255,.2); }
 .bx-also-head span i.on{ background:var(--bx-gold); }
-.bx-also-rows{ display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+/* Room for three rows on every page (ALSO_ROWS in bx.js), so the video or
+   artwork above stays put as the pages turn. */
+.bx-also-rows{ display:flex; flex-direction:column; gap:6px; margin-top:6px; min-height:calc(3 * 72px + 2 * 6px); }
 
 /* One match as a row: game, team, score, team, state. */
 .bx-mrow{ display:grid; grid-template-columns:158px minmax(0,1fr) 112px minmax(0,1fr) 126px; align-items:center; height:72px;
@@ -306,6 +314,9 @@ body.enter .bx-view.on .bx-title .w i{ animation:bx-word .9s var(--bx-ease) both
 .bx-mrow-score i{ width:10px; height:3px; background:var(--bx-muted); }
 .bx-mrow-score b.dim{ color:var(--bx-muted); font-weight:600; }
 .bx-mrow-score.vs{ font-size:19px; letter-spacing:.14em; color:var(--bx-gold); }
+/* A forfeit's W and FF are wider than figures; at this size FF – FF fits the
+   small rows' score column (104 px on Be Right Back). */
+.bx-mrow-score.ff{ font-size:30px; }
 .bx-mrow-state{ justify-self:end; display:inline-flex; align-items:center; gap:8px; height:32px; margin-right:14px; padding:0 12px;
   background:rgba(234,242,255,.09); font:800 13.5px/1 var(--bx-body); letter-spacing:.13em; text-transform:uppercase; white-space:nowrap; }
 .bx-mrow-state.final{ background:var(--bx-gold); color:var(--bx-gold-ink); }
@@ -315,7 +326,9 @@ body.enter .bx-view.on .bx-title .w i{ animation:bx-word .9s var(--bx-ease) both
 /* --- Starting Soon and Post-Match -------------------------------------------- */
 .bx-hero-left{ position:absolute; left:96px; top:128px; bottom:92px; width:904px; display:flex; flex-direction:column; justify-content:center; gap:26px; }
 .bx-hero-right{ position:absolute; right:96px; top:128px; bottom:92px; width:784px; display:flex; flex-direction:column; justify-content:center; gap:34px; }
-.bx-hero-right .bx-video{ margin-top:36px; }
+/* Room for the tag above the video. The artwork keeps the same room, so the
+   column doesn't move when a video arrives or fails. */
+.bx-hero-right .bx-video, .bx-hero-right .bx-art{ margin-top:36px; }
 /* Layout "video left": the two columns change sides. */
 .bx-view.flip .bx-hero-left{ left:auto; right:96px; }
 .bx-view.flip .bx-hero-right{ right:auto; left:96px; }
@@ -471,7 +484,9 @@ body.enter .bx-vs.on .bx-vs-flash{ animation:bx-flash .8s ease-out both; animati
 .bx-sch-dots{ display:flex; justify-content:flex-end; gap:6px; margin-top:12px; }
 .bx-sch-dots i{ width:30px; height:5px; background:rgba(234,242,255,.2); }
 .bx-sch-dots i.on{ background:var(--bx-gold); }
-.bx-sch-rows{ position:absolute; left:96px; right:96px; top:256px; bottom:92px; display:flex; flex-direction:column; justify-content:center; gap:10px; padding-bottom:28px; box-sizing:border-box; }
+/* From the top: a short page, or a match added or removed, leaves the other
+   rows where they were. Seven rows fill the room. */
+.bx-sch-rows{ position:absolute; left:96px; right:96px; top:256px; bottom:92px; display:flex; flex-direction:column; justify-content:flex-start; gap:10px; padding-bottom:28px; box-sizing:border-box; }
 .bx-mrow.big{ grid-template-columns:178px 216px minmax(0,1fr) 196px minmax(0,1fr) 176px; height:92px; }
 .bx-mrow.big .bx-mrow-when{ align-self:stretch; display:flex; flex-direction:column; justify-content:center; padding:0 0 0 22px; border-left:8px solid var(--bx-blue); background:rgba(0,0,0,.28); }
 .bx-mrow.big.home .bx-mrow-when{ border-left-color:var(--bx-gold); }
