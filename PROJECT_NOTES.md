@@ -2759,6 +2759,36 @@ row in `bx.css` found more of the same. Fixed:
   against the two real NECC seasons above. `npm run test:broadcast` 116/116.
   Not checked in real OBS.
 
+### Release checks (2026-10-15)
+
+- Commit `a9c9968` on `master`, annotated tag `v2.2.3`. Before the commit:
+  no tracked file holds a camera host or stream path from the internal note
+  (4 looked for, 119 files), and `local.json` is gitignored.
+- Both installers built from a temp copy of the tagged tree (`git archive`,
+  outside OneDrive, junction to `app/node_modules` removed before the copy
+  was deleted, LotE's two fonts copied in, no `local.json`). Each update file
+  matched its installer (sha512, size); each `app-update.yml` named its
+  channel (`latest`, `lote`).
+- Packaged smoke tests (scratch script, server run out of `app.asar` by the
+  build's own exe with `ELECTRON_RUN_AS_NODE=1`, temp data folder, the
+  source tree's mock OBS). **Widener 26, LotE 28**: version and profile;
+  `dev/`, `build/`, the other league's profile and `local.json` not shipped;
+  LotE's fonts shipped; no camera address in a shipped text file; update
+  channel and feed; the panel without the program screenshot (markup and
+  script) and `/api/obs/program-shot` 404; four scene pages; `bx.css` and
+  `bx.js` carrying this release's fixes; broadcast layer on for Widener, off
+  for LotE; scene build (eleven scenes in `Widener Stream`, nine in
+  `LotE Stream`), Studio Mode untouched; Post-Match on program sets
+  `postEnd`.
+- Published as a draft with six files, each upload matched its local file by
+  size and sha256, then published and marked Latest (2026-10-15 04:26 UTC).
+- The updater, without installing: run as 2.2.2 and as 2.2.1, both channels
+  report `update-available` with 2.2.3, the right installer and size; run
+  as 2.2.3, both report `update-not-available`.
+- Both installers are in the user's Downloads folder.
+- **Not done:** an install from an installed 2.2.2 copy; any of this
+  release's scene changes in real OBS.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
