@@ -1,8 +1,8 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.3.0** (one install for every profile; committed, not
-released; its section is near the end). v2.2.0 released the broadcast
+updated through **v2.3.0** (one install for every profile, released
+2026-10-18; its section is near the end). v2.2.0 released the broadcast
 package built on the `test/widener-broadcast` branch (the design.1 to
 design.6 sections and the v2.2.0 release section). If you're
 starting a new chat, read the
@@ -2791,7 +2791,7 @@ row in `bx.css` found more of the same. Fixed:
 - **Not done:** an install from an installed 2.2.2 copy; any of this
   release's scene changes in real OBS.
 
-## v2.3.0: one install for every profile (not released)
+## v2.3.0: one install for every profile (released 2026-10-18)
 
 Each new team or league used to be a new installer, app id, product name,
 update channel and data folder (`build/dist.js` looped over the profiles).
@@ -2981,11 +2981,42 @@ Checks (2026-10-18):
   connection per profile). The second build is in `dist/app/` and in the
   user's Downloads.
 
+### Release (2026-10-18)
+
+The user: "Push the release".
+- Commit `0ec806c` on `master`, annotated tag `v2.3.0`, both pushed.
+- The installer built from a clean copy of the committed tree
+  (`git archive` into the scratchpad, outside OneDrive, LotE's two fonts
+  copied in, junction to `app/node_modules`, removed before the copy was
+  deleted). Checks on it, 18 passed: `latest.yml` and `lote.yml` name the
+  installer with its size and sha512; `app-update.yml` has no channel, owner
+  `bos-tn`, updater cache `widener-stream-overlay-app-updater`; the packaged
+  `package.json` is `widener-stream-overlay-app` 2.3.0 with no productName
+  or streamProfile; both profiles, LotE's fonts, the profile page, its
+  preload and the app icons are in; `local.json`, `dev/` and `build/` are
+  not; the installer script has the Profile page with both profiles and
+  removes LotE Stream Control. A scan for camera addresses matched only the
+  `rtsp://` scheme in `broadcast.js` and `profile.js`, as in v2.2.3.
+- Packaged tests on that build's exe: startup 19, OBS connection 11,
+  installer default 9.
+- Publishing: draft release with four files (installer, `.blockmap`,
+  `latest.yml`, `lote.yml`), each upload matched its local file by size and
+  sha256 (GitHub's asset digest), then published and marked Latest
+  (2026-10-18 05:56 UTC).
+- The updater, without installing (the throwaway Electron app, now with an
+  update config per channel): run as 2.2.3, `latest` and `lote` both report
+  `update-available` with 2.3.0, `Esports-Stream-Control-Setup-2.3.0.exe`,
+  85,939,900 bytes; run as 2.3.0, both report `update-not-available`; run as
+  2.0.0-rc.1, "No published versions on GitHub" (a prerelease build looks
+  for prereleases), as with the design builds.
+- The dev PC runs the first 2.3.0 build. With the same version number it is
+  not offered the update: the installer in the user's Downloads (built from
+  the same commit) or the release's has to be run by hand.
+
 **Not done:** a first install on a PC with only the old LotE app installed
 for all users (`customInit` switching to all users; the dev PC had Widener's
 own install, so it took the in-place path). Also not done: the second-launch
-switch dialog, an update from GitHub end to end (needs the release), the
-release itself.
+switch dialog, a download and install by an installed 2.2.x copy.
 
 ## Known gaps / things not yet done
 
