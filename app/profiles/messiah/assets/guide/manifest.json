@@ -1,0 +1,121 @@
+{
+  "source": "https://s3.us-east-2.amazonaws.com/sidearm.nextgen.sites/messiah.sidearmsports.com/documents/2026/2/26/Athletics_Brad_Identity_Guide_Updated.pdf",
+  "page": 51,
+  "pdfPageIndex": 13,
+  "method": "Vector clip from PDF page; transparent PNG preview at 720 dpi; no redrawing or recoloring.",
+  "note": "The two dark-background samples include the blue rectangle printed behind the mark in the guide. Request source artwork and permission from Messiah Athletics for production usage.",
+  "marks": [
+    {
+      "id": "logo-primary-light",
+      "label": "Esports primary logo for a light-colored background",
+      "kind": "logo",
+      "use": "light",
+      "svg": "logo-primary-light.svg",
+      "png": "logo-primary-light.png",
+      "sourceClipPoints": [
+        79,
+        289,
+        172,
+        376
+      ]
+    },
+    {
+      "id": "logo-blue-white",
+      "label": "Esports logo in blue and white",
+      "kind": "logo",
+      "use": "light",
+      "svg": "logo-blue-white.svg",
+      "png": "logo-blue-white.png",
+      "sourceClipPoints": [
+        199,
+        289,
+        293,
+        376
+      ]
+    },
+    {
+      "id": "logo-black-white",
+      "label": "Esports logo for black-and-white printing",
+      "kind": "logo",
+      "use": "print",
+      "svg": "logo-black-white.svg",
+      "png": "logo-black-white.png",
+      "sourceClipPoints": [
+        320,
+        289,
+        414,
+        376
+      ]
+    },
+    {
+      "id": "logo-dark-background",
+      "label": "Esports logo on a dark-colored background",
+      "kind": "logo",
+      "use": "dark sample with blue field",
+      "svg": "logo-dark-background.svg",
+      "png": "logo-dark-background.png",
+      "sourceClipPoints": [
+        432,
+        283,
+        540,
+        383
+      ]
+    },
+    {
+      "id": "wordmark-primary-light",
+      "label": "Esports wordmark for a light-colored background",
+      "kind": "wordmark",
+      "use": "light",
+      "svg": "wordmark-primary-light.svg",
+      "png": "wordmark-primary-light.png",
+      "sourceClipPoints": [
+        81,
+        451,
+        173,
+        474
+      ]
+    },
+    {
+      "id": "wordmark-blue-white",
+      "label": "Esports wordmark in blue and white",
+      "kind": "wordmark",
+      "use": "light",
+      "svg": "wordmark-blue-white.svg",
+      "png": "wordmark-blue-white.png",
+      "sourceClipPoints": [
+        199,
+        451,
+        293,
+        474
+      ]
+    },
+    {
+      "id": "wordmark-black-white",
+      "label": "Esports wordmark for black-and-white printing",
+      "kind": "wordmark",
+      "use": "print",
+      "svg": "wordmark-black-white.svg",
+      "png": "wordmark-black-white.png",
+      "sourceClipPoints": [
+        320,
+        451,
+        413,
+        474
+      ]
+    },
+    {
+      "id": "wordmark-dark-background",
+      "label": "Esports wordmark on a dark-colored background",
+      "kind": "wordmark",
+      "use": "dark sample with blue field",
+      "svg": "wordmark-dark-background.svg",
+      "png": "wordmark-dark-background.png",
+      "sourceClipPoints": [
+        432,
+        443,
+        540,
+        485
+      ]
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "id": "messiah",
+  "kind": "team",
+  "dataFolder": "messiah-stream-control",
+  "name": "Messiah Esports",
+  "shortName": "Messiah",
+  "appName": "Messiah Esports Stream Control",
+  "tagline": "Messiah Falcons",
+  "port": 4330,
+  "homeTeam": "messiah",
+  "league": {
+    "name": "LeagueOS",
+    "importHint": "Paste a LeagueOS match page link"
+  },
+  "obs": {
+    "prefix": "MU",
+    "leagueScene": "League Graphics"
+  },
+  "socialHandle": "",
+  "matchExample": "Messiah vs Opponent, Week 1",
+  "colors": {
+    "primary": "#002856",
+    "accent": "#BEC0C2",
+    "accentInk": "#061526",
+    "text": "#FFFFFF",
+    "muted": "#BEC0C2",
+    "teamA": "#002856",
+    "teamB": "#BEC0C2",
+    "panel": "rgba(3,24,47,.96)",
+    "panelDark": "#03182F",
+    "chip": "rgba(3,24,47,.9)",
+    "chipActive": "rgba(0,40,86,.96)",
+    "softText": "#DBE5EE",
+    "inkDark": "#061526",
+    "inkMuted": "#546779",
+    "paused": "#34465A",
+    "ground": "radial-gradient(1200px 600px at 70% 20%, #0B4068 0%, #002856 55%, #03182F 100%)",
+    "ui": {
+      "bg": "#071626",
+      "panel": "#10263B",
+      "panel2": "#0B1D30",
+      "border": "#294058",
+      "muted": "#BEC9D5",
+      "focus": "#81B8D8",
+      "button": "#1B3550",
+      "buttonHover": "#264967",
+      "tint": "rgba(28,138,194,.16)",
+      "placeholder": "#8496A8",
+      "primary2": "#176D9A",
+      "thumb": "repeating-linear-gradient(135deg, rgba(190,192,194,.09) 0 6px, transparent 6px 12px), linear-gradient(160deg, #0B4068, #03182F)"
+    }
+  },
+  "assets": {
+    "logo": "logo.png",
+    "panelLogo": "panel-logo.png",
+    "mascot": "logo.png",
+    "watermark": "panel-logo.png"
+  },
+  "stinger": {"file":"stinger.webm","transitionPoint":590,"trackMatte":false},
+  "music": null,
+  "backgrounds": {
+    "list": [
+      {"id": "plate-30", "name": "30 · Wordmark Flood"},
+      {"id": "plate-25", "name": "25 · Ghost Falcon"},
+      {"id": "plate-08", "name": "08 · Tailwind"},
+      {"id": "plate-01", "name": "01 · Prism Current"},
+      {"id": "plate-05", "name": "05 · Wing Wake"}
+    ],
+    "defaults": {
+      "starting-soon": "plate-25",
+      "roster": "plate-01",
+      "brb": "plate-30",
+      "post-match": "plate-08",
+      "necc": "plate-01",
+      "stats": "plate-05",
+      "schedule": "plate-01",
+      "versus": "plate-08"
+    }
+  },
+  "headlineFonts": {
+    "list": [{"id":"hanken","name":"Hanken Grotesk","family":"Hanken","file":"fonts/Hanken-800.ttf"}],
+    "default": "hanken"
+  },
+  "broadcast": {
+    "scenes": ["schedule", "versus"],
+    "cameras": [
+      {"id":"crowd","label":"Crowd Cam","title":"Crowd Cam","subtitle":"Messiah Esports"},
+      {"id":"room","label":"Comp Room","title":"Comp Room","subtitle":"Messiah Esports"}
+    ],
+    "follow": {"links": [], "scope": "home"}
+  },
+  "defaults": {"montage": false},
+  "theme": "theme.css",
+  "themeScript": "theme.js"
+}

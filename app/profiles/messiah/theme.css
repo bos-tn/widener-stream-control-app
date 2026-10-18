@@ -1,0 +1,11 @@
+/* Messiah beta: the five selected motion plates occupy the existing brand
+   background stage. Shared scene content and OBS behavior stay in the app. */
+:root{ --fixed-stage:1; --title-lines:2; --font-accent:'Hanken'; --accent-case:uppercase; }
+.bx-root{ --bx-head:'Hanken', 'Kanit', system-ui, sans-serif; --bx-ink:#03182F; --bx-panel:rgba(3,24,47,.92); --bx-panel-hi:rgba(8,40,70,.94); }
+.bx-title .w.hi i{ background:linear-gradient(180deg, #FFFFFF 15%, var(--bx-gold) 100%); -webkit-background-clip:text; background-clip:text; }
+.stripes,.bg-gradient{ display:none; }
+.brand-bg{ display:block; left:0; top:0; width:1920px; height:1080px; transform-origin:top left; }
+.brand-bg .messiah-plate{ display:block; width:1920px; height:1080px; }
+body[data-mode="stats"] .brand-bg{ display:block !important; opacity:.5; }
+body[data-mode="scoreboard"] .brand-bg,
+body[data-mode^="cam-"] .brand-bg{ display:none !important; }
