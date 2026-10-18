@@ -1,0 +1,85 @@
+{
+  "project": "Messiah Esports motion study",
+  "version": "concept-round-02",
+  "researchedAt": "2026-10-18",
+  "status": "design exploration; selected plates are not yet wired into app/profiles/messiah",
+  "format": { "width": 1920, "height": 1080, "aspect": "16:9", "loopSeconds": 8, "targetFps": 30 },
+  "identity": {
+    "name": "Messiah Esports",
+    "institution": "Messiah University",
+    "athleticsName": "Falcons",
+    "taglineReference": "see anew",
+    "geography": ["Grantham, Pennsylvania", "Stoner Covered Bridge", "Yellow Breeches Creek"],
+    "institutionalMotifs": ["stained glass panes", "white pane seams", "cool and warm gradients", "circular forms", "paired ideas that fuse"],
+    "broadcastMotifs": ["abstract flight trails", "athletic rails", "arena light", "scoreline grid", "digital signal", "source-mark pattern", "faded word rows", "moving brand tape"]
+  },
+  "colors": {
+    "officialInstitutional": {
+      "primary": { "navy": "#002856", "white": "#FFFFFF" },
+      "secondary": { "lightBlue": "#1C8AC2", "gray": "#5B6770" },
+      "tertiary": { "green": "#0B7367", "blue": "#11698C", "purple": "#614495", "yellow": "#E5AE3A", "orange": "#D6742A", "red": "#A63738" },
+      "source": "https://www.messiah.edu/visual-identity/color-palette/"
+    },
+    "officialAthleticsGuide2026": {
+      "primaryNavy": "#002856",
+      "white": "#FFFFFF",
+      "accentBlack": "#000000",
+      "accentCoolGray": "#BEC0C2",
+      "source": "https://s3.us-east-2.amazonaws.com/sidearm.nextgen.sites/messiah.sidearmsports.com/documents/2026/2/26/Athletics_Brad_Identity_Guide_Updated.pdf",
+      "note": "Page 39 of the 2026 guide supersedes the older athletics color reference. Its approved primary navy agrees with the institutional navy. The esports artwork itself contains a brighter blue, which is part of the supplied mark rather than a new palette token."
+    },
+    "suppliedLogoSample": { "blue": "#004B86", "gray": "#BFC1C2", "white": "#FFFFFF", "note": "Dominant opaque raster pixels sampled from the project-supplied LeagueOS WebP. These are not published brand specifications." },
+    "broadcastDerived": { "night": "#03182F", "ink": "#061526", "panel": "#0B2238", "text": "#F6F9FB", "mutedText": "#A5B8C8", "highlight": "#9DDBF4" },
+    "composition": "Institutional navy and white lead. Secondary blue/gray support. Tertiary colors act as small refracted-light accents. Derived darks are backgrounds, not official brand swatches."
+  },
+  "typography": {
+    "official": [
+      { "family": "Priori Sans", "use": "headlines", "status": "licensed, not bundled" },
+      { "family": "Aptifer Sans / Aptifer Slab", "use": "body and editorial", "status": "licensed, not bundled" },
+      { "family": "Hand of Sean", "use": "limited handwritten emphasis", "status": "licensed, not bundled" },
+      { "family": "Helvetica Neue 85 Heavy / 86 Heavy Italic", "use": "athletics headers and team names in the 2026 athletics guide", "status": "licensed, not bundled" }
+    ],
+    "bundledOpenAlternates": [
+      { "family": "Hanken Grotesk", "role": "scene headings, scores, labels, user interface", "weights": [400,600,700,800], "license": "SIL Open Font License 1.1", "path": "fonts/hanken-*.ttf" },
+      { "family": "Aleo", "role": "editorial accents and select headlines", "weights": [400,700], "license": "SIL Open Font License 1.1", "path": "fonts/aleo-*.ttf" }
+    ],
+    "source": "https://www.messiah.edu/visual-identity/fonts/",
+    "manual": "https://view.messiah.edu/brandmanual"
+  },
+  "marks": {
+    "guideEsportsVariants": { "directory": "assets/guide", "manifest": "assets/guide/manifest.json", "count": 8, "formats": ["SVG vector clip", "transparent PNG preview"], "note": "Extracted without redrawing from page 51 of the 2026 athletics guide. The dark samples include the guide's blue presentation field." },
+    "localReferences": [
+      { "path": "assets/esports-logo-leagueos-source.webp", "source": "https://images.leagueos.gg/groups/c8tx1jcxhv89exuf7rdux1y43/648cd626832b120a065cdffc", "role": "project-supplied Messiah Esports Falcon mark; primary esports logo reference", "note": "Unaltered transparent 512x512 RGBA WebP. Use for concept review. Request an original vector or larger approved source for final broadcast lockups." },
+      { "path": "assets/esports-wordmark-source.png", "source": "https://www.messiah.edu/student-engagement/_images/esports_wordmark_stroke.png", "role": "publicly displayed esports wordmark", "note": "Source file unchanged; RGB white background; reference and layout exploration." },
+      { "path": "assets/university-footer-logo-source.svg", "source": "https://www.messiah.edu/assets/images/logo-footer.svg", "role": "publicly displayed university logo", "note": "Source file unchanged; white art." },
+      { "path": "assets/athletics-site-logo-reference.svg", "source": "https://dxbhsrqyrr690.cloudfront.net/sidearm.nextgen.sites/messiah.sidearmsports.com/images/responsive_2018/main_logo.svg", "role": "historical athletics site reference", "note": "Do not use as a production mark until Athletics supplies current approved artwork." }
+    ],
+    "productionRule": "Use source esports artwork without redrawing or altering proportions. The 2026 guide says reproduction and use require Messiah Athletics permission and an electronic file is provided upon approval. Guide-extracted variants here support concept review; request those production files before public broadcast. Do not turn background flight motifs into a Falcon logo.",
+    "universityGuidelines": "https://www.messiah.edu/visual-identity/",
+    "athleticsContact": "athletics@messiah.edu"
+  },
+  "motion": {
+    "plateCount": 32,
+    "hardlinePlateIds": [25,26,27,28,29,30,31,32],
+    "loop": "All plate geometry returns to the same state after 8 seconds.",
+    "safeZone": { "x": 420, "y": 184, "width": 1080, "height": 712 },
+    "contrast": "Keep detail, thin lines, and brighter color mainly outside the content-safe zone.",
+    "export": "The gallery can export a 1920x1080 PNG or record an 8-second silent WebM in Chrome/Edge. Review codec/playback before use in OBS."
+  },
+  "provisionalAppProfile": {
+    "id": "messiah", "kind": "team", "port": 4330, "dataFolder": "messiah-stream-control", "obsPrefix": "MU",
+    "note": "Reserved proposal only. A functional profile still needs final marks, games, assets, defaults, and selected plate integration."
+  },
+  "sources": [
+    "https://s3.us-east-2.amazonaws.com/sidearm.nextgen.sites/messiah.sidearmsports.com/documents/2026/2/26/Athletics_Brad_Identity_Guide_Updated.pdf",
+    "https://images.leagueos.gg/groups/c8tx1jcxhv89exuf7rdux1y43/648cd626832b120a065cdffc",
+    "https://www.messiah.edu/visual-identity/",
+    "https://www.messiah.edu/visual-identity/color-palette/",
+    "https://www.messiah.edu/visual-identity/fonts/",
+    "https://www.messiah.edu/visual-identity/stained-glass-metaphor/",
+    "https://www.messiah.edu/visual-identity/ligatures/",
+    "https://www.messiah.edu/student-engagement/esports/",
+    "https://gomessiah.com/sports/2014/7/28/GEN_0728141552.aspx?id=245",
+    "https://www.messiah.edu/the_bridge/2023/volume-1/from-the-president"
+  ]
+}
