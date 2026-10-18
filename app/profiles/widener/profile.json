@@ -1,5 +1,7 @@
 {
   "id": "widener",
+  "kind": "team",
+  "dataFolder": "widener-stream-overlay-app",
   "name": "Widener Esports",
   "shortName": "Widener",
   "appName": "Widener Esports Stream Control",
@@ -101,10 +103,5 @@
     "montage": true
   },
   "theme": "theme.css",
-  "themeScript": "theme.js",
-  "build": {
-    "appId": "edu.widener.esports.streamcontrol",
-    "artifactName": "Widener-Esports-Stream-Control-Setup-${version}.${ext}",
-    "channel": "latest"
-  }
+  "themeScript": "theme.js"
 }

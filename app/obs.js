@@ -19,8 +19,10 @@
 // Everything fails soft: OBS being unreachable or a call failing must never
 // crash the app or stop the overlays, which the server keeps serving.
 //
-// SECURITY: the obs-websocket password is a secret. It is held in memory only
-// for the life of a connection, never persisted server-side, and never logged.
+// SECURITY: the obs-websocket password is a secret. This module holds it in
+// memory only for the life of a connection and never logs it. The installed
+// app keeps the saved connection encrypted for the Windows user (main.js,
+// obsStore).
 
 const { OBSWebSocket } = require('obs-websocket-js');
 
@@ -329,6 +331,13 @@ function createObs(opts = {}) {
   async function outputRunning() {
     const live = await Promise.all(['GetStreamStatus', 'GetRecordStatus', 'GetVirtualCamStatus', 'GetReplayBufferStatus']
       .map((req) => obs.call(req).then((s) => !!s.outputActive).catch(() => false)));
+    return live.some(Boolean);
+  }
+
+  // Whether OBS is streaming or recording (false when not connected).
+  async function isLive() {
+    if (!connected) return false;
+    const live = await Promise.all(['GetStreamStatus', 'GetRecordStatus'].map((req) => obs.call(req).then((s) => !!s.outputActive).catch(() => false)));
     return live.some(Boolean);
   }
 
@@ -1179,7 +1188,7 @@ function createObs(opts = {}) {
     connect, disconnect, status, inspect, buildScenes, setupStinger, stingerStatus,
     switchTo, setMusic, setLayout, reloadPages, raiseVideo,
     setCameraWindow, cameraStatus, setCameraDevice, applyCamera,
-    isConnected: () => connected,
+    isConnected: () => connected, isLive,
   };
 }
 

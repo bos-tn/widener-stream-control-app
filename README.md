@@ -1,18 +1,39 @@
 <img src="app/profiles/widener/assets/panel-logo.png" alt="Widener Esports" width="80"> <img src="app/profiles/lote/assets/logo-square.png" alt="League of the East" width="80">
 
-# Widener Esports Stream Control
+# Esports Stream Control
 
 Windows app that builds and drives an OBS scene collection for esports
-broadcasts. One codebase, one installer per league profile.
+broadcasts. One installer holds every team and league profile; the app runs
+one profile at a time.
 
-| App | Profile | Control panel | OBS scene collection |
+| Profile | Kind | Control panel | OBS scene collection |
 | --- | --- | --- | --- |
-| Widener Esports Stream Control | `widener` (NECC) | `http://localhost:4310/control` | `Widener Stream`, scenes `WU: …` |
-| LotE Stream Control | `lote` (League of the East) | `http://localhost:4320/control` | `LotE Stream`, scenes `LotE: …` |
+| Widener Esports (`widener`) | Team, NECC | `http://localhost:4310/control` | `Widener Stream`, scenes `WU: …` |
+| League of the East (`lote`) | League | `http://localhost:4320/control` | `LotE Stream`, scenes `LotE: …` |
 
-Installers: [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest).
-The apps install side by side with separate data folders and update channels.
-An install over an older version keeps settings, teams and saved matches.
+Installer: [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest),
+`Esports-Stream-Control-Setup-<version>.exe`.
+
+- **Profile**: the installer's Profile page sets the profile the app opens
+  (Teams, then Leagues). A silent install takes `--profile=<id>`
+  (`Esports-Stream-Control-Setup-<version>.exe /S --profile=lote`). An update
+  keeps it. Later starts open the profile used last. Settings, Profile,
+  **Change profile** restarts the app in another one. With no profile set,
+  the first start shows the same list.
+- **OBS connection**: one for the PC, used by every profile (host, port,
+  password, connect on start; the password is encrypted for the Windows
+  user). A profile switch connects again with it.
+- Each profile has its own port, OBS scene collection, settings, team library
+  and data folder (`%APPDATA%\widener-stream-overlay-app`,
+  `%APPDATA%\lote-stream-control`).
+- Updates download in the background and keep the open profile, settings,
+  teams and saved matches.
+- **From before v2.3.0**: Widener Esports Stream Control updates in place.
+  LotE Stream Control updates to this app, whose installer removes the old app
+  (not while it runs) and keeps its data folder. The first start opens the
+  profile whose data was written last. A shortcut of the user's own or a
+  taskbar pin that pointed at an old app's exe opens this app with that
+  profile.
 
 - Requires Windows and OBS 30 or newer on the same PC.
 - The server listens on localhost only.
@@ -78,8 +99,9 @@ Settings, Setup, **Run setup** (opens automatically on first run).
 
 1. **Connect to OBS.** OBS: Tools > WebSocket Server Settings > Enable
    WebSocket server. Show Connect Info > copy the password into the app. The
-   password is stored in the app's data folder. The app reconnects
-   automatically.
+   password is stored once for every profile (`obs-connection.json` in
+   `%APPDATA%\widener-stream-overlay-app`, encrypted for the Windows user).
+   The app reconnects automatically.
 2. **Scene collection.** Creates `Widener Stream` and switches OBS to it.
    Options: game capture and game sound on the Gameplay/Scoreboard scene
    (Game Capture, mode: any fullscreen application; Application Audio
@@ -258,8 +280,9 @@ the overlay draws the frame. The source depends on the camera's address
   `{ "cameras": { "<camera id>": "<address>" } }`. The file is not in the
   repository (`.gitignore`): the addresses are on the organisation's own
   network. It applies to dev runs only: the installer build leaves it out
-  (`build/dist.js`), so an installed app starts with no addresses and the
-  operator enters them once (kept in the data folder across updates). A
+  (`build.files` in `app/package.json`), so an installed app starts with no
+  addresses and the operator enters them once (kept in the data folder across
+  updates). A
   `url` on a camera in `profile.json` is a default that ships, for an address
   that may be public. **Default link** on a camera goes back to its default.
 
@@ -451,7 +474,9 @@ OBS: Docks > Custom Browser Docks, URL `http://localhost:4310/control`.
 | Standings scene is empty | League page: check the status line. No table means the league site has no season or no confirmed teams for the game, or the read failed. |
 | Team record missing beside a name | The team name does not match a row of the standings. Names are matched by prefix, short names only when unique. |
 | Typed text not on stream | Press Enter or leave the field. |
-| "Port 4310 is in use" | Another instance of the app is running. |
+| App opens the wrong profile | Settings, Profile, **Change profile**. For every user of the PC: run the installer again and pick on its Profile page (or `/S --profile=<id>`). |
+| OBS not connected after a profile switch | Settings, OBS: check the address and password, **Connect**. The connection is saved once for every profile. |
+| "Port 4310 is in use" | Another copy of the app is running, or an app from before v2.3.0 for the same profile (LotE Stream Control, port 4320). Close it. The next update removes the old app. |
 | Match import fails | LeagueOS changed or is unreachable. Enter teams manually or load a saved match. |
 | League graphic scene is empty | Import the match. The graphic links come from the import. |
 | Rocket League: waiting | Score card > Connect to Rocket League, then restart the game. |
@@ -473,25 +498,28 @@ Requires [Node.js](https://nodejs.org/) 18 or newer.
 ```bash
 cd app
 npm install
-npm start             # Widener app
-npm run start:lote    # LotE app
+npm start             # the profile used last, or the profile page
+npm run start:widener # Widener profile
+npm run start:lote    # LotE profile
 npm run server        # server only (Widener, port 4310)
 npm run server:lote   # server only (LotE, port 4320)
-npm run dist          # every profile's installer
-npm run dist:lote     # one profile's installer
-npm run icons         # app icons from profiles/<id>/icon-source.png
+npm run dist          # the installer, every profile
+npm run icons         # icons from profiles/<id>/icon-source.png and build/icon-source.svg
 npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
 npm run design        # demo server for the broadcast package, http://localhost:4313/showcase
 npm run test:broadcast    # checks against a mock OBS
 ```
 
+`npm start` uses the installed app's data folders. `STREAM_APP_DATA=<folder>`
+stands in for `%APPDATA%`.
+
 ### Profile files
 
-`app/profiles/<id>/`. Each installer contains exactly one profile.
+`app/profiles/<id>/`. The installer carries every profile.
 
 | File | Contents |
 | --- | --- |
-| `profile.json` | Names, port, OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (optional: `scenes`, `cameras` with id, label, title, subtitle and optional `url`, `follow`), defaults, installer identity (app id, package name, artifact name, update channel) |
+| `profile.json` | `kind` (`team` or `league`, the profile page's sections), names, port, `dataFolder` (folder in `%APPDATA%`), OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (optional: `scenes`, `cameras` with id, label, title, subtitle and optional `url`, `follow`), defaults, `replaces` (optional: an app from before v2.3.0 that held only this profile; app id, name, update channel) |
 | `games.json` | Games: id, name, scoreboard preset, highlight video, `leagueActivity` (LeagueOS activity ids), `scoreName` |
 | `teams.json` | Optional member schools (id, name, short name, colours, logo), preloaded into the team library |
 | `assets/` | Logo, panel logo, mascot, watermark, stinger video, `teams/` logos, `fonts/` |
@@ -499,23 +527,30 @@ npm run test:broadcast    # checks against a mock OBS
 | `theme.js` | Optional overlay script; builds the background layers |
 | `icon-source.png`, `icons/` | App icon source and generated icons |
 
-New profile: copy `profiles/lote`, change `profile.json` (`port`,
-`obs.prefix`, `build.appId`, `build.packageName`, `build.artifactName`,
-`build.channel`), replace assets, `games.json` and `teams.json`, then
-`npm run icons -- <id>` and `npm run dist -- <id>`.
+New profile: copy `profiles/widener` (a team) or `profiles/lote` (a league)
+to `profiles/<id>/`, change `profile.json` (`id`, `kind`, `port` and
+`dataFolder` unused by any other profile, `obs.prefix`; remove `replaces`),
+replace assets, `games.json` and `teams.json`, then `npm run icons -- <id>`.
+The next `npm run dist` includes it, in the installer's Profile page too.
 
 ### Build and release
 
-- `version` in `app/package.json` is shared by every profile.
-- Output: `app/dist/<id>/` (installer, `.blockmap`, update file) and
-  `app/dist/<id>/win-unpacked/`.
+- `version` in `app/package.json`.
+- Output: `app/dist/app/`: the installer, its `.blockmap`, `latest.yml`,
+  `lote.yml` (a copy of `latest.yml`: the update channel LotE Stream Control
+  read before v2.3.0) and `win-unpacked/`.
+- The build stops when a profile fails to load or two profiles share a port or
+  data folder.
+- `build/dist.js` writes the installer script (`dist/app/installer.nsh`):
+  the Profile page from the profiles' `kind` and `name`, `--profile=<id>`,
+  the default kept across updates (`resources\default-profile.ini`), and the
+  removal of replaced apps.
 - A new top-level `.js` file in `app/` must be added to `build.files` in
   `app/package.json`.
 - Licensed font files must be present in `profiles/lote/assets/fonts/` on the
   build PC. The build warns about missing ones.
-- Release: one GitHub release tagged `v<version>` with, per profile, the
-  installer, its `.blockmap` and its update file (`latest.yml` for Widener,
-  `lote.yml` for LotE).
+- Release: one GitHub release tagged `v<version>` with the installer, its
+  `.blockmap`, `latest.yml` and `lote.yml`.
 
 ### Internals
 
@@ -536,19 +571,21 @@ New profile: copy `profiles/lote`, change `profile.json` (`port`,
 
 ```
 app/
-  main.js            Electron entry point, update checks
+  main.js            Electron entry point, profile choice, update checks
+  picker-preload.js  profile page API before a profile runs
   server.js          local server, match state, library, standings, WebSocket
-  profile.js         profile loading, /brand.js, /brand.css
+  profile.js         profile loading, profile list, /brand.js, /brand.css
   necc.js            LeagueOS: match import, seasons, standings
   obs.js             OBS: scene collection, scenes, stinger, music, program scene
   rlstats.js         Rocket League Stats API client
-  build/dist.js      one installer per profile
-  build/make-icon.js app icons
+  build/dist.js      the installer; removal of replaced apps
+  build/make-icon.js icons (app icon: build/icon-source.svg, icons/)
   build/make-stinger.js  drawn stinger video (transparent WebM)
   dev/mock-rlstats.js  mock Rocket League feed
   profiles/<id>/     profile.json, games.json, teams.json, assets, theme, icons
   templates/overlay.html   overlay page (all views, all profiles)
   public/control/    control panel
+  public/picker/     profile page
   public/overlay-assets/  shared fonts
 archive/             old per-game overlay files
 PROJECT_NOTES.md     design notes and history

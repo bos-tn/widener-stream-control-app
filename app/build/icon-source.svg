@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The app's own icon (v2.3.0): the installer, the exe and the profile
+       page. Each profile's window uses its own icon. Rendered to
+       icon-source.png by `npm run icons -- app`. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2840"/>
+      <stop offset="1" stop-color="#0a0e17"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="none" stroke="#33415c" stroke-width="8"/>
+  <g fill="#2c3850">
+    <rect x="300" y="250" width="40" height="524" rx="20"/>
+    <rect x="492" y="250" width="40" height="524" rx="20"/>
+    <rect x="684" y="250" width="40" height="524" rx="20"/>
+  </g>
+  <rect x="232" y="560" width="176" height="84" rx="24" fill="#eaf2ff"/>
+  <rect x="424" y="356" width="176" height="84" rx="24" fill="#4c8dff"/>
+  <rect x="616" y="472" width="176" height="84" rx="24" fill="#eaf2ff"/>
+</svg>

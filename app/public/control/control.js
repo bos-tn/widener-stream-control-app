@@ -73,6 +73,7 @@ function applyBrandText(root) {
 applyBrandText(document.body);
 document.title = BRAND.appName;
 if (BRAND.panelLogo) $id('brandLogo').src = BRAND.panelLogo;
+$id('profileKind').textContent = BRAND.kind === 'league' ? 'League profile' : 'Team profile';
 
 // --- Helpers -------------------------------------------------------------------
 
@@ -2493,24 +2494,41 @@ const OBS_SETTINGS_KEY = 'widener-obs-settings';
 let obsAutoConnect = false;
 let obsStatus = null;
 let obsChecked = false;
+// The installed app keeps one OBS connection for every profile
+// (/api/obs/saved, v2.3.0), so a profile switch keeps it. Page storage is
+// per port, so per profile: it is only used by `node server.js` on its own,
+// and an older copy in it moves to the app's store once.
+let obsShared = false;
 
-function loadObsSettings() {
+async function loadObsSettings() {
+  let s = null;
   try {
-    const s = JSON.parse(lsGet(OBS_SETTINGS_KEY)) || {};
-    if (s.host) obsHostInput.value = s.host;
-    if (s.port) obsPortInput.value = s.port;
-    if (typeof s.password === 'string') obsPassInput.value = s.password;
-    obsAutoConnect = !!s.autoConnect;
+    const r = await getJson('/api/obs/saved');
+    obsShared = !!r.shared;
+    s = r.saved || null;
   } catch (e) {}
+  let local = null;
+  try { local = JSON.parse(lsGet(OBS_SETTINGS_KEY)); } catch (e) {}
+  const moving = obsShared && !s && local;
+  s = s || local || {};
+  if (s.host) obsHostInput.value = s.host;
+  if (s.port) obsPortInput.value = s.port;
+  if (typeof s.password === 'string') obsPassInput.value = s.password;
+  obsAutoConnect = !!s.autoConnect;
+  if (moving) saveObsSettings();
+  else if (obsShared && local) lsSet(OBS_SETTINGS_KEY, '');
 }
 function saveObsSettings() {
-  lsSet(OBS_SETTINGS_KEY, JSON.stringify({
+  const s = {
     host: obsHostInput.value.trim(),
     port: parseInt(obsPortInput.value, 10) || 4455,
     // Convenience only, on this machine. Not committed, not logged.
     password: obsPassInput.value,
     autoConnect: obsAutoConnect,
-  }));
+  };
+  if (!obsShared) { lsSet(OBS_SETTINGS_KEY, JSON.stringify(s)); return; }
+  fetch('/api/obs/saved', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) }).catch(() => {});
+  lsSet(OBS_SETTINGS_KEY, '');
 }
 
 function renderObsStatus(st) {
@@ -2942,7 +2960,7 @@ currentStep = [new URLSearchParams(location.search).get('step'), lsGet(STEP_KEY)
 setPage(START_PAGE || 'live');
 showCountdownFields();
 $id('dockUrl').value = `${location.origin}/control`;
-loadObsSettings();
+const obsSettingsLoaded = loadObsSettings();
 renderNeccTypeList();
 renderStingerGuides();
 loadPrefs();
@@ -2957,7 +2975,7 @@ getJson('/games.json').then((data) => {
 
 // Reflect a connection that survived a panel reload, and connect by itself
 // if this machine has connected before (e.g. the app was just started).
-refreshObs(true).then((st) => {
+Promise.all([refreshObs(true), obsSettingsLoaded]).then(([st]) => {
   obsWasConnected = !!(st && st.connected);
   if (st && !st.connected && !st.reconnecting && obsAutoConnect) obsConnect(true);
   refreshStinger();

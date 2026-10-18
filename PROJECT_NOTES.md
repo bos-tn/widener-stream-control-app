@@ -1,15 +1,17 @@
 # Widener Esports Stream Control App: Project Notes
 
 Handoff doc for picking this up in a future session. Written at **v0.4.2**,
-updated through **v2.2.0**, which released the broadcast package built on the
-`test/widener-broadcast` branch (the design.1 to design.6 sections and the
-v2.2.0 release section, near the end). If you're
+updated through **v2.3.0** (one install for every profile; committed, not
+released; its section is near the end). v2.2.0 released the broadcast
+package built on the `test/widener-broadcast` branch (the design.1 to
+design.6 sections and the v2.2.0 release section). If you're
 starting a new chat, read the
 v2.0.0 section first: it changed the app's whole model (OBS first, one state,
 no Push Live), so much of the history below describes things that are gone.
 The later sections are a history: each one records why something is the way
 it is. v1.0.0 split everything league-specific into profiles (Widener and
-League of the East); read that section before touching the build.
+League of the East); v2.3.0 put every profile in one install that runs one
+at a time. Read both sections before touching the build or `main.js`.
 
 ## How the app worked in v0.9 to v1.0 (see v2.0.0 for what changed)
 
@@ -2469,7 +2471,7 @@ same steps as v2.1.0 (see its Release section).
 - **Not done:** an actual download and install from an installed 2.1.0 copy;
   the LotE build in a real OBS; an import through LotE's Match link pane.
 
-## State shape (server.js `DEFAULT_STATE`)
+## State shape (server.js `defaultState()`)
 
 ```js
 {
@@ -2788,6 +2790,202 @@ row in `bx.css` found more of the same. Fixed:
 - Both installers are in the user's Downloads folder.
 - **Not done:** an install from an installed 2.2.2 copy; any of this
   release's scene changes in real OBS.
+
+## v2.3.0: one install for every profile (not released)
+
+Each new team or league used to be a new installer, app id, product name,
+update channel and data folder (`build/dist.js` looped over the profiles).
+The next addition is another university. The user's decisions (2026-10-17):
+the app is **Esports Stream Control**; **one profile runs at a time**; the
+profile page reads "Choose a team or league profile", one list with a Teams
+section and a Leagues section; updates stay as automatic as possible and keep
+the profile chosen before.
+
+- **What stays per profile:** port (4310, 4320), OBS collection and prefix,
+  data folder. So every OBS browser source, dock and Stream Deck URL keeps
+  working. Serving every profile on one port under `/p/<id>/` was ruled out:
+  every page uses root-relative URLs (`/api/...`, `/ws`, `/brand.css`) and
+  every OBS source points at a profile's port.
+- **profile.json:** `kind` (`team` or `league`, the page's sections; default
+  team), `dataFolder` (Widener `widener-stream-overlay-app`, LotE
+  `lote-stream-control`: the folders their own apps used; default
+  `<id>-stream-control`), `replaces` (below). The `build` block is gone.
+- **Which profile opens (`main.js`):** `--profile=<id>`; else the
+  installer's default (below) when this user has not had that pick yet;
+  else `profile-choice.json` in Electron's own folder
+  (`%APPDATA%\widener-stream-overlay-app`, which is also Widener's data
+  folder); else the installer's default; else the profile whose
+  `state.json`, `settings.json` or `library.json` was written last; else the
+  profile page.
+- **Installer default profile** (the user, after testing the first build: "I
+  want the default profile to be selectable in the install so it never
+  opens the widener profile to a LotE member or other school player that
+  only needs one profile"). The installer has a Profile page after the
+  folder page, "Choose a team or league profile", Teams then Leagues, radio
+  buttons generated from the profiles by `dist.js`; nothing is preselected on
+  a first install and Install stays disabled until one is picked. Not shown
+  on an update (`--updated`). A silent install takes `--profile=<id>` (an
+  unknown id keeps what was there). The pick goes to
+  `resources\default-profile.ini` (`[profile] id`, `set` = when it was
+  picked). The old app's uninstaller removes `$INSTDIR` on every update, so
+  `customInit` reads the file before that and `customInstall` writes it back.
+  A first install with no pick that replaces an old one-profile app gets
+  that app's profile. `main.js` records the applied `set` in
+  `profile-choice.json` (`installSet`): a new pick opens once, then a switch
+  in the app sticks across updates. NSIS warnings stop the build (`-WX`), so
+  the page's variables are declared outside the uninstaller build and its
+  functions live in `customPageAfterChangeDir`, after nsDialogs and MUI2 are
+  included.
+- **OBS connection, one for the PC** (the user: "When switching profiles the
+  websocket password should move with it ... it didnt transfer over the first
+  time i switched"). The panel kept host, port, password and auto-connect in
+  its page storage, which is per origin, so per port, so per profile. Now
+  `main.js` keeps them in `obs-connection.json` in Electron's folder, the
+  password encrypted with `safeStorage` (DPAPI, this Windows user), passed to
+  the server as `opts.obsStore`; the panel reads and writes them at
+  `GET`/`PUT /api/obs/saved`. Those routes answer only when the Host is this
+  PC on this port and any Origin is this app (a page on another site that
+  points its DNS here gets 403). Older settings in a profile's page storage
+  move to the store the first time that panel loads; page storage is then
+  cleared. `node server.js` on its own has no store and keeps using page
+  storage. The choice is
+  written on every start; an update never touches `%APPDATA%`, so the updated
+  app reopens the same profile. The newest-data rule covers the first start
+  after an update from a one-profile app. `STREAM_APP_DATA` stands in for
+  `%APPDATA%` (Electron reads the real folder from Windows, not from the
+  environment variable).
+- **Profile page (`public/picker/`):** two ways in. From the app's files
+  before any profile runs: `picker-preload.js` gives `window.streamControl`,
+  and only to `file:` pages, so the panel and other http pages never get it.
+  At `/picker/` on a running server (Settings, Profile, **Change profile**):
+  `GET /api/app/profiles`, `POST /api/app/profile`. A switch confirms first
+  when OBS is streaming or recording (`obs.isLive()`), then `main.js` writes
+  the choice, `app.relaunch({ args: [..., '--profile=<id>'] })`, `app.quit()`;
+  `before-quit` still gives Rocket League its HUD back. A restart, not a swap
+  in place: the server's OBS connection, game feed, timers and open pages
+  belong to the old profile. `node server.js` on its own cannot restart:
+  `canSwitch: false`, and the page says to start it with `--profile`. A second
+  launch that names another profile asks to switch (one copy runs, so two
+  profiles never drive one OBS).
+- **server.js:** the profile is `opts.profile` of `createServer`. The
+  module-level `PROFILE`, `GAMES`, `DEFAULT_STATE`, `PAGE_STAMPS`, `BX_ON`
+  became `defaultState(profile)`, `pageStamps(profile)`,
+  `defaultViewText(bx)` and constants inside `createServer`. `node server.js`
+  takes `--profile` or `STREAM_PROFILE`, else widener. Exports
+  `{ createServer }` only.
+- **Installer:** product name Esports Stream Control, Widener's app id
+  `edu.widener.esports.streamcontrol`, package name
+  `widener-stream-overlay-app` kept (Electron's folder, Widener's data and the
+  updater cache `widener-stream-overlay-app-updater` stay where they are),
+  `Esports-Stream-Control-Setup-<version>.exe`, output `dist/app/`, channel
+  `latest`. A neutral app icon (`build/icon-source.svg`, `npm run icons --
+  app`, into `icons/`) for the exe, installer and profile page; each
+  profile's window takes its own `icon-256.png`. `dist.js` stops on a profile
+  that fails to load or two profiles sharing a port or data folder.
+- **Widener in place:** same app id, new product name. The old version's
+  uninstaller is not given `--keep-shortcuts` (the new exe name does not
+  exist yet), so it removes `Widener Esports Stream Control.lnk` and the new
+  installer makes `Esports Stream Control.lnk`; the install folder comes from
+  the registry and is kept.
+- **LotE (`replaces` in its profile.json):** `dist.js` copies `latest.yml`
+  to `lote.yml`, so an old LotE install downloads this installer as its
+  update. `dist.js` also writes `dist/app/installer.nsh` (`nsis.include`):
+  - `customInstall`: the old app's uninstall key (its GUID is UUID v5 of its
+    app id in electron-builder's namespace, as in `NsisTarget.js`) under HKCU,
+    and under HKLM when the installer runs as admin. Skipped while
+    `LotE Stream Control.exe` runs, since its uninstaller would kill it,
+    perhaps mid-stream; the next update tries again. Otherwise a copy of its
+    uninstaller runs with `/S /KEEP_APP_DATA <mode> --updated _?=<dir>`, the
+    call electron-builder's own `uninstallOldVersion` makes. Its shortcuts
+    go; `%APPDATA%\lote-stream-control` stays (no `--delete-app-data`).
+  - `customInit`: a first install on a PC where the old app is installed for
+    all users installs for all users too, so the silent update elevates (as
+    the old app's own updates did) and can remove it.
+- **Shortcuts the installers don't own:** the exe is renamed
+  (`Esports Stream Control.exe`), so a shortcut the operator copied or a
+  taskbar pin still points at `Widener Esports Stream Control.exe` or
+  `LotE Stream Control.exe`, which are gone. On every start the installed app
+  (`fixOldShortcuts` in `main.js`) looks through this user's desktop, Start
+  menu and taskbar pins (two folder levels) for a `.lnk` whose target is a
+  profile's `<appName>.exe` and no longer exists, and points it at itself with
+  `--profile=<that profile>`, keeping its AppUserModelID. Shared shortcuts
+  (Public desktop, ProgramData Start menu) are the installers' and need
+  admin. A test run (`STREAM_APP_DATA`) leaves the real desktop alone.
+- The Widener install folder keeps its old name (`C:\Program Files\Widener
+  Esports Stream Control`): an update installs where the registry says.
+
+Checks (2026-10-18):
+- `npm run test:broadcast`: 116 passed.
+- Electron startup through CDP, `STREAM_APP_DATA` in the scratchpad, on the
+  dev app and on the packaged exe: 19 passed each. Fresh start opens the
+  profile page from the app's files with its API; Teams before Leagues; both
+  profiles; choosing LotE opens 4320, saves the choice, makes
+  `lote-stream-control`; a switch through the server restarts into Widener
+  on 4310 and 4320 stops; the next start opens the saved choice; no choice
+  and newer LotE data opens LotE; `--profile` wins.
+- Package: both LotE fonts in, no `local.json`, package name
+  `widener-stream-overlay-app`, no productName in the packaged
+  `package.json`, `app-update.yml` with no channel.
+- Replaced-app removal, per user, with a test pair built from this tree
+  (test app ids and names, `LotE Migration Test` and `Stream Control
+  Migration Test`): 13 passed. The old app stays while a process with its
+  image name runs; the next silent update removes its uninstall entry,
+  folder and both shortcuts; its data folder stays.
+- Widener rename in place, test app id: 12 passed (same folder, new exe, old
+  shortcut gone, new desktop and Start menu shortcuts, one uninstall entry,
+  data kept).
+- `/picker/` and Settings, Profile on `node server.js` in the browser pane.
+- `fixOldShortcuts` on the packaged exe with stand-in shortcuts under
+  `STREAM_APP_DATA`: 5 passed (a pin and a Start menu subfolder shortcut to
+  missing old exes retargeted with their profiles; one to an old exe that
+  exists, one to another program, and the real desktop untouched).
+- **The real install on the dev PC**, with the user approving the UAC
+  prompt. Before: Widener 2.2.0-design.6 and LotE 2.0.0-rc.1, both for all
+  users (HKLM, Program Files, Public desktop and ProgramData Start menu
+  shortcuts), plus the user's own copy `Desktop\Desk\Widener Esports Stream
+  Control.lnk`. Data folders backed up first (no montages, music or caches).
+  `Esports-Stream-Control-Setup-2.3.0.exe --updated /S`, as the updater runs
+  it: elevated, done in 66 s. After: one HKLM entry, `Esports Stream Control
+  2.3.0`, in `C:\Program Files\Widener Esports Stream Control` with only the
+  new exe; LotE's uninstall entry, registry key and Program Files folder gone;
+  all four old shared shortcuts gone, `Esports Stream Control.lnk` on the
+  Public desktop and in the ProgramData Start menu; both data folders
+  unchanged file for file (SHA-256). Then the installed app: 13 passed. With
+  no saved choice the first start opened Widener (its `state.json`,
+  2026-10-12, newer than LotE's, 2026-10-05) on 4310, saved the choice, read
+  Widener's team library; the user's `Desk` shortcut now targets the new exe
+  with `--profile=widener`; a switch to LotE restarted on 4320 with LotE's
+  library, and back; a normal close quit it.
+
+- After the profile page and the shared OBS connection (2026-10-18, second
+  build): `test:broadcast` 116; startup on the packaged exe 19; OBS
+  connection 11 each on the dev app, the packaged exe, and with the settings
+  starting in page storage (LotE connects to the mock OBS, the saved file
+  holds the password encrypted, page storage empty, foreign Host 403, switch
+  to Widener connects by itself with the same host, port and password);
+  installer default in `main.js` 9 (default over newer Widener data, a
+  switch sticks, a new pick opens once, `--profile` wins, UTF-16 ini, an
+  unknown id ignored); installer default with the per-user test pair 9
+  (`--profile` written, kept by an update with the same stamp, replaced by a
+  new `--profile`, an unknown one ignored, a first install replacing the old
+  app gets its profile, none otherwise). The Profile page itself, driven
+  through window messages (UI Automation sees NSIS controls as panes with no
+  patterns, and a `SendMessage` click blocks inside the next page's message
+  loop, so clicks are posted, and Next is `WM_COMMAND` 1 to the window):
+  both sections, nothing picked and Install disabled on a first install, one
+  check across both sections, Install enabled after a pick; installed with
+  League of the East picked and Run unticked, the ini read `id=lote`.
+  `GetTime` does not pad every field, so the stamp has separators
+  (`2026.10.18T14.11.4`).
+- The dev PC still runs the first 2.3.0 build (no Profile page, OBS
+  connection per profile). The second build is in `dist/app/` and in the
+  user's Downloads.
+
+**Not done:** a first install on a PC with only the old LotE app installed
+for all users (`customInit` switching to all users; the dev PC had Widener's
+own install, so it took the in-place path). Also not done: the second-launch
+switch dialog, an update from GitHub end to end (needs the release), the
+release itself.
 
 ## Known gaps / things not yet done
 

@@ -8,19 +8,13 @@ const { importMatch, listSeasons, pickSeason, seasonStandings } = require('./nec
 const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
-const { profileId, loadProfile, clientBrand, brandCss } = require('./profile');
+const { profileId, loadProfile, listProfileCards, clientBrand, brandCss } = require('./profile');
 const { createBroadcast } = require('./broadcast');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
+const PICKER_DIR = path.join(__dirname, 'public', 'picker');
 const APP_VERSION = require('./package.json').version;
-
-// The league this build is for (see profile.js): its games, colours, art,
-// OBS scene names and defaults.
-const PROFILE = loadProfile(profileId());
-const GAMES = PROFILE.games;
-
-const DEFAULT_SOCIAL = PROFILE.socialHandle;
 
 // A stamp of the pages this build serves, so a page left open across an app
 // update can tell it is the old one. OBS keeps every scene's browser source
@@ -33,18 +27,15 @@ function pageStamp(files) {
   files.filter(Boolean).forEach((f) => { try { h.update(fs.readFileSync(f)); } catch (e) { h.update('missing'); } });
   return h.digest('hex').slice(0, 12);
 }
-const PROFILE_FILE = path.join(PROFILE.dir, 'profile.json');
 const OVERLAY_ASSETS_DIR = path.join(__dirname, 'public', 'overlay-assets');
-const PAGE_STAMPS = {
-  overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), path.join(OVERLAY_ASSETS_DIR, 'bx.js'), path.join(OVERLAY_ASSETS_DIR, 'bx.css'),
-    PROFILE.theme, PROFILE.themeScript, PROFILE_FILE]),
-  panel: pageStamp(['index.html', 'control.js', 'control.css', 'broadcast.js', 'broadcast.css'].map((f) => path.join(CONTROL_DIR, f)).concat(PROFILE_FILE)),
-};
-
-// The broadcast package (see broadcast.js): on for a profile with a
-// `broadcast` block.
-const BX_ON = PROFILE.broadcast.enabled;
-const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`));
+function pageStamps(profile) {
+  const profileFile = path.join(profile.dir, 'profile.json');
+  return {
+    overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), path.join(OVERLAY_ASSETS_DIR, 'bx.js'), path.join(OVERLAY_ASSETS_DIR, 'bx.css'),
+      profile.theme, profile.themeScript, profileFile]),
+    panel: pageStamp(['index.html', 'control.js', 'control.css', 'broadcast.js', 'broadcast.css'].map((f) => path.join(CONTROL_DIR, f)).concat(profileFile)),
+  };
+}
 
 function emptyTeam() {
   return { name: '', tag: '', color: '', colorAlt: '', logoUrl: '', players: [] };
@@ -56,8 +47,8 @@ function emptyTeam() {
 // locked scene rendered the single shared title, so switching scenes in OBS
 // showed the previous view's text until someone pushed again.
 // Everything else (socials, logo, montage, rosters, countdown) stays global -
-// only these three vary per view.
-function defaultViewText() {
+// only these three vary per view. bx: the profile's broadcast options.
+function defaultViewText(bx) {
   const out = {
     'starting-soon': { title: 'Stream Starting Soon', subtitle: '', status: 'Starting Soon' },
     'post-match': { title: 'Thanks for Watching', subtitle: '', status: 'Stream Ending Soon' },
@@ -72,10 +63,10 @@ function defaultViewText() {
   };
   // The broadcast package's scenes: the week's matches, the matchup, and one
   // per camera (its label, the place, the badge).
-  if (BX_ON) {
+  if (bx.enabled) {
     out.schedule = { title: 'This Week', subtitle: '', status: '' };
     out.versus = { title: 'Tonight', subtitle: '', status: 'Matchup' };
-    PROFILE.broadcast.cameras.forEach((c) => { out[`cam-${c.id}`] = { title: c.title, subtitle: c.subtitle, status: 'Live' }; });
+    bx.cameras.forEach((c) => { out[`cam-${c.id}`] = { title: c.title, subtitle: c.subtitle, status: 'Live' }; });
   }
   return out;
 }
@@ -129,8 +120,8 @@ function normalizeScoreboard(raw) {
   return out;
 }
 
-function normalizeViews(raw, parent) {
-  const out = defaultViewText();
+function normalizeViews(raw, parent, bx) {
+  const out = defaultViewText(bx);
   if (raw && typeof raw === 'object') {
     if (raw.smash && !raw.scoreboard) raw = { ...raw, scoreboard: raw.smash };
     Object.keys(out).forEach((k) => {
@@ -153,7 +144,8 @@ function normalizeViews(raw, parent) {
   return out;
 }
 
-const DEFAULT_STATE = {
+// What a new install shows, from the profile's defaults and social handle.
+const defaultState = (profile) => ({
   mode: 'starting-soon',
   game: '',
   team: '',
@@ -170,7 +162,7 @@ const DEFAULT_STATE = {
   layout: 'right',
   clip: '',
   logo: '',
-  montage: PROFILE.defaults.montage !== false,
+  montage: profile.defaults.montage !== false,
   neccUrl: '',
   neccType: '',
   // Branded backdrop behind transparent league overlays (vs flat black)
@@ -185,41 +177,33 @@ const DEFAULT_STATE = {
   // profile has more than one. Empty means the profile's default.
   headlineFont: '',
   socials: {
-    twitch: DEFAULT_SOCIAL,
-    twitter: DEFAULT_SOCIAL,
-    instagram: DEFAULT_SOCIAL,
-    youtube: DEFAULT_SOCIAL,
+    twitch: profile.socialHandle,
+    twitter: profile.socialHandle,
+    instagram: profile.socialHandle,
+    youtube: profile.socialHandle,
   },
   teamA: emptyTeam(),
   teamB: emptyTeam(),
-  views: defaultViewText(),
+  views: defaultViewText(profile.broadcast),
   scoreboard: defaultScoreboard(),
-};
+});
 
-function initialState() {
-  return {
-    ...DEFAULT_STATE,
-    socials: { ...DEFAULT_STATE.socials },
-    teamA: emptyTeam(),
-    teamB: emptyTeam(),
-    views: defaultViewText(),
-    scoreboard: defaultScoreboard(),
-    backgrounds: {},
-    end: new Date(Date.now() + DEFAULT_STATE.durationSec * 1000).toISOString(),
-  };
+function initialState(profile) {
+  const s = defaultState(profile);
+  return { ...s, end: new Date(Date.now() + s.durationSec * 1000).toISOString() };
 }
 
-function normalizeLoaded(raw) {
+function normalizeLoaded(raw, profile) {
   if (!raw || typeof raw.mode !== 'string') return null;
   const out = {
-    ...initialState(),
+    ...initialState(profile),
     ...raw,
-    socials: { ...DEFAULT_STATE.socials, ...raw.socials },
+    socials: { ...defaultState(profile).socials, ...raw.socials },
     teamA: { ...emptyTeam(), ...raw.teamA },
     teamB: { ...emptyTeam(), ...raw.teamB },
     // State files written before v0.7.2 have no `views` at all; merging over
     // fresh defaults gives them the per-view text without losing anything.
-    views: normalizeViews(raw.views, raw),
+    views: normalizeViews(raw.views, raw, profile.broadcast),
     scoreboard: normalizeScoreboard(raw),
     backgrounds: raw.backgrounds && typeof raw.backgrounds === 'object' ? { ...raw.backgrounds } : {},
     headlineFont: typeof raw.headlineFont === 'string' ? raw.headlineFont : '',
@@ -260,10 +244,21 @@ function readJsonSafe(file) {
   return null;
 }
 
+// opts.profile: the team or league profile this server runs (see profile.js);
+// without one, the profile named on the command line (dev), else Widener.
 // dataDir defaults to app/data for standalone `node server.js` use in dev.
-// The packaged Electron app passes app.getPath('userData') instead, since the
-// app's own install directory lives inside a read-only asar archive.
+// The packaged Electron app passes the profile's folder in %APPDATA% instead,
+// since the app's own install directory lives inside a read-only asar archive.
+// opts.onProfileChange(id): how this app switches profile (main.js restarts
+// it); without it the panel can only list them.
 function createServer(port, opts = {}) {
+  const PROFILE = opts.profile || loadProfile(profileId() || 'widener');
+  const GAMES = PROFILE.games;
+  const PAGE_STAMPS = pageStamps(PROFILE);
+  // The broadcast package (see broadcast.js): on for a profile with a
+  // `broadcast` block.
+  const BX_ON = PROFILE.broadcast.enabled;
+  const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`));
   // In dev, each league other than Widener keeps its own app/data/<id>.
   // STREAM_DATA_DIR points a dev run at another folder (the design demo).
   const dataDir = opts.dataDir || process.env.STREAM_DATA_DIR || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
@@ -302,7 +297,7 @@ function createServer(port, opts = {}) {
   }
   const persisted = readJsonSafe(stateFile) || {};
   // From a v1 file, what was on stream (live) is the state to keep.
-  let state = normalizeLoaded(persisted.live) || normalizeLoaded(persisted.draft) || initialState();
+  let state = normalizeLoaded(persisted.live, PROFILE) || normalizeLoaded(persisted.draft, PROFILE) || initialState(PROFILE);
 
   function countdownSeconds(s) {
     const n = Number(s.durationSec);
@@ -943,6 +938,23 @@ function createServer(port, opts = {}) {
   app.get('/api/games', (req, res) => res.json(GAMES));
   app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }));
 
+  // Team and league profiles (/picker): every profile in this install, the
+  // one running, and whether this app can switch (main.js restarts it in the
+  // other profile, with that profile's port and data folder).
+  app.use('/picker', express.static(PICKER_DIR));
+  app.get('/api/app/profiles', async (req, res) => {
+    res.json({ profiles: listProfileCards(), current: PROFILE.id, live: await obs.isLive(), canSwitch: !!opts.onProfileChange, version: APP_VERSION });
+  });
+  app.post('/api/app/profile', (req, res) => {
+    const id = String((req.body || {}).id || '');
+    if (!listProfileCards().some((p) => p.id === id)) return res.status(400).json({ error: 'Unknown profile' });
+    if (id === PROFILE.id) return res.json({ restarting: false });
+    if (!opts.onProfileChange) return res.status(501).json({ error: `Restart with --profile=${id}` });
+    res.json({ restarting: true });
+    // After the reply is out: the restart closes this server.
+    setTimeout(() => opts.onProfileChange(id), 200);
+  });
+
   app.get('/overlay', (req, res) => {
     // OBS's embedded Chromium (CEF) will happily cache this page indefinitely
     // otherwise, which makes edits look "stuck" until the source is manually
@@ -1320,6 +1332,34 @@ function createServer(port, opts = {}) {
     catch (err) { res.json({ ...obs.status(), error: err.message || String(err) }); }
   });
 
+  // The saved OBS connection, the same for every profile (opts.obsStore,
+  // main.js). It holds the password, so only this app's own pages may read or
+  // change it: the Host must be this PC (a page on another site pointed here
+  // by its DNS gets 403) and an Origin, when sent, must be this app.
+  // `node server.js` on its own has no store: the panel keeps the connection
+  // in its page storage.
+  function ownPage(req) {
+    const host = String(req.headers.host || '').toLowerCase();
+    return [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`].includes(host) && remoteAllowed(req);
+  }
+  app.get('/api/obs/saved', (req, res) => {
+    if (!ownPage(req)) return res.status(403).json({ error: 'Not from this app' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ shared: !!opts.obsStore, saved: opts.obsStore ? opts.obsStore.load() : null });
+  });
+  app.put('/api/obs/saved', (req, res) => {
+    if (!ownPage(req)) return res.status(403).json({ error: 'Not from this app' });
+    if (!opts.obsStore) return res.status(501).json({ error: 'No shared store' });
+    const b = req.body || {};
+    opts.obsStore.save({
+      host: String(b.host || '').trim().slice(0, 255),
+      port: Math.max(1, Math.min(65535, parseInt(b.port, 10) || 4455)),
+      password: typeof b.password === 'string' ? b.password.slice(0, 1024) : '',
+      autoConnect: !!b.autoConnect,
+    });
+    res.json({ saved: true });
+  });
+
   app.post('/api/obs/connect', async (req, res) => {
     try {
       updateMusic();
@@ -1421,6 +1461,9 @@ function createServer(port, opts = {}) {
   // For the app as it quits: drops the game feed, and says whether the game
   // was sent its HUD back (main.js then waits a moment before exiting).
   server.releaseGame = () => rl.close();
+  // Whether OBS is streaming or recording, for main.js before it switches
+  // profile.
+  server.isLive = () => obs.isLive();
 
   // OBS opened before the app leaves every scene's page on Chromium's error
   // page: nothing was listening when OBS asked for it, and it does not try
@@ -1556,9 +1599,9 @@ function createServer(port, opts = {}) {
   return server;
 }
 
-module.exports = { createServer, GAMES, PROFILE };
+module.exports = { createServer };
 
 if (require.main === module) {
-  const port = process.env.PORT || PROFILE.port;
-  createServer(port);
+  const profile = loadProfile(profileId() || 'widener');
+  createServer(process.env.PORT || profile.port, { profile });
 }

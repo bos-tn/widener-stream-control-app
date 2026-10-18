@@ -185,6 +185,7 @@ input:focus, select:focus, button:focus-visible{outline:2px solid var(--focus); 
   padding:8px 14px; border-radius:8px; cursor:pointer; font:inherit; font-size:.82rem; font-weight:600;
 }
 .btn-secondary:hover{background:var(--btn-hover)}
+a.btn-secondary{ display:inline-block; text-decoration:none; }
 .btn-secondary:disabled, .btn-accent:disabled{opacity:.5; cursor:not-allowed}
 .btn-accent{ background:var(--brand-primary); border-color:var(--brand-primary); color:#fff; }
 .btn-accent:hover:not(:disabled){ filter:brightness(1.1); }

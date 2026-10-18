@@ -1,5 +1,7 @@
 {
   "id": "lote",
+  "kind": "league",
+  "dataFolder": "lote-stream-control",
   "name": "League of the East",
   "shortName": "LotE",
   "appName": "LotE Stream Control",
@@ -93,10 +95,9 @@
   },
   "theme": "theme.css",
   "themeScript": "theme.js",
-  "build": {
+  "replaces": {
     "appId": "edu.widener.esports.lotestreamcontrol",
-    "artifactName": "LotE-Stream-Control-Setup-${version}.${ext}",
-    "channel": "lote",
-    "packageName": "lote-stream-control"
+    "appName": "LotE Stream Control",
+    "channel": "lote"
   }
 }

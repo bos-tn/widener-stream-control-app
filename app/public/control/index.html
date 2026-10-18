@@ -519,6 +519,14 @@
     <!-- ========================== SETTINGS ========================== -->
     <div class="page" data-page="settings" hidden>
 
+      <!-- The team or league profile this app runs (v2.3.0). Another one
+           restarts the app in it (/picker/). -->
+      <section class="card">
+        <div class="card-head"><h2>Profile</h2></div>
+        <p class="card-text"><b id="profileName">{{name}}</b> · <span id="profileKind"></span></p>
+        <a class="btn-secondary" href="/picker/">Change profile</a>
+      </section>
+
       <section class="card">
         <div class="card-head"><h2>Setup</h2></div>
         <p class="card-text">OBS connection, scene build, stinger transition, highlight videos.</p>

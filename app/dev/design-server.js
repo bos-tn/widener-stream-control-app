@@ -22,7 +22,9 @@ if (!process.env.WIDENER_RL_PORT) process.env.WIDENER_RL_PORT = '49199';
 if (process.argv.includes('--fresh')) fs.rmSync(dataDir, { recursive: true, force: true });
 if (require('./demo').seed(dataDir)) console.log(`Demo data written to ${dataDir}`);
 
-const { createServer, PROFILE } = require('../server');
+const { createServer } = require('../server');
+const { profileId, loadProfile } = require('../profile');
+const profile = loadProfile(profileId() || 'widener');
 const port = Number(process.env.PORT) || 4313;
-createServer(port);
-console.log(`${PROFILE.name} design review: http://localhost:${port}/showcase`);
+createServer(port, { profile });
+console.log(`${profile.name} design review: http://localhost:${port}/showcase`);

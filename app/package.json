@@ -1,18 +1,17 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "private": true,
-  "description": "Esports stream overlay control app, one build per league profile",
+  "description": "Esports stream overlay control app: one install for every team and league profile",
   "main": "main.js",
   "author": "Widener University Esports",
   "scripts": {
     "start": "electron .",
+    "start:widener": "electron . --profile=widener",
     "start:lote": "electron . --profile=lote",
     "server": "node server.js",
     "server:lote": "node server.js --profile=lote",
     "dist": "node build/dist.js",
-    "dist:widener": "node build/dist.js widener",
-    "dist:lote": "node build/dist.js lote",
     "icons": "electron build/make-icon.js",
     "stinger": "electron build/make-stinger.js",
     "design": "node dev/design-server.js",
@@ -31,12 +30,13 @@
   },
   "build": {
     "appId": "edu.widener.esports.streamcontrol",
-    "productName": "Widener Esports Stream Control",
+    "productName": "Esports Stream Control",
     "directories": {
-      "output": "dist"
+      "output": "dist/app"
     },
     "files": [
       "main.js",
+      "picker-preload.js",
       "server.js",
       "necc.js",
       "obs.js",
@@ -46,18 +46,19 @@
       "broadcast.js",
       "package.json",
       "templates/**/*",
+      "icons/**/*",
       "public/**/*",
       "profiles/**/*",
       "!profiles/*/local.json"
     ],
     "win": {
       "target": "nsis",
-      "icon": "profiles/widener/icons/icon.ico"
+      "icon": "icons/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Widener-Esports-Stream-Control-Setup-${version}.${ext}"
+      "artifactName": "Esports-Stream-Control-Setup-${version}.${ext}"
     },
     "publish": [
       {

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esports Stream Control</title>
+<link rel="stylesheet" href="picker.css">
+</head>
+<body>
+  <!-- Team and league profiles (v2.3.0): see picker.js. Opened from the
+       app's files before any profile runs, or at /picker/ on a running
+       profile's server (Settings, Profile). -->
+  <header class="bar">
+    <span class="app-name">Esports Stream Control</span>
+    <span class="app-version" id="version"></span>
+    <a class="back" id="back" href="/control/" hidden>Control panel</a>
+  </header>
+  <main class="wrap">
+    <h1>Choose a team or league profile</h1>
+    <p class="lead">One profile runs at a time. Each has its own OBS scenes, settings and team library.</p>
+    <div id="list"></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="picker.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ under Scenes. Their files go in this folder:
 | `Zentras.ttf` | Zentras (Alit Design) | Blackletter, set in upper and lower case. The file from the designer's free download is marked "personal use only"; a league broadcast needs the full licence from alitdesign.net. |
 
 Neither file is in this repository (see `.gitignore`): their licences don't
-allow passing them on. Before building the LotE installer, copy them here;
+allow passing them on. Before building the installer, copy them here;
 `npm run dist` names any that are missing.
 
 Without a file everything still works. A typeface whose file is missing is

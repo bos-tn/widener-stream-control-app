@@ -1,0 +1,59 @@
+/* The profile page: no profile's brand applies here, so it keeps the
+   panel's own fallback colours. */
+:root{
+  --bg:#0a0e17;
+  --panel:#131a29;
+  --panel-hover:#1a2336;
+  --border:#242e42;
+  --text:#eaf2ff;
+  --muted:#9fb0cc;
+  --accent:#4c8dff;
+  --ok:#3ddc84;
+  --bad:#ff9a9d;
+}
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif; }
+
+.bar{
+  display:flex; align-items:baseline; gap:10px;
+  padding:14px 20px; border-bottom:1px solid var(--border);
+}
+.app-name{ font-weight:800; font-size:1rem; }
+.app-version{ font-size:.78rem; color:var(--muted); }
+.back{ margin-left:auto; font-size:.86rem; color:var(--muted); text-decoration:none; }
+.back::before{ content:'\2190\00a0'; }
+.back:hover{ color:var(--text); }
+
+.wrap{ max-width:640px; margin:0 auto; padding:40px 16px 48px; }
+h1{ margin:0 0 6px; font-size:1.5rem; font-weight:800; }
+.lead{ margin:0 0 28px; font-size:.9rem; color:var(--muted); line-height:1.5; }
+
+.group{ margin:0 0 24px; }
+.group h2{
+  margin:0 0 10px; font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent);
+}
+.items{ display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+
+.item{
+  display:flex; align-items:center; gap:14px; width:100%;
+  padding:12px 14px; border-radius:12px; cursor:pointer; text-align:left;
+  background:var(--panel); border:1px solid var(--border); color:var(--text); font:inherit;
+}
+.item:hover:not(:disabled){ background:var(--panel-hover); border-color:#33415c; }
+.item:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.item:disabled{ cursor:default; opacity:.6; }
+.item img{ width:44px; height:44px; object-fit:contain; border-radius:8px; flex-shrink:0; }
+.item .ph{ width:44px; height:44px; border-radius:8px; flex-shrink:0; background:var(--border); }
+.item .text{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.item .name{ font-size:1rem; font-weight:700; }
+.item .meta{ font-size:.82rem; color:var(--muted); }
+.item .tag{
+  margin-left:auto; padding:2px 9px; border-radius:999px; flex-shrink:0;
+  font-size:.66rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+  background:rgba(61,220,132,.14); color:var(--ok);
+}
+
+.status{ min-height:1.4em; margin:8px 0 0; font-size:.86rem; color:var(--muted); }
+.status.error{ color:var(--bad); }

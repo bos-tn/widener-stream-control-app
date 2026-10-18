@@ -1,11 +1,14 @@
-// League profiles (v1.0.0). One codebase serves several leagues: everything
-// that belongs to one league (name, colours, logos, stinger, games, member
-// schools, OBS scene names, port, installer identity) lives in profiles/<id>/profile.json and its
-// assets folder, and each installer is built with exactly one profile inside.
+// Team and league profiles (v1.0.0; one install for all of them since
+// v2.3.0). One codebase serves several teams and leagues: everything that
+// belongs to one (name, colours, logos, stinger, games, member schools, OBS
+// scene names, port, data folder) lives in profiles/<id>/profile.json and its
+// assets folder. The installer carries every profile; the app runs one at a
+// time.
 //
-// Which profile runs: `--profile=<id>` on the command line (dev), the
-// STREAM_PROFILE environment variable, or `streamProfile` in package.json,
-// which build/dist.js writes into each installer. Default: widener.
+// Which profile runs: `--profile=<id>` on the command line or the
+// STREAM_PROFILE environment variable (profileId), else main.js picks: the
+// one used last, the one with the newest data on this PC, or the operator's
+// choice on the profile page (public/picker).
 
 const fs = require('fs');
 const path = require('path');
@@ -46,9 +49,10 @@ function cameraLinkKind(link) {
 // local: profiles/<id>/local.json, `{ "cameras": { "<camera id>": "<address>" } }`.
 // Addresses on the organisation's own network are kept there and not in
 // profile.json: that file is in the public repository, local.json is not
-// (.gitignore), and it is left out of an installer (build/dist.js). It is
-// for dev runs on that PC; an installed app's operator types the addresses
-// in once (Broadcast, Cameras), and they are kept in its data folder.
+// (.gitignore), and it is left out of the installer (build.files in
+// package.json). It is for dev runs on that PC; an installed app's operator
+// types the addresses in once (Broadcast, Cameras), and they are kept in its
+// data folder.
 function broadcastOptions(raw, local) {
   if (!raw || typeof raw !== 'object') return { enabled: false, scenes: [], cameras: [] };
   const cameras = (Array.isArray(raw.cameras) ? raw.cameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '')).slice(0, 4)
@@ -86,15 +90,39 @@ function headlineFonts(raw, assetsDir) {
   };
 }
 
-function profileId() {
-  const arg = process.argv.find((a) => a.startsWith('--profile='));
+// The profile named on the command line (or in argv, for a second launch's
+// arguments) or in STREAM_PROFILE; '' when none is.
+function profileId(argv = process.argv) {
+  const arg = argv.find((a) => String(a).startsWith('--profile='));
   if (arg) return arg.slice('--profile='.length);
-  if (process.env.STREAM_PROFILE) return process.env.STREAM_PROFILE;
-  try { return require('./package.json').streamProfile || 'widener'; } catch (e) { return 'widener'; }
+  return process.env.STREAM_PROFILE || '';
 }
 
 function listProfiles() {
   return fs.readdirSync(PROFILES_DIR).filter((d) => fs.existsSync(path.join(PROFILES_DIR, d, 'profile.json')));
+}
+
+// A team (a school's or club's own stream) or a league (a league's broadcast,
+// its member schools' teams in its library). The profile page lists them
+// apart.
+const KINDS = ['team', 'league'];
+
+// What the profile page shows for each profile, teams first. A profile that
+// fails to load is left out (and logged), so one broken folder never hides
+// the others.
+function listProfileCards() {
+  const cards = [];
+  listProfiles().forEach((id) => {
+    try {
+      const p = loadProfile(id);
+      let icon = '';
+      try { icon = `data:image/png;base64,${fs.readFileSync(path.join(p.iconsDir, 'icon-128.png')).toString('base64')}`; } catch (e) { /* no icon */ }
+      cards.push({ id: p.id, kind: p.kind, name: p.name, shortName: p.shortName, league: p.league.name, icon });
+    } catch (e) {
+      console.error(`Profile "${id}" left out: ${e.message}`);
+    }
+  });
+  return cards.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || a.name.localeCompare(b.name));
 }
 
 // Reads and checks one profile. Missing optional parts get safe defaults, so
@@ -130,8 +158,23 @@ function loadProfile(id) {
   const teams = fs.existsSync(teamsFile)
     ? JSON.parse(fs.readFileSync(teamsFile, 'utf8')).filter((t) => t && t.id && t.name)
     : [];
+  // The profile's data folder in %APPDATA% (settings, teams, saved matches,
+  // downloads). Widener's and LotE's are the folders their own apps used
+  // before v2.3.0, so their data carries over.
+  const dataFolder = String(raw.dataFolder || `${id}-stream-control`);
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(dataFolder)) throw new Error(`Profile "${id}": bad dataFolder "${dataFolder}"`);
+  // An app from before v2.3.0 that held only this profile, which the
+  // installer removes and replaces (build/dist.js): its app id, the name its
+  // executable and shortcuts had, and its update channel.
+  const r = raw.replaces || null;
+  const replaces = r && r.appId && r.appName && r.channel
+    ? { appId: String(r.appId), appName: String(r.appName), channel: String(r.channel) }
+    : null;
   const p = {
     id,
+    kind: KINDS.includes(raw.kind) ? raw.kind : 'team',
+    dataFolder,
+    replaces,
     name: raw.name || id,
     shortName: raw.shortName || raw.name || id,
     appName: raw.appName || `${raw.name || id} Stream Control`,
@@ -163,7 +206,6 @@ function loadProfile(id) {
     music: raw.music && raw.music.driveId ? raw.music : null,
     defaults: raw.defaults || {},
     theme: raw.theme && fs.existsSync(path.join(dir, raw.theme)) ? path.join(dir, raw.theme) : '',
-    build: raw.build || {},
     dir,
     assetsDir,
     iconsDir: path.join(dir, 'icons'),
@@ -178,6 +220,7 @@ function clientBrand(p) {
   const url = (f) => (f ? `/brand/${encodeURIComponent(f)}` : '');
   return {
     id: p.id,
+    kind: p.kind,
     name: p.name,
     shortName: p.shortName,
     appName: p.appName,
@@ -256,4 +299,4 @@ function brandCss(p) {
   return `/* ${p.name}: generated from profiles/${p.id}/profile.json */\n:root{\n${lines.join('\n')}\n}\n${faces.join('')}`;
 }
 
-module.exports = { PROFILES_DIR, profileId, listProfiles, loadProfile, clientBrand, brandCss, cameraLink, cameraLinkKind };
+module.exports = { PROFILES_DIR, profileId, listProfiles, listProfileCards, loadProfile, clientBrand, brandCss, cameraLink, cameraLinkKind };
