@@ -10,6 +10,8 @@ const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
 const { profileId, loadProfile, listProfileCards, clientBrand, brandCss } = require('./profile');
 const { createBroadcast } = require('./broadcast');
+const seriesEngine = require('./series');
+const seriesRules = require('./series-rules');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const CONTROL_DIR = path.join(__dirname, 'public', 'control');
@@ -31,9 +33,9 @@ const OVERLAY_ASSETS_DIR = path.join(__dirname, 'public', 'overlay-assets');
 function pageStamps(profile) {
   const profileFile = path.join(profile.dir, 'profile.json');
   return {
-    overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), path.join(OVERLAY_ASSETS_DIR, 'bx.js'), path.join(OVERLAY_ASSETS_DIR, 'bx.css'),
+    overlay: pageStamp([path.join(TEMPLATES_DIR, 'overlay.html'), path.join(OVERLAY_ASSETS_DIR, 'series-board.js'), path.join(OVERLAY_ASSETS_DIR, 'series-board.css'), path.join(OVERLAY_ASSETS_DIR, 'bx.js'), path.join(OVERLAY_ASSETS_DIR, 'bx.css'),
       profile.theme, profile.themeScript, profileFile]),
-    panel: pageStamp(['index.html', 'control.js', 'control.css', 'broadcast.js', 'broadcast.css'].map((f) => path.join(CONTROL_DIR, f)).concat(profileFile)),
+    panel: pageStamp(['index.html', 'control.js', 'control.css', 'series-control.js', 'series-setup.js', 'series-control.css', 'broadcast.js', 'broadcast.css'].map((f) => path.join(CONTROL_DIR, f)).concat(profileFile)),
   };
 }
 
@@ -85,7 +87,7 @@ function defaultViewText(bx) {
 // the boost meter. The rl* flags turn its parts on and off; rlHideHud has the
 // app turn the game's own HUD off for a spectator while the board is in use.
 const SCOREBOARD_POSITIONS = ['top', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
-const SCOREBOARD_STYLES = ['standard', 'rl'];
+const SCOREBOARD_STYLES = ['standard', 'rl', 'valorant', 'overwatch', 'rivals', 'league', 'siege', 'cod'];
 function defaultScoreboard() {
   return {
     round: '',
@@ -258,7 +260,7 @@ function createServer(port, opts = {}) {
   // The broadcast package (see broadcast.js): on for a profile with a
   // `broadcast` block.
   const BX_ON = PROFILE.broadcast.enabled;
-  const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`));
+  const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`), PROFILE.broadcast.cameraGroup ? ['camera-group'] : []);
   // In dev, each league other than Widener keeps its own app/data/<id>.
   // STREAM_DATA_DIR points a dev run at another folder (the design demo).
   const dataDir = opts.dataDir || process.env.STREAM_DATA_DIR || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
@@ -293,11 +295,29 @@ function createServer(port, opts = {}) {
   // { live, draft } shape, both the same, so an older version can still read
   // it after a downgrade.
   function savePersisted() {
-    writeJsonSafe(stateFile, { live: state, draft: state });
+    writeJsonSafe(stateFile, { live: state, draft: state, seriesUndo });
   }
   const persisted = readJsonSafe(stateFile) || {};
   // From a v1 file, what was on stream (live) is the state to keep.
   let state = normalizeLoaded(persisted.live, PROFILE) || normalizeLoaded(persisted.draft, PROFILE) || initialState(PROFILE);
+  let seriesUndo = Array.isArray(persisted.seriesUndo) ? persisted.seriesUndo.slice(-20) : [];
+  const managedSeries = () => !!seriesEngine.gameRules(state.game) && !!state.series;
+  function projectSeries() {
+    state.series.config = { ...seriesRules.defaults(state.game), ...state.series.config };
+    const wins = seriesEngine.scores(state.series);
+    state.series.canUndo = seriesUndo.length > 0;
+    state.series.rules = seriesEngine.gameRules(state.game, state.series.config);
+    state.series.exclusions = Object.fromEntries(['A', 'B'].map((t) => [t, seriesRules.exclusions(state.series, t)]));
+    state.scoreboard = { ...state.scoreboard, scoreA: wins.A, scoreB: wins.B, swap: state.series.leftTeam === 'B',
+      bestOf: state.series.bestOf, unit: state.series.rules.unit || 'Map', showStocks: false, style: state.series.rules.style };
+  }
+  if (seriesEngine.gameRules(state.game)) {
+    state.series = seriesEngine.restoreSeries(state.series, state.game, state.scoreboard.bestOf, { A: state.scoreboard.scoreA, B: state.scoreboard.scoreB });
+    // Move migrated companion boards away from the native top HUD.
+    if (!persisted.live?.series && !persisted.draft?.series) state.scoreboard.position = 'bottom-left';
+    projectSeries();
+    savePersisted();
+  } else { state.series = null; seriesUndo = []; }
 
   function countdownSeconds(s) {
     const n = Number(s.durationSec);
@@ -307,6 +327,17 @@ function createServer(port, opts = {}) {
   function updateState(partial) {
     const target = state;
     const next = { ...partial };
+    // Records and their counters may only be changed by versioned commands.
+    delete next.series;
+    const gameChanged = next.game !== undefined && next.game !== target.game;
+    const requestedScoreboard = { ...(partial.scoreboard || {}) };
+    if (managedSeries() && !gameChanged) ['scoreA', 'scoreB', 'swap', 'bestOf', 'style', 'unit', 'showStocks'].forEach((k) => delete requestedScoreboard[k]);
+    if (gameChanged && seriesEngine.gameRules(next.game)) {
+      // A newly selected game starts its own record rather than inheriting
+      // Rocket League/Smash/another game's series totals.
+      state.series = seriesEngine.createSeries(next.game, partial.scoreboard?.bestOf || (['ow', 'mr', 'cod'].includes(next.game) ? 5 : 3));
+      seriesUndo = [];
+    }
     delete next.restartCountdown;
     // The countdown only restarts when it is actually changed: a new length,
     // a switch into "count down from now", or an explicit restart (the panel's
@@ -331,8 +362,10 @@ function createServer(port, opts = {}) {
       views: partial.views ? mergeViews(target.views, partial.views) : target.views,
       neccUrls: partial.neccUrls ? { ...partial.neccUrls } : target.neccUrls,
       backgrounds: partial.backgrounds ? { ...target.backgrounds, ...partial.backgrounds } : target.backgrounds,
-      scoreboard: partial.scoreboard ? { ...target.scoreboard, ...partial.scoreboard } : target.scoreboard,
+      scoreboard: partial.scoreboard ? { ...target.scoreboard, ...requestedScoreboard } : target.scoreboard,
     };
+    if (managedSeries()) projectSeries();
+    else if (gameChanged) { state.series = null; seriesUndo = []; }
     savePersisted();
     return state;
   }
@@ -348,6 +381,7 @@ function createServer(port, opts = {}) {
   const COUNTERS = ['scoreA', 'scoreB', 'lostA', 'lostB', 'swap'];
   function applyScore(sb) {
     if (!sb || typeof sb !== 'object') return;
+    if (managedSeries()) return; // Legacy absolute counters cannot erase map history.
     const picked = {};
     COUNTERS.forEach((k) => { if (sb[k] !== undefined) picked[k] = sb[k]; });
     const decided = (s) => {
@@ -543,7 +577,7 @@ function createServer(port, opts = {}) {
   // The LeagueOS graphics a scene can be made for, in the order their scenes
   // sit in OBS: the ones for before the match first, then the ones for
   // during it.
-  const NECC_TYPES = [
+  const ALL_NECC_TYPES = [
     { key: 'matchPreview', label: 'Match Preview' },
     { key: 'matchRosters', label: 'Match Rosters' },
     { key: 'stageBracket', label: 'Bracket' },
@@ -551,13 +585,16 @@ function createServer(port, opts = {}) {
     { key: 'matchProgress', label: 'Match Progress' },
     { key: 'matchActivity', label: 'Match Activity' },
   ];
+  const NECC_TYPES = ALL_NECC_TYPES.filter((t) => !PROFILE.leagueGraphics.exclude.includes(t.key));
   const obs = createObs({
     getOverlayBase: () => `http://localhost:${port}`,
     prefix: PROFILE.obs.prefix,
     collection: PROFILE.obs.collection || `${PROFILE.shortName} Stream`,
     stingerName: `${PROFILE.shortName} Stinger`,
-    allNeccTypes: NECC_TYPES,
-    allCameras: PROFILE.broadcast.cameras,
+    allNeccTypes: ALL_NECC_TYPES,
+    allCameras: PROFILE.broadcast.cameras.concat(PROFILE.broadcast.retiredCameras || []),
+    retiredCameraIds: (PROFILE.broadcast.retiredCameras || []).map((c) => c.id),
+    allCameraGroup: PROFILE.broadcast.cameraGroup,
     onConnected: () => { setTimeout(reloadMissingPages, PAGE_CHECK_MS).unref(); },
     onProgram: (p) => {
       if (p.key !== 'stats') autoStatsUp = false;
@@ -598,11 +635,12 @@ function createServer(port, opts = {}) {
   // which league graphics and league scenes get an OBS scene, whether the
   // Scoreboard scene gets a game capture, whether setup turns on OBS Studio
   // Mode, and whether the setup guide has run.
-  const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
+  const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'].filter((key) => NECC_TYPES.some((t) => t.key === key));
   const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'gameAudio', 'casterMics', 'studioMode', 'orderScenes'];
   const onlyLeagueScenes = (list) => PROFILE.leagueScenes.filter((s) => list.includes(s));
   function panelPrefs() {
     const p = appSettings.panel || {};
+    const migrateMessiahCams = PROFILE.id === 'messiah' && Array.isArray(p.bxScenes) && p.cameraPrefsVersion !== 2;
     return {
       neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t)) : DEFAULT_NECC_TYPES.slice(),
       // The league's own scenes: all of them until the operator unticks one.
@@ -620,7 +658,8 @@ function createServer(port, opts = {}) {
       // A build puts the app's scenes in stream order in OBS's list.
       orderScenes: p.orderScenes !== false,
       // The broadcast package's scenes: all of them until one is unticked.
-      bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k)) : BX_SCENE_KEYS.slice(),
+      bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k) ||
+        (migrateMessiahCams && (k === 'camera-group' || PROFILE.broadcast.cameras.some((c) => k === `cam-${c.id}`)))) : BX_SCENE_KEYS.slice(),
     };
   }
   function savePanelPrefs(patch) {
@@ -629,7 +668,7 @@ function createServer(port, opts = {}) {
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
     if (Array.isArray(patch.bxScenes)) next.bxScenes = BX_SCENE_KEYS.filter((k) => patch.bxScenes.includes(k));
-    appSettings = { ...appSettings, panel: next };
+    appSettings = { ...appSettings, panel: { ...next, ...(PROFILE.id === 'messiah' ? { cameraPrefsVersion: 2 } : {}) } };
     writeJsonSafe(settingsFile, appSettings);
     sendToPanels({ type: 'prefs', prefs: next });
     syncLayout();
@@ -647,7 +686,10 @@ function createServer(port, opts = {}) {
       includeStats: state.scoreboard.style === 'rl',
       leagueScenes: prefs.leagueScenes,
       broadcastScenes: PROFILE.broadcast.scenes.filter((k) => prefs.bxScenes.includes(k)),
-      cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`)),
+      // Keep optional solo scenes and the group independent. Automation also
+      // needs the player sources, even when every optional camera is unticked.
+      cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`) || (c.player && bx && bx.settings().playerCams.on)),
+      cameraGroup: PROFILE.broadcast.cameraGroup && prefs.bxScenes.includes('camera-group') ? PROFILE.broadcast.cameraGroup : null,
       // Which cameras are network cameras, and where (see broadcast.js).
       cameraLinks: bx ? bx.cameraLinks() : {},
       gameCapture: prefs.gameCapture,
@@ -665,7 +707,7 @@ function createServer(port, opts = {}) {
   let layoutKey = '';
   function syncLayout(quiet) {
     const o = buildOptions();
-    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id), o.cameraLinks]);
+    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id), o.cameraGroup, o.cameraLinks]);
     if (key === layoutKey) return;
     layoutKey = key;
     obs.setLayout(o);
@@ -766,6 +808,7 @@ function createServer(port, opts = {}) {
     documentsDir: opts.documentsDir,
     port: opts.rlPort || Number(process.env.WIDENER_RL_PORT) || null,
     onSnapshot: (snap) => {
+      if (bx) bx.onRl(snap);
       sendToAll({ type: 'rl', rl: snap });
       const key = snap.status + ':' + snap.inMatch;
       if (key !== lastRlMusicKey) { lastRlMusicKey = key; updateMusic(); }
@@ -986,6 +1029,33 @@ function createServer(port, opts = {}) {
     res.json(state);
   });
 
+  app.post('/api/series', (req, res) => {
+    if (!ownPage(req)) return res.status(403).json({ error: 'Not from this app' });
+    if (!managedSeries()) return res.status(400).json({ error: 'Map controls are unavailable for this game.' });
+    const command = req.body || {};
+    const before = state.series;
+    if (command.seriesId !== before.id || command.revision !== before.revision) {
+      return res.status(409).json({ error: 'This series changed in another panel. Review the latest state and try again.', state });
+    }
+    try {
+      const wasFinal = seriesEngine.decided(before);
+      let next;
+      if (command.action === 'undo') {
+        if (!seriesUndo.length) throw new Error('There is no series change to undo.');
+        next = { ...seriesUndo.pop(), revision: before.revision + 1 };
+        if (before.needsReview) next.needsReview = true;
+      } else {
+        next = seriesEngine.changeSeries(before, command);
+        if (command.action === 'reset' && command.newMatch === true) seriesUndo = [];
+        else { seriesUndo.push(before); seriesUndo = seriesUndo.slice(-20); }
+      }
+      state = { ...state, series: next };
+      projectSeries(); savePersisted(); syncLayout(); broadcastState();
+      if (bx) { bx.onState(); if (!wasFinal && seriesEngine.decided(next)) bx.alertSeriesFinal(); }
+      res.json({ ok: true, state });
+    } catch (err) { res.status(400).json({ error: err.message }); }
+  });
+
   // Local media passthrough. The control panel's Browse buttons store the
   // logo/clip as plain filesystem paths, but the overlay is an http page and
   // Chromium blocks file:// subresources from it - so the overlay requests
@@ -1160,7 +1230,11 @@ function createServer(port, opts = {}) {
       reply(res, {});
     });
     app.post('/api/bx/lower', (req, res) => reply(res, bx.setLower(req.body || {})));
-    app.post('/api/bx/settings', (req, res) => reply(res, bx.setSettings(req.body || {})));
+    app.post('/api/bx/settings', (req, res) => {
+      const out = bx.setSettings(req.body || {});
+      syncLayout(); // Mark camera scenes that need a build after a setting change.
+      reply(res, out);
+    });
     app.post('/api/bx/follows', async (req, res) => {
       try { reply(res, await bx.follow(String((req.body || {}).url || ''), (req.body || {}).league, { all: !!(req.body || {}).all })); }
       catch (err) { res.status(502).json({ error: err.message || 'Could not read that link' }); }
@@ -1196,6 +1270,8 @@ function createServer(port, opts = {}) {
       if (out.error) return res.status(400).json(out);
       syncLayout(true);
       const applied = await obs.applyCamera(String(req.params.id)).catch((err) => 'error: ' + ((err && err.message) || 'OBS refused'));
+      // A source-kind change replaces the gameplay item; restore its window.
+      bx.applyPipRects();
       res.json({ ok: true, ...out, applied });
     });
     app.post('/api/bx/cameras/:id/device', async (req, res) => {
@@ -1241,6 +1317,7 @@ function createServer(port, opts = {}) {
   }
 
   function remoteScore(team, action) {
+    if (managedSeries()) return { error: 'Use the versioned /api/series map controls. Legacy score buttons cannot change map records.' };
     const T = team === 'b' ? 'B' : team === 'a' ? 'A' : '';
     const sb = state.scoreboard;
     const total = (Number(sb.crewSize) || 4) * (Number(sb.stocksEach) || 3);
@@ -1383,6 +1460,7 @@ function createServer(port, opts = {}) {
     try {
       updateMusic();
       const out = await obs.buildScenes(buildOptions());
+      if (bx) bx.applyPipRects(); // Restore windows already requested before their sources existed.
       let stinger = null;
       try { stinger = await configureStinger(); } catch (e) { stinger = { found: false, error: e.message }; }
       res.json({ ...out, stinger });
@@ -1552,7 +1630,8 @@ function createServer(port, opts = {}) {
         const data = { ...(msg.data || {}) };
         PROGRAM_FIELDS.forEach((k) => delete data[k]);
         const gameBefore = state.game;
-        updateState(data);
+        try { updateState(data); }
+        catch (err) { ws.send(JSON.stringify({ type: 'error', error: err.message })); broadcastState(); return; }
         if (state.game !== gameBefore) refreshStandings(state.game).catch(() => {});
         wantMontage(state.game);
         updateRlActive();
@@ -1564,6 +1643,8 @@ function createServer(port, opts = {}) {
 
       // Scoreboard counters (see applyScore).
       if (msg.type === 'score') {
+        if (ws.role !== 'panel') return;
+        if (managedSeries()) { ws.send(JSON.stringify({ type: 'error', error: 'Use the map controls to change map results.' })); broadcastState(); return; }
         applyScore(msg.scoreboard);
         broadcastState();
         return;

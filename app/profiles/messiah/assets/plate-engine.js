@@ -213,14 +213,14 @@
       glow(ctx,960,530,700,C.blue,.12);
     }
   }
-  function hardline(ctx,n,t){
+  function hardline(ctx,n,t,options={}){
     // Motifs echo existing profile backgrounds: word rows,
     // repeating mark pattern, varsity rails, and pride tape. Extracted PDF
     // artwork is drawn intact; no new Falcon geometry is fabricated.
     if(n===1){
       glow(ctx,1500,500,850,C.blue,.24);
       for(let i=0;i<17;i++){let x=i*160-280+45*wave(t,1,i*.02);poly(ctx,[[x,-100],[x+14,-100],[x+650,1180],[x+635,1180]],rgba(i%5===0?C.white:C.blue,i%5===0?.085:.035),null);}
-      mark(ctx,falcon,1450,550,980,.13);
+      if(options.showMark!==false)mark(ctx,falcon,options.markX||1510,390,650,.24);
     }else if(n===2){
       word(ctx,'MESSIAH',-170,280,320,.075);word(ctx,'ESPORTS',500,955,300,.07);
       for(let i=0;i<7;i++){let y=110+i*145,dx=80*wave(t,1,i*.08);word(ctx,'FALCONS',i%2?-300+dx:1050+dx,y,100,.045,true);}
@@ -241,7 +241,7 @@
     }else if(n===6){
       for(let i=0;i<11;i++){const y=70+i*110;line(ctx,0,y,W,y,rgba(i%3?C.blue:C.white,.08),i%3?3:7);}
       glow(ctx,1540,460,750,C.blue,.19);
-      mark(ctx,esportsWordmark,1040,500,1550,.12);
+      if(options.showMark!==false)mark(ctx,esportsWordmark,options.markX||1510,390,660,.3);
     }else if(n===7){
       for(let y=0;y<24;y++)for(let x=0;x<38;x++){const a=.025+.04*(.5+.5*wave(t,1,(x+y)*.01));ctx.fillStyle=rgba((x+y)%11?C.blue:C.white,a);ctx.fillRect(x*52+8,y*48+8,10,10);}
       for(let i=0;i<20;i++){const y=i*58+10;line(ctx,0,y,W,y,rgba(C.white,.035),1);}
@@ -254,7 +254,7 @@
       glow(ctx,1440,510,710,C.blue,.24);
     }
   }
-  function draw(ctx,plate,seconds,width,height){
+  function draw(ctx,plate,seconds,width,height,options){
     const t=((seconds%8)+8)%8/8;
     ctx.setTransform(width/W,0,0,height/H,0,0);ctx.clearRect(0,0,W,H);
     base(ctx,plate,t);
@@ -264,7 +264,7 @@
     else if(plate.family==='Arena')arena(ctx,v,t);
     else if(plate.family==='Campus')campus(ctx,v,t);
     else if(plate.family==='Signal')signal(ctx,v,t);
-    else if(plate.family==='Hardline')hardline(ctx,Number(plate.id)-24,t);
+    else if(plate.family==='Hardline')hardline(ctx,Number(plate.id)-24,t,options);
     else unity(ctx,v,t);
     finish(ctx);
     ctx.setTransform(1,0,0,1,0,0);

@@ -15,6 +15,32 @@
   let cams = { connected: false, cameras: [] };
   let editing = '';   // id of the typed-in match in the form, '' for a new one
 
+  const rlPicker = $id('rlCamPicker');
+  if (BRAND.broadcast.cameraGroup) {
+    const select = $id('rlCamSelect');
+    select.appendChild(new Option('Off', ''));
+    BRAND.broadcast.cameras.forEach((c) => select.appendChild(new Option(c.label, c.id)));
+    select.addEventListener('change', async () => {
+      const id = select.value;
+      const active = (bx && bx.cams || []).find((c) => c.pip);
+      if (!id && active) await post('/api/bx/cam', { id: active.id, pip: false });
+      else if (id) await post('/api/bx/cam', { id, pip: true });
+    });
+    $id('rlCamGroupBtn').textContent = `Put ${BRAND.broadcast.cameraGroup.label} on air`;
+    $id('rlCamGroupBtn').addEventListener('click', () => switchScene('camera-group'));
+  }
+  function renderRlCamPicker() {
+    rlPicker.hidden = !BRAND.broadcast.cameraGroup || !state || state.scoreboard.style !== 'rl';
+    if (rlPicker.hidden) return;
+    $id('rlCamSelect').value = ((bx && bx.cams || []).find((c) => c.pip) || {}).id || '';
+    $id('rlCamSelect').disabled = !cams.connected || !!(bx && bx.settings.playerCams.on);
+    $id('rlCamSelect').title = bx && bx.settings.playerCams.on ? 'Opened by the Player cameras setting' : '';
+    $id('rlCamHint').textContent = bx && bx.settings.playerCams.on
+      ? 'Player cameras follow the home player POV. Goal replays show all three; change automation under Broadcast, Cameras.'
+      : "Choose the camera for the observer's current player. Only one player window shows at a time.";
+    $id('rlCamGroupBtn').disabled = !cams.connected;
+  }
+
   function call(method, url, body) {
     return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
       .then((r) => r.json()).catch(() => ({ error: 'App not reachable' }));
@@ -313,7 +339,7 @@
   const set = (patch) => post('/api/bx/settings', patch);
   const CHECKS = [
     ['bxTickerOn', 'ticker', 'on'], ['bxTickerCams', 'ticker', 'cams'], ['bxTickerGame', 'ticker', 'gameplay'],
-    ['bxAlertAuto', 'alerts', 'auto'], ['bxAlertEdit', 'alerts', 'onEdit'], ['bxAlertSeries', 'alerts', 'series'], ['bxAlertGame', 'alerts', 'gameplay'],
+    ['bxPlayerCams', 'playerCams', 'on'], ['bxAlertAuto', 'alerts', 'auto'], ['bxAlertEdit', 'alerts', 'onEdit'], ['bxAlertSeries', 'alerts', 'series'], ['bxAlertGame', 'alerts', 'gameplay'],
   ];
   CHECKS.forEach(([id, group, key]) => $id(id).addEventListener('change', (e) => set({ [group]: { [key]: e.target.checked } })));
   $id('bxScope').addEventListener('change', (e) => set({ scope: e.target.value }));
@@ -328,6 +354,9 @@
     const s = bx.settings;
     CHECKS.forEach(([id, group, key]) => setVal($id(id), s[group][key]));
     setVal($id('bxScope'), s.scope);
+    const hasPlayers = bx.cams.some((c) => c.player);
+    $id('bxPlayerCamsBox').hidden = !hasPlayers;
+    $id('bxPlayerCamsNote').textContent = hasPlayers && s.playerCams.on ? 'On. Windows follow Rocket League. Build scenes if the panel lists missing player scenes; the Player Cams timeout scene stays separate.' : '';
     setVal($id('bxAlertPos'), s.alerts.pos);
     setVal($id('bxAlertSeconds'), s.alerts.seconds);
     setVal($id('bxPipPos'), s.pip.pos);
@@ -408,6 +437,7 @@
   function renderCams() {
     const box = $id('bxCamList');
     if (!bx) return;
+    renderRlCamPicker();
     // A field or device list in use is not rebuilt under the pointer.
     if (box.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement.tagName)) return;
     box.textContent = '';
@@ -416,7 +446,7 @@
       const net = !!c.link;
       const row = el('div', 'bx-cam' + (c.pip ? ' on' : ''));
       const head = el('div', 'bx-cam-head');
-      head.append(el('b', '', c.label));
+      head.append(el('b', '', c.player && c.tab !== c.label ? `${c.label} (${c.tab})` : c.label));
       const inObs = !cams.connected ? 'OBS not connected' : !info.exists ? 'Source missing. Build scenes.' : '';
       if (net) {
         const live = info.link === c.link ? info.live : null;
@@ -464,14 +494,23 @@
         });
         controls.appendChild(sel);
       }
+      const auto = c.player && bx.settings.playerCams.on;
       const win = button(c.pip ? 'Hide window' : 'Show window', c.pip ? 'btn-accent' : 'btn-secondary', () => post('/api/bx/cam', { id: c.id, pip: !c.pip }));
       win.title = 'Camera window over the game, on the Scoreboard scene';
       const air = button('Put scene on air', 'btn-secondary', () => switchScene('cam-' + c.id));
       air.disabled = !cams.connected;
+      win.disabled = auto;
+      if (auto) win.title = 'Opened by the Player cameras setting';
       controls.append(win, air);
       row.append(head, linkRow, controls);
       box.appendChild(row);
     });
+    if (BRAND.broadcast && BRAND.broadcast.cameraGroup) {
+      const group = BRAND.broadcast.cameraGroup;
+      const air = button(`Put ${group.label} on air`, 'btn-secondary', () => switchScene('camera-group'));
+      air.disabled = !cams.connected;
+      box.appendChild(air);
+    }
     $id('bxCamStatus').textContent = cams.connected ? '' : 'Camera sources, device lists and camera windows need OBS.';
   }
   // A network camera's signal is checked while the page is open.
@@ -510,7 +549,7 @@
       if (msg.type === 'scenes') refreshCams();
     },
     // The match state changed (control.js renderAll).
-    render() { renderPlayers(); fillLists(); },
+    render() { renderPlayers(); fillLists(); renderRlCamPicker(); },
   };
 
   refreshCams();

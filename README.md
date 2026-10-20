@@ -184,7 +184,7 @@ Scoreboard has none. Changes apply immediately.
 | --- | --- | --- |
 | Widener | Moving Stripes, Varsity Stripes, Shutters, W Shine, Pride Lions, Pride Tape, Floodlights, Speed Lines | Starting Soon: Varsity Stripes. This Week and Be Right Back: Floodlights. Matchup: Speed Lines. Rosters: Shutters. Post-Match: Pride Tape. League graphics: Pride Lions. Rocket League Stats: Moving Stripes |
 | LotE | Mark Shine, Word Rows, Mark Pattern, Curtains | Starting Soon and league graphics: Mark Shine. Be Right Back and Standings: Curtains. Rosters and Rocket League Stats: Mark Pattern. Post-Match and Head to Head: Word Rows |
-| Messiah | 30 Wordmark Flood, 25 Ghost Falcon, 08 Tailwind, 01 Prism Current, 05 Wing Wake | Starting Soon: 25. Be Right Back: 30. Matchup and Post-Match: 08. Rosters and This Week: 01. Rocket League Stats: 05 |
+| Messiah | 30 Wordmark Flood, 25 Ghost Falcon, 08 Tailwind, 01 Prism Current, 05 Wing Wake | Starting Soon: 25. Be Right Back: 30. Matchup and Post-Match: 08. Rosters and This Week: 01. Rocket League Stats: 05. The scene framing, type, masthead and scoreboard have a Messiah-specific glass and circular treatment. |
 
 Widener draws the Rocket League Stats background at 50% opacity.
 
@@ -233,9 +233,11 @@ or removes them.
   - **Clear all** removes every followed link and the matches read from them
     (typed-in matches stay). **Default feed** replaces them with the
     profile's own feed (`broadcast.follow` in `profile.json`; Widener: its
-    NECC school page, home team's matches only). Both have **Undo**.
+    NECC school page; Messiah: its NECC and LotE calendars; both show the
+    home team's matches only). Both have **Undo**.
   - A new install starts on the default feed. An install that already follows
-    something keeps it.
+    something keeps it. Messiah's calendar update adds both school calendars
+    to existing installs while keeping their other follows and saved matches.
   - Seasons are read two at a time, every 90 s while a match is due or in
     progress, otherwise every 15 min. Team logos are downloaded once.
 - **Matches**: Monday to Sunday, from the league feed and from **Add match
@@ -255,6 +257,33 @@ or removes them.
 - **Cameras**: per camera a network address or a device, its signal,
   **Show window** (camera over the game on the Scoreboard scene), **Put
   scene on air**, window position and size.
+
+### Player cameras
+
+For a profile with a player camera group (Messiah), **Broadcast > Cameras >
+Player cameras** follows Rocket League automatically. It is off by default.
+
+- Cameras 1 to 3 follow the home team's roster order. The home team's name
+  contains the profile's `homeTeam`; the spectated player's name is matched
+  to a roster gamertag first, then a player name, ignoring case.
+- While spectating a home player in a match, only that player's camera window
+  opens. An opponent or no match closes it. During a goal replay all three
+  stack on the left, first player on top; after replay only the POV camera stays.
+- Automatic windows use the bottom left at 384 x 216, above the ticker reserve,
+  with the roster gamertag on the frame. A change must hold for 250 ms.
+- With automation on, **Show window** and the Live page's **Player POV camera**
+  selector are disabled for player cameras. Turning it off closes their windows
+  and returns the manual controls and window position/size settings.
+- Turning it on includes all three solo camera scenes and their sources in a
+  scene build. **Build scenes** when the panel marks a difference. Turning it off
+  returns to the optional scene choices under Match > Details. A selected
+  **Player Cams** group can still be built on its own for timeouts; it uses the
+  same camera sources and does not enable unticked solo scenes.
+
+Enter each camera's link or device under Cameras and keep each seat in roster
+order. Needs the Rocket League scoreboard, the Stats API connection and the
+home roster (filled by a match import or entered manually). Checked with mock
+OBS and a stand-in Stats API; a live game, OBS and camera signals remain unverified.
 
 ### Cameras in OBS
 
@@ -308,7 +337,11 @@ league score change.
 ## Profiles
 
 The Messiah profile uses the broadcast package with five selected Canvas plates,
-its own logo assets and stinger. See [its profile notes](app/profiles/messiah/README.md)
+its own logo assets and stinger. Its scene layout has a vertical identity spine,
+offset translucent panes, fixture cards and horizontal lineup benches. Its three player cameras follow Rocket League POV and goal replays when
+Player cameras is on, or use the Live page's Player POV camera selector when
+it is off. The Player Cams timeout scene shows all three together.
+It excludes the LeagueOS Match Preview and uses the Matchup scene. See [its profile notes](app/profiles/messiah/README.md)
 for the scene defaults and asset provenance.
 
 | | Widener | LotE |
@@ -499,6 +532,17 @@ OBS: Docks > Custom Browser Docks, URL `http://localhost:4310/control`.
 
 ## Development
 
+Version 2.5.0 scoreboard work on `codex/scoreboard-overhaul`: shared map records,
+series controls, corrections and undo, with six game-specific companion boards: VALORANT, Overwatch, Marvel Rivals,
+League of Legends, Rainbow Six Siege and Call of Duty, enabled in each profile's
+supported game list. They include mode schedules, draws, remakes, side mapping,
+optional draft/bans, Siege overtime/rehosts and Call of Duty title/season rules. See [the implementation notes](docs/scoreboard-implementation.md)
+for operation, demo ports and verification details. `npm run design:scoreboard`
+starts an isolated VALORANT demo on port 4396; add `-- widener ow` for Overwatch
+on port 4391. Other demo game IDs: `mr` (4392), `lol` (4393), `r6` (4394),
+`cod` (4395). `npm run test:series` and
+`npm run test:series:visual -- <output-folder> <game>` verify it without live OBS.
+
 Requires [Node.js](https://nodejs.org/) 18 or newer.
 
 ```bash
@@ -516,6 +560,12 @@ npm run icons         # icons from profiles/<id>/icon-source.png and build/icon-
 npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
 npm run design        # demo server for the broadcast package, http://localhost:4313/showcase
 npm run test:broadcast    # checks against a mock OBS
+npm run test:feed         # weekly feed defaults, migration and offline retry
+npm run test:playercams   # player camera automation, mock OBS and Stats API
+npm run test:stats-entrance # stats hidden off air; OBS entrance and fallback in Electron
+npm run test:messiah      # Messiah camera geometry, sources and scene migration
+npm run test:messiah:visual -- <output-folder> # Electron render review, isolated data
+npm run test:headlines    # headline sizing on load and during OBS scene entrances
 ```
 
 `npm start` uses the installed app's data folders. `STREAM_APP_DATA=<folder>`
@@ -527,7 +577,7 @@ stands in for `%APPDATA%`.
 
 | File | Contents |
 | --- | --- |
-| `profile.json` | `kind` (`team` or `league`, the profile page's sections), names, port, `dataFolder` (folder in `%APPDATA%`), OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (optional: `scenes`, `cameras` with id, label, title, subtitle and optional `url`, `follow`), defaults, `replaces` (optional: an app from before v2.3.0 that held only this profile; app id, name, update channel) |
+| `profile.json` | `kind` (`team` or `league`, the profile page's sections), names, port, `dataFolder` (folder in `%APPDATA%`), OBS scene prefix, `league` (name, import hint, `site` and LeagueOS `id` for standings), home team, colours, asset file names, stinger (file, transition point in ms, track matte), music track, `leagueScenes`, `backgrounds` (list and per-view defaults), `headlineFonts` (list and default), `broadcast` (optional: `scenes`, `cameras` with id, label, title, subtitle and optional `url`, `cameraGroup` (camera ids and frames; defines player cameras), `follow`), defaults, `replaces` (optional: an app from before v2.3.0 that held only this profile; app id, name, update channel) |
 | `games.json` | Games: id, name, scoreboard preset, highlight video, `leagueActivity` (LeagueOS activity ids), `scoreName` |
 | `teams.json` | Optional member schools (id, name, short name, colours, logo), preloaded into the team library |
 | `assets/` | Logo, panel logo, mascot, watermark, stinger video, `teams/` logos, `fonts/` |
@@ -544,6 +594,9 @@ The next `npm run dist` includes it, in the installer's Profile page too.
 ### Build and release
 
 - `version` in `app/package.json`.
+- Set `STREAM_BUILD_OUTPUT=dist/messiah-review` for a separate candidate build.
+  GitHub builds use `latest.yml` even for prerelease versions. Keep candidate
+  artifacts separate from a stable release's files.
 - Output: `app/dist/app/`: the installer, its `.blockmap`, `latest.yml`,
   `lote.yml` (a copy of `latest.yml`: the update channel LotE Stream Control
   read before v2.3.0) and `win-unpacked/`.

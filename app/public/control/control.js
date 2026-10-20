@@ -50,7 +50,7 @@ const BX = BRAND.broadcast || null;
 const BX_SCENES = BX ? [
   { key: 'schedule', label: 'This Week', note: 'matches this week' },
   { key: 'versus', label: 'Matchup', note: 'both teams, before the match' },
-].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' }))) : [];
+].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' })), BX.cameraGroup ? [{ key: 'camera-group', label: BX.cameraGroup.label, note: 'three player feeds together for timeouts' }] : []) : [];
 // The typefaces the scene headlines can be set in, for a league with several.
 const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
 
@@ -253,9 +253,9 @@ const NECC_TYPES = [
   { key: 'seasonHeader', label: 'Season Header' },
   { key: 'matchProgress', label: 'Match Progress' },
   { key: 'matchActivity', label: 'Match Activity' },
-];
+].filter((t) => !(BRAND.leagueGraphics && BRAND.leagueGraphics.exclude || []).includes(t.key));
 let prefs = {
-  neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
+  neccTypes: NECC_TYPES.filter((t) => ['stageBracket', 'matchPreview'].includes(t.key)).map((t) => t.key), leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
   setupDone: false, guideV2: false, gameCapture: true, gameAudio: true, casterMics: false, studioMode: false, orderScenes: true,
 };
 let prefsLoaded = false;
@@ -899,6 +899,7 @@ neccFetchBtn.addEventListener('click', async () => {
     const res = await fetch('/api/necc/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Import failed');
+    if (window.seriesPanel?.supports(state) && !await window.seriesPanel.newMatch(data.bestOf)) return;
     rosters.A = importToRoster(data.teams[0]);
     rosters.B = importToRoster(data.teams[1]);
     rosterDirty.A = rosterDirty.B = false;
@@ -1187,6 +1188,8 @@ function matchData() {
     countdownMode: s.countdownMode, logo: s.logo, clip: s.clip, montage: s.montage, layout: s.layout,
     postMatchSec: s.postMatchSec, neccUrls: s.neccUrls, neccLink: neccUrlInput.value.trim(),
   };
+  if (window.seriesPanel?.supports(s)) out.seriesSetup = { game: s.game, config: s.series.config,
+    maps: s.series.maps.filter((m) => m.status !== 'void').map(({ slot, name, mode, picker, sideChooser, blueTeam }) => ({ slot, name, mode, picker, sideChooser, blueTeam })) };
   if (s.countdownMode === 'at') out.end = s.end; else out.durationSec = s.durationSec;
   return out;
 }
@@ -1205,10 +1208,12 @@ $id('matchSaveBtn').addEventListener('click', async (e) => {
     flashText(btn, 'Save failed', 'Save');
   }
 });
-$id('matchLoadBtn').addEventListener('click', () => {
+$id('matchLoadBtn').addEventListener('click', async () => {
   const m = library.matches.find((x) => x.id === matchSelect.value);
   if (!m) return;
   const d = { ...(m.data || {}) };
+  const seriesSetup = d.seriesSetup; delete d.seriesSetup;
+  if (window.seriesPanel?.supports(state) && !await window.seriesPanel.newMatch(d.scoreboard?.bestOf)) return;
   neccUrlInput.value = d.neccLink || '';
   delete d.neccLink;
   // v1 saved matches keep the league graphic links under another name.
@@ -1217,6 +1222,9 @@ $id('matchLoadBtn').addEventListener('click', () => {
   matchNameInput.value = m.name;
   rosterDirty.A = rosterDirty.B = false;
   send(d);
+  if (seriesSetup) {
+    if (!await window.seriesPanel.loadSetup(seriesSetup)) { toast('Match loaded; review series setup before starting.'); return; }
+  }
   ['A', 'B'].forEach((L) => { rosters[L] = stateTeam(L); renderRosterEditor(L); });
   afterLocalChange();
   toast(`Loaded: ${m.name}`);
@@ -1404,6 +1412,12 @@ function renderOrderList(t, crewSize, stocksEach, lost) {
 
 function renderScorePanel() {
   const s = sb();
+  const managed = !!window.seriesPanel?.supports(state);
+  if (window.seriesPanel) window.seriesPanel.render(state);
+  scorePanel.querySelector('.sb-grid').hidden = managed;
+  scorePanel.querySelector('.sb-actions').hidden = managed;
+  sbBestOfInput.disabled = managed;
+  $id('sbUnitInput').disabled = managed;
   const isRl = s.style === 'rl';
   const showStocks = s.showStocks && !isRl;
   const crewSize = clampInt(s.crewSize, 1, 8, 4), stocksEach = clampInt(s.stocksEach, 1, 5, 3);
@@ -1413,11 +1427,11 @@ function renderScorePanel() {
   $id('sbStockFields').style.display = showStocks ? '' : 'none';
   $id('sbRefillBtn').style.display = showStocks ? '' : 'none';
   $id('sbRlFields').style.display = isRl ? '' : 'none';
-  $id('sbShowStocksField').style.display = isRl ? 'none' : '';
+  $id('sbShowStocksField').style.display = isRl || managed ? 'none' : '';
   $id('sbPositionField').style.visibility = isRl ? 'hidden' : '';
   // Only a game with a live scoreboard of its own offers the choice.
   const preset = (games.find((g) => g.id === (state && state.game)) || {}).scoreboard || {};
-  $id('sbStyleField').style.display = isRl || (preset.style && preset.style !== 'standard') ? '' : 'none';
+  $id('sbStyleField').style.display = !managed && (isRl || (preset.style && preset.style !== 'standard')) ? '' : 'none';
   const need = Math.ceil(clampInt(s.bestOf, 1, 9, 3) / 2);
   $id('scoreHint').textContent = `${s.round ? s.round + ' · ' : ''}Best of ${s.bestOf || 3}, first to ${need}`;
   ['A', 'B'].forEach((t) => {
@@ -1482,6 +1496,12 @@ function sendScore(counters) {
 }
 
 function scoreAction(action, t, btn) {
+  if (window.seriesPanel?.supports(state)) {
+    if (action === 'swap') window.seriesPanel.command('swap');
+    else if (action === 'win') window.seriesPanel.pickWinner(t);
+    else toast('Use the map controls to record or correct a map result.');
+    return;
+  }
   const s = sb();
   const total = clampInt(s.crewSize, 1, 8, 4) * clampInt(s.stocksEach, 1, 5, 3);
   const out = {};
@@ -1697,7 +1717,7 @@ if (BX) {
 
 // The view a scene's background is kept under: every league graphic shares
 // one, and the Scoreboard has none (the game shows through it).
-function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') ? '' : key; }
+function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') || key === 'camera-group' ? '' : key; }
 function bgValue(view) {
   const ok = (id) => BACKGROUNDS.some((b) => b.id === id);
   const picked = ((state && state.backgrounds) || {})[view];
@@ -1741,6 +1761,7 @@ function sceneNote(key) {
   if (key === 'roster') return 'Source: Rosters card.';
   if (key === 'schedule') return 'Source: Broadcast, Matches this week.';
   if (key === 'versus') return 'Both teams with logos, players and the countdown.';
+  if (key === 'camera-group') return 'Three player feeds together. Sources: Broadcast, Cameras.';
   if (key.startsWith('cam-')) return 'Camera under a transparent frame. Device: Broadcast, Cameras.';
   if (key === 'scoreboard') return sb().style === 'rl' ? 'Live game data over the game capture.' : 'Manual score over the game capture.';
   if (key === 'stats') return 'Auto-cut after each game. Returns to Scoreboard at the next kickoff countdown.';
@@ -2174,6 +2195,7 @@ function connect() {
         if (!START_PAGE) setPage(state.teamA.name && state.teamB.name ? 'live' : 'match');
       }
     }
+    if (msg.type === 'error') toast(msg.error || 'Change not saved.');
     if (msg.type === 'onair') { onAir = msg.onAir || onAir; renderOnAir(); renderSceneList(); }
     // The scenes this match uses changed (another game, an extra scene
     // ticked): redraw the list and ask OBS what it has.

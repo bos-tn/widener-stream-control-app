@@ -3033,6 +3033,81 @@ switch dialog, a download and install by an installed 2.2.x copy.
   and is not in this release.
 - Checks: `test:broadcast` 116 passed, `test:messiah` passed.
 
+## v2.5.0: ports from release/2.4.1 (2026-10-20)
+
+Ported the two fixes from `release/2.4.1` (`8fe11b2`) into the uncommitted
+`codex/scoreboard-overhaul` work (`2.5.0-beta.1`), without merging or replacing
+its scoreboard, scene migration or Player Cams group changes.
+
+- **Stats entrance** (`templates/overlay.html`): `body.rls-hold` hides player
+  names, stat cells, row labels and series game cards from load in OBS and
+  whenever the page goes off air. The entrance releases the hold in the same
+  frame. With no OBS event, a visible page releases it after 3 s. Plain browsers
+  are unaffected. The existing `.rls-*` classes and entrance path are retained.
+  The MVP badge explicitly obeys the hold too: its own `visibility:visible`
+  otherwise overrides its hidden parent, caught by the renderer regression.
+- **Player cameras** (`broadcast.js`): `settings.playerCams.on` is persisted in
+  `broadcast.json`, off by default. Match the home roster by gamertag first,
+  then name, ignoring case. Home POV opens one camera; opponent/no match closes
+  it; replay stacks three on the left, first player on top. Automatic windows
+  are 384 x 216 at bottom left, respecting `cameraWindowBottom` and the existing
+  scoreboard reserve. Each rect carries `pos`. Wanted sets settle for 250 ms;
+  one OBS timer updates every player window 450 ms after the overlay frames.
+  Settings/roster changes re-evaluate the set. Turning off closes frames at once
+  and cancels pending openings. Manual mode keeps its chosen position and size.
+- **Profile marking** (`profile.js`): derive each camera's `player` flag from
+  the validated `cameraGroup.cameras`, passed through the existing public
+  broadcast block. No duplicate player list in profile JSON. Widener and LotE
+  have no marked player cameras.
+- **Reconciliation**: automatic player windows form one set, bypassing
+  `exclusiveWindows`; manual requests cannot override them. The manual rule
+  still applies with automation off. The `camera-group` scene, its frames,
+  per-profile camera list, retired-camera cleanup, `migrateMessiahCams` and
+  `MU-cam-player1` to `MU-cam-player3` input names are retained.
+- **Scene building** (`server.js`): the selected solo scenes and the selected
+  group remain independent. Automation adds all player solo scenes/sources to
+  the build while on. Off, only operator-selected scenes/group are built.
+  `/api/bx/settings` calls `syncLayout()` so the panel marks a required build;
+  a build restores windows requested before their sources existed. Stats API
+  snapshots call `bx.onRl(snap)`.
+- **Panel** (`public/control/index.html`, `broadcast.js`): Cameras checkbox,
+  gamertag labels, build guidance, and disabled manual player window/Live POV
+  controls while automation owns them. The group scene cut stays available.
+- **Overlay** (`public/overlay-assets/bx.js`): frame labels use `c.tab || c.label`
+  and update on roster changes; frame animation, ticker, pop-ups and lower third
+  use each window's actual corner.
+- **Tests/scripts**: ported and extended `dev/test-playercams.js` (40 checks),
+  added `dev/test-stats-entrance.js`, registered both in `package.json`.
+  README and Messiah profile README document automatic/manual operation,
+  independent scene selection, setup and test commands.
+
+Verification:
+
+- `npm run test:playercams`: 40 passed, mock OBS and TCP Stats API, including
+  off/default builds, missing-scene marker, persisted setting, POV swaps,
+  opponent/no match, replay geometry and OBS transforms, case/name matching,
+  roster edits, debounce, handover races, group-only builds and manual settings.
+- `npm run test:broadcast`: 116 passed, 0 failed.
+- `npm run test:messiah`: passed, including existing group geometry, source
+  replacement, scene retirement and exclusive manual switching.
+- `npm run test:series`: 153 passed across Widener, LotE and Messiah.
+- `npm run test:feed`: passed.
+- `node dev/test-profile.js widener` and `... lote`: passed (isolated scene
+  URLs, assets and idempotent rebuilds).
+- `npm run test:stats-entrance`: passed for all three profiles, game rows/MVP,
+  series cards, explicit off-air hold beyond 3 s, same-frame release, repeated
+  entrances, hidden/visible events, fallback and plain-browser behavior.
+- `npm run test:headlines`: passed for Messiah's eight scene/preset cases.
+- Browser pane: Cameras toggle and disabled controls, Live POV control,
+  Rocket League scoreboard with the labelled left replay stack and stats page.
+  Used `dev/mock-rlstats.js --fast`, mock OBS and isolated temporary
+  `STREAM_APP_DATA`/`STREAM_DATA_DIR`; HTTP 4388, mock OBS 4470, feed 49205.
+  Automated stats renderer used HTTP 4389/feed 49204; camera integration used
+  HTTP 4399/mock OBS 4469/feed 49198. No production ports/data were used.
+
+Not run: live OBS/CEF, a live Rocket League game, real camera signals, an
+installer build or publishing. The branch remains uncommitted. No push or tag.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was
@@ -3051,3 +3126,36 @@ switch dialog, a download and install by an installed 2.2.x copy.
   the code is broken.
 - `archive/` at the project root is leftover from before this app existed -
   safe to ignore, not part of the shipped app.
+
+
+## v2.5.0 scoreboard test branch: six companion boards (October 20, 2026)
+
+Continued the existing `codex/scoreboard-overhaul` working tree. The remaining
+League of Legends, Rainbow Six Siege and Call of Duty boards now use the
+server-owned series record, alongside VALORANT, Overwatch and Marvel Rivals.
+Profile game lists determine which boards are available; Rocket League and
+Smash keep their existing score paths.
+
+- League: games won, per-game blue/red mapping, optional champion draft and
+  final trade confirmation, team/global Fearless exclusions and admin-approved
+  draft carry on remake.
+- Siege: configurable regulation/capped or unlimited overtime, independent
+  attack/HUD/phase assignments, operator bans, retained rehost scores and full
+  replay attempts.
+- CoD: mandatory title/season, versioned research example labels, mode-specific
+  points/rounds/custom units, editable BO7 schedules, custom future modes,
+  mode-specific legal map pools and admin continuations.
+- Shared: competition rulebook provenance, picks/side choosers, saved match
+  setup without played results, expanded break schedules, compact gameplay
+  boards, profile branding and camera/lower-third reservations. Starting play
+  collapses break history. Pending native HUD verification is explicit.
+
+`series-rules.js` is included in installer files. Demos support all six game
+IDs, isolated temporary data and ports 4391–4396. No real OBS or game was used.
+Verification: 202 series checks; 116 broadcast checks; 40 player-camera checks;
+Messiah, profile and league-feed suites; Electron workflows for all 14 supported
+profile/game combinations with 1080p/720p renders, narrow docks, saved-match
+loading, compact boards and a scaled BO7 break schedule. Research specification:
+`docs/scoreboard-research.md`; operation: `docs/scoreboard-implementation.md`.
+Screenshots/reports: `artifacts/scoreboards/`. Live spectator HUD overlap, actual
+capture geometry and delay alignment remain manual broadcast checks.

@@ -1,6 +1,6 @@
 {
   "name": "widener-stream-overlay-app",
-  "version": "2.4.0",
+  "version": "2.5.0-beta.1",
   "private": true,
   "description": "Esports stream overlay control app: one install for every team and league profile",
   "main": "main.js",
@@ -17,8 +17,16 @@
     "icons": "electron build/make-icon.js",
     "stinger": "electron build/make-stinger.js",
     "design": "node dev/design-server.js",
+    "design:scoreboard": "node dev/scoreboard-demo.js",
     "test:broadcast": "node dev/test-broadcast.js",
-    "test:messiah": "node dev/test-messiah.js"
+    "test:series": "node dev/test-series.js",
+    "test:series:visual": "electron dev/review-series.js",
+    "test:feed": "node dev/test-league-feed.js",
+    "test:stats-entrance": "electron dev/test-stats-entrance.js",
+    "test:playercams": "node dev/test-playercams.js",
+    "test:messiah": "node dev/test-messiah.js",
+    "test:messiah:visual": "electron dev/review-messiah.js",
+    "test:headlines": "electron dev/test-headline-motion.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -41,6 +49,8 @@
       "main.js",
       "picker-preload.js",
       "server.js",
+      "series.js",
+      "series-rules.js",
       "necc.js",
       "obs.js",
       "montages.js",

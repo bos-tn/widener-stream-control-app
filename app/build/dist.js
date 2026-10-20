@@ -23,7 +23,7 @@ const { UUID } = require('builder-util-runtime');
 const pkg = require('../package.json');
 const { listProfiles, loadProfile } = require('../profile');
 
-const OUT_DIR = path.join(__dirname, '..', pkg.build.directories.output);
+const OUT_DIR = path.resolve(__dirname, '..', process.env.STREAM_BUILD_OUTPUT || pkg.build.directories.output);
 // electron-builder's own namespace for an app id's GUID (NsisTarget.js), so
 // this finds the registry keys the replaced app's installer wrote.
 const ELECTRON_BUILDER_NS_UUID = UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3');
@@ -326,7 +326,7 @@ async function main() {
   // electron-builder merges it into package.json's "build" (and folds a
   // publish list into its first entry, which breaks it).
   const configFile = path.join(OUT_DIR, 'build.json');
-  const config = { extends: null, ...pkg.build, nsis: { ...pkg.build.nsis, include: nshFile } };
+  const config = { extends: null, ...pkg.build, directories: { ...pkg.build.directories, output: OUT_DIR }, nsis: { ...pkg.build.nsis, include: nshFile } };
   fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
   console.log(`\n=== ${pkg.build.productName} ${pkg.version}: ${profiles.map((p) => p.id).join(', ')} ===`);
   await build({

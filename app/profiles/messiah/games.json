@@ -1,9 +1,9 @@
 [
-  {"id":"cod","name":"Call of Duty","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"top-left"},"leagueActivity":["cod","callofduty"]},
-  {"id":"lol","name":"League of Legends","scoreboard":{"round":"","showStocks":false,"unit":"Game","bestOf":3,"position":"top-left"},"leagueActivity":["lol","leagueoflegends"]},
-  {"id":"mr","name":"Marvel Rivals","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"top-left"},"leagueActivity":["marvelrivals","rivals"]},
-  {"id":"ow","name":"Overwatch","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"top-left"},"leagueActivity":["overwatch","overwatch2"]},
+  {"id":"cod","name":"Call of Duty","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"bottom-left","style":"cod"},"leagueActivity":["cod","callofduty"]},
+  {"id":"lol","name":"League of Legends","scoreboard":{"round":"","showStocks":false,"unit":"Game","bestOf":3,"position":"bottom-left","style":"league"},"leagueActivity":["lol","leagueoflegends"]},
+  {"id":"mr","name":"Marvel Rivals","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"bottom-left","style":"rivals"},"leagueActivity":["marvelrivals","rivals"]},
+  {"id":"ow","name":"Overwatch","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":5,"position":"bottom-left","style":"overwatch"},"leagueActivity":["overwatch","overwatch2"]},
   {"id":"rl","name":"Rocket League","scoreName":"Goal","scoreboard":{"round":"","showStocks":false,"unit":"Game","bestOf":7,"position":"top","style":"rl"},"leagueActivity":["rl"]},
   {"id":"smash","name":"Super Smash Bros. Ultimate","scoreboard":{"round":"Crew Battle","showStocks":true,"unit":"Set","bestOf":3,"position":"top","crewSize":4,"stocksEach":3},"leagueActivity":["ssbu"]},
-  {"id":"val","name":"VALORANT","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":3,"position":"top-left"},"leagueActivity":["valorant"]}
+  {"id":"val","name":"VALORANT","scoreboard":{"round":"","showStocks":false,"unit":"Map","bestOf":3,"position":"bottom-left","style":"valorant"},"leagueActivity":["valorant"]}
 ]

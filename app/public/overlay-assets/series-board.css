@@ -1,0 +1,67 @@
+/* VALORANT companion. Its stage remains the app's shared 1920x1080 canvas. */
+.sb-view.valorant .sb,.sb-view.valorant .sbc{display:none!important}
+.sb-view.managed-series .sb,.sb-view.managed-series .sbc{display:none!important}
+.val-board{position:absolute;width:560px;color:#f5f7fb;background:var(--brand-panel-dark,#0c1421);font-family:'Inter',system-ui,sans-serif;border:1px solid rgba(230,238,255,.2);box-shadow:0 4px 20px rgba(0,0,0,.35);transform-origin:bottom left;font-variant-numeric:tabular-nums}
+.val-board[hidden],.val-board [hidden]{display:none!important}
+.val-kicker{height:28px;padding:0 14px;display:flex;justify-content:space-between;align-items:center;background:var(--brand-panel,#13223a);border-top:3px solid var(--brand-accent,#ff5965);font-size:10px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}
+.val-kicker span{max-width:390px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.val-match{height:70px;display:grid;grid-template-columns:minmax(0,1fr) 46px 46px minmax(0,1fr);align-items:stretch}
+.val-team{min-width:0;display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:3px solid var(--team-color);background:linear-gradient(115deg,var(--team-wash),transparent)}
+.val-team.right{flex-direction:row-reverse;text-align:right;background:linear-gradient(245deg,var(--team-wash),transparent)}
+.val-team img{width:34px;height:34px;object-fit:contain;flex-shrink:0}
+.val-team-copy{min-width:0;display:flex;flex-direction:column;gap:5px}
+.val-team-name{font-size:21px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;max-width:142px}
+.val-team-role{font-size:9px;font-weight:700;letter-spacing:.12em;color:#b9c9db;white-space:nowrap}
+.val-score{font-size:38px;font-weight:800;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.055);border-bottom:3px solid var(--team-color);line-height:1}
+.val-score.winner{color:var(--brand-accent,#fff);background:rgba(255,255,255,.14)}
+.val-context{height:34px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;background:rgba(0,0,0,.28);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.val-context b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;min-width:0}
+.val-context span{white-space:nowrap;color:#aebfd4;font-size:9px;letter-spacing:.09em;flex-shrink:0}
+.val-context.paused span{color:#ffcc80}.val-context.final span{color:var(--brand-accent,#fff)}
+.val-history{display:flex;gap:5px;padding:8px;background:var(--brand-panel,#13223a);border-top:1px solid rgba(255,255,255,.12)}
+.val-map{flex:1;min-width:0;padding:7px 8px;background:rgba(0,0,0,.22);border-top:2px solid transparent;display:flex;flex-direction:column;gap:5px}
+.val-map.current{border-top-color:var(--brand-accent,#fff)}.val-map.void{opacity:.55}
+.val-map small{font-size:8px;letter-spacing:.08em;color:#bdcce0}.val-map b{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.val-map span{font-size:9px;color:#e3ebf7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.val-context>span{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+/* Overwatch uses the same identity and series record with a mode-first companion. */
+.sb-view.overwatch .sb,.sb-view.overwatch .sbc{display:none!important}
+.ow-board{border:0;border-radius:6px;overflow:hidden;box-shadow:0 5px 24px #0008}
+.ow-board .val-kicker{border-top:0;border-left:5px solid var(--brand-accent,#f5a332);height:28px;letter-spacing:.08em}
+.ow-board .val-match{height:70px;background:#edf1f6}
+.ow-board .val-team{color:#142238;background:linear-gradient(115deg,var(--team-wash),transparent);border-bottom:4px solid var(--team-color)}
+.ow-board .val-team.right{background:linear-gradient(245deg,var(--team-wash),transparent)}
+.ow-board .val-team-role{color:#46576e}.ow-board .val-score{background:#152135;color:#fff;border-bottom-width:4px}
+.ow-board .val-score.winner{background:var(--team-color);color:#fff}
+.ow-mode{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--brand-accent,#f5a332);color:var(--brand-accent-text,#101927);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.ow-mode span{font-size:9px;font-weight:800}.ow-board .val-context{background:#132034}
+.ow-bans{height:34px;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:0 14px;background:#1c2a40;color:#cbd6e6;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.ow-bans span{min-width:0;max-width:50%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ow-board .val-map small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Rivals retains profile colors while keeping draft locks distinct from bans. */
+.sb-view.rivals .sb,.sb-view.rivals .sbc{display:none!important}
+.mr-board{border:0;border-left:4px solid var(--brand-accent,#f5c844);overflow:hidden}
+.mr-board .val-kicker{border-top:0;height:28px;background:var(--brand-panel,#13223a)}
+.mr-board .val-match{height:70px}
+.mr-board .val-team{border-bottom-width:4px}
+.mr-board .val-team-name{font-style:italic;letter-spacing:.02em}
+.mr-board .val-score{border-bottom-width:4px}
+.mr-board .ow-mode{background:var(--brand-accent,#f5c844)}
+.mr-board .val-context{background:#101a2a}
+.mr-board .ow-bans{height:38px;font-size:9px}
+.mr-board .mr-locks{color:#b7ead9;border-top:1px solid #ffffff18;background:#102923}
+.mr-board .val-map small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.series-edition{height:30px;box-sizing:border-box;padding:8px 14px;background:var(--brand-panel,#13223a);color:#d6dfec;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase}
+.lol-board{border-top:2px solid var(--brand-accent,#bca46b);border-radius:5px;overflow:hidden}
+.lol-board .val-kicker{border-top:0}.lol-board .val-team-role{color:#dae7fb}
+.lol-board .val-score{font-family:Georgia,serif;font-size:40px}
+.r6-board{border-left:5px solid var(--brand-accent,#fff);border-right:0}
+.r6-board .val-kicker{border-top:0}.r6-board .val-team-name{font-weight:900;letter-spacing:.03em}
+.r6-board .series-edition{border-top:1px solid #ffffff28}
+.cod-board{border:0;border-left:4px solid var(--brand-accent,#a6c979)}
+.cod-board .val-kicker{border-top:0}.cod-board .val-score{font-weight:900}
+.cod-board .ow-mode{background:var(--brand-panel,#13223a);color:#f5f7fb;border-top:1px solid #ffffff28}
+.cod-board .ow-mode b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:430px}
+.cod-board .series-edition{color:#c4d1c0;background:#101c20}
+.val-team-name{font-size:24px}
+.val-board{box-sizing:border-box}
+.val-map small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
