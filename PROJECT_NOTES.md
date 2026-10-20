@@ -3033,8 +3033,24 @@ source, 116 broadcast checks, Messiah asset/scene regression checks and packaged
 Widener/LotE mock scene builds. Its 140 production files, profile locks, fonts,
 private-file exclusions, update configuration and installer hashes were checked.
 An unchanged-version replacement requires manual installation for existing
-2.4.0 users, so v2.4.1 will carry the same lock through automatic updates.
+2.4.0 users, so v2.4.1 carries the same lock through automatic updates.
 The existing v2.5.0-beta.1 release keeps Messiah access. Live OBS was not used.
+
+Published October 20: v2.4.0's four assets were replaced and its release notes
+corrected; v2.4.1 was published and marked Latest, from tag `v2.4.1` at
+`4581fe7`. The original v2.4.0 source tag was preserved; its release notes link
+the stable lock source at `7c0f7a2`. Original release files were backed up and
+checked before replacement. Both published releases' four asset sizes and
+SHA-256 digests match local verification reports. All five v2.5.0-beta.1
+assets, their digests and its release notes are unchanged.
+
+Read-only checks with the actual updater: 2.4.0 on both `latest` and `lote`
+is offered 2.4.1; 2.4.1 reports no update; 2.5.0-beta.1 still resolves to
+2.5.0-beta.1 and reports no update. No installer was run on this PC. Copies
+already downloaded or installed cannot be revoked remotely and need the
+update or a corrected installer. Build/verification output is retained in the
+attached stable worktree under `app/dist/stable-2.4.0-locked/` and
+`app/dist/stable-2.4.1-locked/`; backups are under `app/dist/original-v2.4.0/`.
 
 - Third profile in the one installer: Messiah Esports (`messiah`, team kind,
   port 4330, scene collection `Messiah Stream`, scenes `MU: ...`). It uses the
