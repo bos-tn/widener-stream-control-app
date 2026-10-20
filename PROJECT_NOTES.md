@@ -3018,6 +3018,21 @@ for all users (`customInit` switching to all users; the dev PC had Widener's
 own install, so it took the in-place path). Also not done: the second-launch
 switch dialog, a download and install by an installed 2.2.x copy.
 
+## v2.4.0: Messiah Esports profile (released 2026-10-19)
+
+- Third profile in the one installer: Messiah Esports (`messiah`, team kind,
+  port 4330, scene collection `Messiah Stream`, scenes `MU: ...`). It uses the
+  Widener broadcast package with five Canvas plates (30, 25, 08, 01, 05),
+  Hanken Grotesk (OFL), the identity-guide logos and a generated stinger. See
+  `app/profiles/messiah/README.md`.
+- The version moved from `2.4.0-beta.1` to `2.4.0`; README and the profile
+  notes no longer call Messiah a beta.
+- Released from commit `f6e84e2` plus the version/docs commit, built from a
+  clean worktree of `master`. The scoreboard overhaul (`app/series.js`,
+  series control) was still uncommitted work on `codex/scoreboard-overhaul`
+  and is not in this release.
+- Checks: `test:broadcast` 116 passed, `test:messiah` passed.
+
 ## Known gaps / things not yet done
 
 - An *early* OBS WebSocket integration (for a NECC/Widener source toggle) was

@@ -1,4 +1,4 @@
-# Messiah Esports beta profile
+# Messiah Esports profile
 
 This team profile runs on localhost port 4330, uses the `MU:` OBS scene prefix,
 the `Messiah Stream` scene collection, and the separate
@@ -31,5 +31,5 @@ Grotesk is OFL licensed; its notice is in `assets/fonts/`. The generated
 stinger is a 1.22-second alpha WebM with a 590 ms transition point. It is
 optional in OBS until the operator creates and configures `Messiah Stinger`.
 
-This beta is for local testing. The guide asks users to obtain production
+The identity guide asks users to obtain production
 artwork and permission from Messiah Athletics before public reproduction.

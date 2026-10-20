@@ -10,7 +10,7 @@ one profile at a time.
 | --- | --- | --- | --- |
 | Widener Esports (`widener`) | Team, NECC | `http://localhost:4310/control` | `Widener Stream`, scenes `WU: …` |
 | League of the East (`lote`) | League | `http://localhost:4320/control` | `LotE Stream`, scenes `LotE: …` |
-| Messiah Esports (`messiah`) | Team beta | `http://localhost:4330/control` | `Messiah Stream`, scenes `MU: …` |
+| Messiah Esports (`messiah`) | Team | `http://localhost:4330/control` | `Messiah Stream`, scenes `MU: …` |
 
 Installer: [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest),
 `Esports-Stream-Control-Setup-<version>.exe`.
@@ -184,7 +184,7 @@ Scoreboard has none. Changes apply immediately.
 | --- | --- | --- |
 | Widener | Moving Stripes, Varsity Stripes, Shutters, W Shine, Pride Lions, Pride Tape, Floodlights, Speed Lines | Starting Soon: Varsity Stripes. This Week and Be Right Back: Floodlights. Matchup: Speed Lines. Rosters: Shutters. Post-Match: Pride Tape. League graphics: Pride Lions. Rocket League Stats: Moving Stripes |
 | LotE | Mark Shine, Word Rows, Mark Pattern, Curtains | Starting Soon and league graphics: Mark Shine. Be Right Back and Standings: Curtains. Rosters and Rocket League Stats: Mark Pattern. Post-Match and Head to Head: Word Rows |
-| Messiah beta | 30 Wordmark Flood, 25 Ghost Falcon, 08 Tailwind, 01 Prism Current, 05 Wing Wake | Starting Soon: 25. Be Right Back: 30. Matchup and Post-Match: 08. Rosters and This Week: 01. Rocket League Stats: 05 |
+| Messiah | 30 Wordmark Flood, 25 Ghost Falcon, 08 Tailwind, 01 Prism Current, 05 Wing Wake | Starting Soon: 25. Be Right Back: 30. Matchup and Post-Match: 08. Rosters and This Week: 01. Rocket League Stats: 05 |
 
 Widener draws the Rocket League Stats background at 50% opacity.
 
@@ -307,7 +307,7 @@ league score change.
 
 ## Profiles
 
-The Messiah beta uses the broadcast package with five selected Canvas plates,
+The Messiah profile uses the broadcast package with five selected Canvas plates,
 its own logo assets and stinger. See [its profile notes](app/profiles/messiah/README.md)
 for the scene defaults and asset provenance.
 
@@ -507,7 +507,7 @@ npm install
 npm start             # the profile used last, or the profile page
 npm run start:widener # Widener profile
 npm run start:lote    # LotE profile
-npm run start:messiah # Messiah beta profile
+npm run start:messiah # Messiah profile
 npm run server        # server only (Widener, port 4310)
 npm run server:lote   # server only (LotE, port 4320)
 npm run server:messiah # server only (Messiah, port 4330)
