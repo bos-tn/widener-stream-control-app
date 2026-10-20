@@ -41,6 +41,9 @@
     const b = el('button', 'item');
     b.type = 'button';
     b.dataset.id = p.id;
+    b.disabled = !!p.locked;
+    b.classList.toggle('locked', !!p.locked);
+    if (p.locked) { b.title = p.lockReason; b.setAttribute('aria-disabled', 'true'); }
     if (p.icon) {
       const img = el('img');
       img.src = p.icon;
@@ -55,7 +58,8 @@
     const meta = p.kind === 'team' ? p.league : p.shortName;
     if (meta && meta !== p.name) text.appendChild(el('span', 'meta', meta));
     b.appendChild(text);
-    if (p.id === info.current) b.appendChild(el('span', 'tag', 'Open'));
+    if (p.locked) b.appendChild(el('span', 'tag', 'Locked'));
+    else if (p.id === info.current) b.appendChild(el('span', 'tag', 'Open'));
     b.addEventListener('click', () => choose(p));
     return b;
   }
@@ -80,12 +84,13 @@
       section.appendChild(ul);
       list.appendChild(section);
     });
-    const first = list.querySelector('.item');
+    const first = list.querySelector('.item:not(:disabled)');
     if (first) first.focus();
   }
 
   async function choose(p) {
     if (busy) return;
+    if (p.locked) { setStatus(p.lockReason, true); return; }
     if (p.id === info.current) { location.href = '/control/'; return; }
     // `node server.js` on its own: nothing can restart it.
     if (info.current && !info.canSwitch) { setStatus(`Start the server with --profile=${p.id}.`, true); return; }
@@ -101,7 +106,7 @@
       await api.choose(p.id);
     } catch (err) {
       busy = false;
-      list.querySelectorAll('.item').forEach((b) => { b.disabled = false; });
+      list.querySelectorAll('.item').forEach((b) => { b.disabled = !!info.profiles.find((p) => p.id === b.dataset.id)?.locked; });
       setStatus(err.message || String(err), true);
     }
   }

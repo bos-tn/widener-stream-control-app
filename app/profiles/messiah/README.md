@@ -1,5 +1,10 @@
 # Messiah Esports profile
 
+The upcoming main release locks this profile (`locked: true` in `profile.json`).
+The installer and app picker show Messiah greyed out with a Locked label.
+Saved/explicit Messiah launches return to the picker; profile data and assets
+are retained. Removing the flag enables selection again.
+
 This team profile runs on localhost port 4330, uses the `MU:` OBS scene prefix,
 the `Messiah Stream` scene collection, and the separate
 `messiah-stream-control` data folder. It uses the broadcast package with

@@ -64,7 +64,7 @@ const nsisText = (s) => String(s).replace(/\$/g, '$$$$').replace(/"/g, '$\\"');
 //   ([profile] id, set = when it was picked); main.js opens it.
 // - the apps from before v2.3.0 that held one profile (`replaced`), which it
 //   removes, keeping their data folders.
-// choices: [{ id, kind, name }], teams first.
+// choices: [{ id, kind, name, locked }], teams first.
 function installerScript(replaced, choices = []) {
   const ini = '"$INSTDIR\\resources\\default-profile.ini"';
   const stamp = [
@@ -116,20 +116,26 @@ function installerScript(replaced, choices = []) {
     '  ; The default profile of the install being updated.',
     `  ReadINIStr $defaultProfile ${ini} "profile" "id"`,
     `  ReadINIStr $defaultProfileSet ${ini} "profile" "set"`,
+    ...choices.filter((c) => c.locked).flatMap((c) => [
+      `  \${if} $defaultProfile == "${c.id}"`,
+      '    StrCpy $defaultProfile ""',
+      '    StrCpy $defaultProfileSet ""',
+      '  ${endif}',
+    ]),
     '  ; --profile=<id> on the command line.',
     '  ${GetParameters} $R0',
     '  ClearErrors',
     '  ${GetOptions} $R0 "--profile=" $R1',
     '  ${ifNot} ${Errors}',
   );
-  choices.forEach((c, i) => {
+  choices.filter((c) => !c.locked).forEach((c, i) => {
     lines.push(
       `    ${i ? '${elseIf}' : '${if}'} $R1 == "${c.id}"`,
       `      StrCpy $defaultProfile "${c.id}"`,
       '      !insertmacro profileStamp',
     );
   });
-  if (choices.length) lines.push('    ${endif}');
+  if (choices.some((c) => !c.locked)) lines.push('    ${endif}');
   lines.push(
     '  ${endif}',
     '  Pop $R1',
@@ -152,8 +158,11 @@ function installerScript(replaced, choices = []) {
     y += 12;
     group.forEach((c) => {
       rows.push(
-        `  \${NSD_CreateRadioButton} 8u ${y}u 92% 12u "${nsisText(c.name)}"`,
+        `  \${NSD_CreateRadioButton} 8u ${y}u 92% 12u "${nsisText(c.name)}${c.locked ? ' (Locked)' : ''}"`,
         `  Pop $profileRadio${c.i}`,
+      );
+      if (c.locked) rows.push(`  EnableWindow $profileRadio${c.i} 0`);
+      else rows.push(
         `  \${NSD_OnClick} $profileRadio${c.i} profilePageClick`,
         `  \${if} $defaultProfile == "${c.id}"`,
         `    \${NSD_Check} $profileRadio${c.i}`,
@@ -199,7 +208,7 @@ function installerScript(replaced, choices = []) {
       '    ${endif}',
     ]),
     '    StrCpy $1 0',
-    ...choices.flatMap((c, i) => [
+    ...choices.flatMap((c, i) => c.locked ? [] : [
       `    \${NSD_GetState} $profileRadio${i} $2`,
       '    ${if} $2 == ${BST_CHECKED}',
       '      StrCpy $1 1',
@@ -217,7 +226,7 @@ function installerScript(replaced, choices = []) {
     '  Function profilePageLeave',
     '    Push $0',
     '    StrCpy $defaultProfile ""',
-    ...choices.flatMap((c, i) => [
+    ...choices.flatMap((c, i) => c.locked ? [] : [
       `    \${NSD_GetState} $profileRadio${i} $0`,
       '    ${if} $0 == ${BST_CHECKED}',
       `      StrCpy $defaultProfile "${c.id}"`,
@@ -318,7 +327,7 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const nshFile = path.join(OUT_DIR, 'installer.nsh');
   const kinds = ['team', 'league'];
-  const choices = profiles.map((p) => ({ id: p.id, kind: p.kind, name: p.name }))
+  const choices = profiles.map((p) => ({ id: p.id, kind: p.kind, name: p.name, locked: p.locked }))
     .sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.name.localeCompare(b.name));
   fs.writeFileSync(nshFile, installerScript(replaced, choices));
 

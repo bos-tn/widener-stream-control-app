@@ -12,6 +12,11 @@ one profile at a time.
 | League of the East (`lote`) | League | `http://localhost:4320/control` | `LotE Stream`, scenes `LotE: …` |
 | Messiah Esports (`messiah`) | Team | `http://localhost:4330/control` | `Messiah Stream`, scenes `MU: …` |
 
+For the upcoming main release, Messiah is visible but greyed out and marked
+**Locked** in the installer and profile picker. It cannot be selected or opened
+from a saved choice or `--profile=messiah`; those starts show the profile picker.
+Its assets, settings and saved matches are retained. Widener and LotE stay available.
+
 Installer: [latest release](https://github.com/bos-tn/widener-stream-control-app/releases/latest),
 `Esports-Stream-Control-Setup-<version>.exe`.
 
@@ -590,6 +595,11 @@ to `profiles/<id>/`, change `profile.json` (`id`, `kind`, `port` and
 `dataFolder` unused by any other profile, `obs.prefix`; remove `replaces`),
 replace assets, `games.json` and `teams.json`, then `npm run icons -- <id>`.
 The next `npm run dist` includes it, in the installer's Profile page too.
+
+Set `locked: true` and an optional `lockReason` in a profile's `profile.json`
+to keep it listed while disabling selection and normal app launches. Removing
+the flag makes it available again. `npm run test:profile-lock` checks the
+picker, startup, switch requests and generated installer rules with isolated data.
 
 ### Build and release
 

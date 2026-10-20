@@ -21,6 +21,7 @@
     "test:broadcast": "node dev/test-broadcast.js",
     "test:series": "node dev/test-series.js",
     "test:series:visual": "electron dev/review-series.js",
+    "test:profile-lock": "electron dev/test-profile-lock.js",
     "test:feed": "node dev/test-league-feed.js",
     "test:stats-entrance": "electron dev/test-stats-entrance.js",
     "test:playercams": "node dev/test-playercams.js",

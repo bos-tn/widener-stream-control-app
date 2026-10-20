@@ -3159,3 +3159,17 @@ loading, compact boards and a scaled BO7 break schedule. Research specification:
 `docs/scoreboard-research.md`; operation: `docs/scoreboard-implementation.md`.
 Screenshots/reports: `artifacts/scoreboards/`. Live spectator HUD overlap, actual
 capture geometry and delay alignment remain manual broadcast checks.
+
+### Main release preparation: Messiah selection lock
+
+Messiah remains included but is greyed out and marked Locked in the app and
+installer selectors. Availability is declared in its `profile.json`; Widener
+and LotE remain selectable. Startup choices, explicit launches, IPC/HTTP
+switches, and installer defaults respect the lock without deleting profile
+assets or saved data. The published v2.5.0-beta.1 tag/installer retain their
+original profile availability for current testers.
+
+Checked with `npm run test:profile-lock` (13 checks, including actual Electron
+picker rendering), `npm run test:series` (202 checks), an isolated installer
+build and packaged source/hash verification. The local review build is under
+`app/dist/profile-lock-review/`; it is not a new published release.

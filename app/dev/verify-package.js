@@ -13,6 +13,7 @@ const files = asar.listPackage(archive).map(p => p.replaceAll('\\', '/'));
 assert(!files.some(p => /\/(?:dev|data|build)\//.test(p) && !p.startsWith('/node_modules/')));
 assert(!files.some(p => /^\/profiles\/[^/]+\/local\.json$/.test(p)));
 const production = ['main.js', 'templates/overlay.html', 'profile.js', 'server.js', 'obs.js', 'broadcast.js', 'series.js', 'series-rules.js',
+  'public/picker/picker.js', 'public/picker/picker.css',
   'public/control/series-control.js', 'public/control/series-setup.js', 'public/control/series-control.css',
   'public/overlay-assets/series-board.js', 'public/overlay-assets/series-board.css',
   'profiles/widener/games.json', 'profiles/lote/games.json', 'profiles/messiah/games.json',
