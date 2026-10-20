@@ -44,6 +44,8 @@ h1{ margin:0 0 6px; font-size:1.5rem; font-weight:800; }
 .item:hover:not(:disabled){ background:var(--panel-hover); border-color:#33415c; }
 .item:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .item:disabled{ cursor:default; opacity:.6; }
+.item.locked{ filter:grayscale(1); cursor:not-allowed; }
+.item.locked .tag{ background:var(--border); color:var(--muted); }
 .item img{ width:44px; height:44px; object-fit:contain; border-radius:8px; flex-shrink:0; }
 .item .ph{ width:44px; height:44px; border-radius:8px; flex-shrink:0; background:var(--border); }
 .item .text{ display:flex; flex-direction:column; gap:2px; min-width:0; }

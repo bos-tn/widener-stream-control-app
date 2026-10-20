@@ -8,7 +8,7 @@ const { importMatch, listSeasons, pickSeason, seasonStandings } = require('./nec
 const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
-const { profileId, loadProfile, listProfileCards, clientBrand, brandCss } = require('./profile');
+const { profileId, loadProfile, loadSelectableProfile, listProfileCards, clientBrand, brandCss } = require('./profile');
 const { createBroadcast } = require('./broadcast');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
@@ -947,7 +947,9 @@ function createServer(port, opts = {}) {
   });
   app.post('/api/app/profile', (req, res) => {
     const id = String((req.body || {}).id || '');
-    if (!listProfileCards().some((p) => p.id === id)) return res.status(400).json({ error: 'Unknown profile' });
+    const target = listProfileCards().find((p) => p.id === id);
+    if (!target) return res.status(400).json({ error: 'Unknown profile' });
+    if (target.locked) return res.status(403).json({ error: target.lockReason });
     if (id === PROFILE.id) return res.json({ restarting: false });
     if (!opts.onProfileChange) return res.status(501).json({ error: `Restart with --profile=${id}` });
     res.json({ restarting: true });
@@ -1602,6 +1604,6 @@ function createServer(port, opts = {}) {
 module.exports = { createServer };
 
 if (require.main === module) {
-  const profile = loadProfile(profileId() || 'widener');
+  const profile = loadSelectableProfile(profileId() || 'widener');
   createServer(process.env.PORT || profile.port, { profile });
 }

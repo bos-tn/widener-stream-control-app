@@ -117,7 +117,8 @@ function listProfileCards() {
       const p = loadProfile(id);
       let icon = '';
       try { icon = `data:image/png;base64,${fs.readFileSync(path.join(p.iconsDir, 'icon-128.png')).toString('base64')}`; } catch (e) { /* no icon */ }
-      cards.push({ id: p.id, kind: p.kind, name: p.name, shortName: p.shortName, league: p.league.name, icon });
+      cards.push({ id: p.id, kind: p.kind, name: p.name, shortName: p.shortName, league: p.league.name, icon,
+        locked: p.locked, lockReason: p.lockReason });
     } catch (e) {
       console.error(`Profile "${id}" left out: ${e.message}`);
     }
@@ -173,6 +174,8 @@ function loadProfile(id) {
   const p = {
     id,
     kind: KINDS.includes(raw.kind) ? raw.kind : 'team',
+    locked: raw.locked === true,
+    lockReason: raw.locked === true ? String(raw.lockReason || 'This profile is currently locked.') : '',
     dataFolder,
     replaces,
     name: raw.name || id,
@@ -211,6 +214,14 @@ function loadProfile(id) {
     iconsDir: path.join(dir, 'icons'),
     games: JSON.parse(fs.readFileSync(path.join(dir, 'games.json'), 'utf8')),
   };
+  return p;
+}
+
+// Keep locked profile assets loadable for builds and isolated tests, while
+// every user-facing launch/switch must pass this availability check.
+function loadSelectableProfile(id) {
+  const p = loadProfile(id);
+  if (p.locked) throw new Error(`${p.name}: ${p.lockReason}`);
   return p;
 }
 
@@ -299,4 +310,4 @@ function brandCss(p) {
   return `/* ${p.name}: generated from profiles/${p.id}/profile.json */\n:root{\n${lines.join('\n')}\n}\n${faces.join('')}`;
 }
 
-module.exports = { PROFILES_DIR, profileId, listProfiles, listProfileCards, loadProfile, clientBrand, brandCss, cameraLink, cameraLinkKind };
+module.exports = { PROFILES_DIR, profileId, listProfiles, listProfileCards, loadProfile, loadSelectableProfile, clientBrand, brandCss, cameraLink, cameraLinkKind };

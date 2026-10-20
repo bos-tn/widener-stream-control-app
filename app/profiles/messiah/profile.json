@@ -1,6 +1,8 @@
 {
   "id": "messiah",
   "kind": "team",
+  "locked": true,
+  "lockReason": "This profile is currently locked.",
   "dataFolder": "messiah-stream-control",
   "name": "Messiah Esports",
   "shortName": "Messiah",

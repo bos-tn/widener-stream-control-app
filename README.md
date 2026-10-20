@@ -2,6 +2,11 @@
 
 # Esports Stream Control
 
+Messiah Esports is available only in the beta release. Stable installers show
+Messiah as **Locked**, and saved choices, direct launches and profile switches
+cannot open it. Its assets and saved data are retained. Widener and League of
+the East remain available.
+
 Windows app that builds and drives an OBS scene collection for esports
 broadcasts. One installer holds every team and league profile; the app runs
 one profile at a time.
@@ -542,6 +547,10 @@ replace assets, `games.json` and `teams.json`, then `npm run icons -- <id>`.
 The next `npm run dist` includes it, in the installer's Profile page too.
 
 ### Build and release
+
+- Stable releases must retain `locked: true` in
+  `app/profiles/messiah/profile.json`. Run `npm run test:profile-lock` before
+  publishing. The existing `v2.5.0-beta.1` release retains Messiah access.
 
 - `version` in `app/package.json`.
 - Output: `app/dist/app/`: the installer, its `.blockmap`, `latest.yml`,

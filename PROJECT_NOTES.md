@@ -3020,6 +3020,22 @@ switch dialog, a download and install by an installed 2.2.x copy.
 
 ## v2.4.0: Messiah Esports profile (released 2026-10-19)
 
+### Stable availability correction (2026-10-20)
+
+Messiah is now beta only. The stable correction ports only the profile lock
+from `5f83960`, without the v2.5 scoreboard work or unpublished v2.4.1 scene
+changes. The installer and app picker retain a disabled Messiah card. Direct
+launches, saved choices, installer defaults, IPC and HTTP switches reject it;
+saved data and assets remain intact. Widener and LotE remain selectable.
+
+The replacement v2.4.0 package passed 13 availability checks against packaged
+source, 116 broadcast checks, Messiah asset/scene regression checks and packaged
+Widener/LotE mock scene builds. Its 140 production files, profile locks, fonts,
+private-file exclusions, update configuration and installer hashes were checked.
+An unchanged-version replacement requires manual installation for existing
+2.4.0 users, so v2.4.1 will carry the same lock through automatic updates.
+The existing v2.5.0-beta.1 release keeps Messiah access. Live OBS was not used.
+
 - Third profile in the one installer: Messiah Esports (`messiah`, team kind,
   port 4330, scene collection `Messiah Stream`, scenes `MU: ...`). It uses the
   Widener broadcast package with five Canvas plates (30, 25, 08, 01, 05),

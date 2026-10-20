@@ -1,5 +1,8 @@
 # Messiah Esports profile
 
+Beta only. Stable builds retain the assets but lock this profile in the
+installer, picker and launch/switch paths. Saved profile data is kept.
+
 This team profile runs on localhost port 4330, uses the `MU:` OBS scene prefix,
 the `Messiah Stream` scene collection, and the separate
 `messiah-stream-control` data folder. It uses the existing broadcast package,

@@ -18,7 +18,8 @@
     "stinger": "electron build/make-stinger.js",
     "design": "node dev/design-server.js",
     "test:broadcast": "node dev/test-broadcast.js",
-    "test:messiah": "node dev/test-messiah.js"
+    "test:messiah": "node dev/test-messiah.js",
+    "test:profile-lock": "electron dev/test-profile-lock.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

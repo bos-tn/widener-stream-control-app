@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } = require('electron');
 const { createServer } = require('./server');
-const { profileId, listProfiles, listProfileCards, loadProfile } = require('./profile');
+const { profileId, listProfiles, listProfileCards, loadProfile, loadSelectableProfile } = require('./profile');
 
 // One install for every team and league profile (v2.3.0). The app runs one
 // profile at a time, with that profile's port, data folder, window title and
@@ -87,6 +87,7 @@ function newestData() {
   listProfiles().forEach((id) => {
     let p;
     try { p = loadProfile(id); } catch (e) { return; }
+    if (p.locked) return;
     ['state.json', 'settings.json', 'library.json'].forEach((f) => {
       try {
         const t = fs.statSync(path.join(dataDirOf(p), f)).mtimeMs;
@@ -102,8 +103,11 @@ function newestData() {
 // a later switch sticks); the one used last; the installer default; the
 // newest data. '' means the profile page asks.
 function pickProfile() {
-  const known = listProfiles();
+  const cards = listProfileCards();
+  const known = cards.filter((p) => !p.locked).map((p) => p.id);
+  const locked = (id) => cards.some((p) => p.id === id && p.locked);
   const ok = (id) => !!id && known.includes(id);
+  if (locked(profileId())) return '';
   if (ok(profileId())) return profileId();
   const choice = readChoice();
   const def = installDefault();
@@ -111,7 +115,9 @@ function pickProfile() {
     appliedInstallSet = def.set;
     return def.id;
   }
+  if (locked(choice.profile)) return '';
   if (ok(choice.profile)) return choice.profile;
+  if (def && locked(def.id)) return '';
   if (def && ok(def.id)) return def.id;
   const newest = newestData();
   return ok(newest) ? newest : '';
@@ -182,7 +188,7 @@ function showPicker() {
 function startProfile(id) {
   let profile;
   try {
-    profile = loadProfile(id);
+    profile = loadSelectableProfile(id);
   } catch (err) {
     dialog.showErrorBox(APP_TITLE, `Profile "${id}" could not be loaded:\n${err.message}`);
     showPicker();
@@ -216,6 +222,7 @@ function startProfile(id) {
 // the old profile. The quit runs before-quit, which gives Rocket League its
 // HUD back first.
 function switchProfile(id) {
+  loadSelectableProfile(id);
   writeChoice(id);
   const args = process.argv.slice(1).filter((a) => !a.startsWith('--profile=')).concat(`--profile=${id}`);
   app.relaunch({ args });
@@ -227,6 +234,7 @@ function switchProfile(id) {
 ipcMain.handle('profiles:list', () => ({ profiles: listProfileCards(), current: '', live: false, canSwitch: true, version: app.getVersion() }));
 ipcMain.handle('profiles:choose', (e, id) => {
   if (server || !listProfiles().includes(String(id))) return { restarting: false };
+  loadSelectableProfile(String(id));
   startProfile(String(id));
   return { restarting: false };
 });
@@ -281,7 +289,7 @@ if (!app.requestSingleInstanceLock()) {
     const id = profileId(argv);
     if (!current || !id || id === current.id || !listProfiles().includes(id)) return;
     let target;
-    try { target = loadProfile(id); } catch (err) { return; }
+    try { target = loadSelectableProfile(id); } catch (err) { return; }
     const live = server ? await server.isLive().catch(() => false) : false;
     const { response } = await dialog.showMessageBox(win, {
       type: 'question',
