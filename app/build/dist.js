@@ -335,7 +335,7 @@ async function main() {
   // electron-builder merges it into package.json's "build" (and folds a
   // publish list into its first entry, which breaks it).
   const configFile = path.join(OUT_DIR, 'build.json');
-  const config = { extends: null, ...pkg.build, nsis: { ...pkg.build.nsis, include: nshFile } };
+  const config = { extends: null, ...pkg.build, directories: { ...pkg.build.directories, output: OUT_DIR }, nsis: { ...pkg.build.nsis, include: nshFile } };
   fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
   console.log(`\n=== ${pkg.build.productName} ${pkg.version}: ${profiles.map((p) => p.id).join(', ')} ===`);
   await build({
