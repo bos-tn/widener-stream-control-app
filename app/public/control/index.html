@@ -278,6 +278,15 @@
             <label class="checkbox small"><input type="checkbox" id="sbRlStatsInput" checked> Auto-cut to Stats after each game</label>
           </div>
 
+          <div class="rl-cam-picker" id="rlCamPicker" hidden>
+            <div class="sub-head first">Player POV camera</div>
+            <div class="field-row">
+              <label class="grow"><span class="lbl">Show over gameplay</span><select id="rlCamSelect"></select></label>
+              <button class="btn-secondary" type="button" id="rlCamGroupBtn">Put Player Cams on air</button>
+            </div>
+            <p class="muted-note" id="rlCamHint">Choose the camera for the observer's current player. Only one player window shows at a time.</p>
+          </div>
+
           <details class="help sb-settings">
             <summary>Scoreboard settings</summary>
             <div class="help-body">
@@ -483,6 +492,11 @@
           <div class="card-head">
             <h2>Cameras</h2>
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="One OBS source per camera, used by its own scene and by its window in the Scoreboard scene. With a link: a browser source showing that page, muted. Without: a Video Capture Device. Created by a scene build; a changed link is applied at once.">i</span>
+          </div>
+          <div id="bxPlayerCamsBox" hidden>
+            <label class="check"><input type="checkbox" id="bxPlayerCams"> Player cameras</label>
+            <p class="hint">Follow the home roster's player POV; show all three during goal replays. Bottom left, small windows. Build scenes after changing this if the scene list differs.</p>
+            <div class="status-line" id="bxPlayerCamsNote"></div>
           </div>
           <div class="bx-list" id="bxCamList"></div>
           <div class="field-row" style="margin-top:12px">

@@ -84,13 +84,35 @@
     "default": "hanken"
   },
   "broadcast": {
+    "rosterPageSize": 8,
     "scenes": ["schedule", "versus"],
     "cameras": [
-      {"id":"crowd","label":"Crowd Cam","title":"Crowd Cam","subtitle":"Messiah Esports"},
-      {"id":"room","label":"Comp Room","title":"Comp Room","subtitle":"Messiah Esports"}
+      {"id":"player1","label":"Player 1","title":"Player 1","subtitle":"Messiah Esports"},
+      {"id":"player2","label":"Player 2","title":"Player 2","subtitle":"Messiah Esports"},
+      {"id":"player3","label":"Player 3","title":"Player 3","subtitle":"Messiah Esports"}
     ],
-    "follow": {"links": [], "scope": "home"}
+    "cameraGroup": {
+      "label":"Player Cams",
+      "cameras":["player1","player2","player3"],
+      "frames":[
+        {"x":96,"y":300,"w":560,"h":420},
+        {"x":680,"y":300,"w":560,"h":420},
+        {"x":1264,"y":300,"w":560,"h":420}
+      ]
+    },
+    "exclusiveWindows": true,
+    "cameraWindowBottom": 100,
+    "retiredCameras": [{"id":"crowd","label":"Crowd Cam"},{"id":"room","label":"Comp Room"}],
+    "follow": {
+      "version": 2,
+      "links": [
+        "https://necc.v1.leagueos.gg/league/groups/c8tx1jcxhv89exuf7rdux1y43/calendar",
+        "https://lote.v1.leagueos.gg/league/groups/c8tx1jcxhv89exuf7rdux1y43/calendar"
+      ],
+      "scope": "home"
+    }
   },
+  "leagueGraphics": {"exclude": ["matchPreview"]},
   "defaults": {"montage": false},
   "theme": "theme.css",
   "themeScript": "theme.js"

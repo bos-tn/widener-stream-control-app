@@ -116,6 +116,7 @@ function sceneEntries(prefix, opts) {
   (opts.cameras || []).forEach((c) => {
     list.push({ key: `cam-${c.id}`, view: `cam-${c.id}`, camera: c.id, scene: `${prefix}: ${c.label}`, input: `${prefix}-src-cam-${c.id}` });
   });
+  if (opts.cameraGroup) list.push({ key: 'camera-group', view: 'camera-group', cameraGroup: opts.cameraGroup.cameras, cameraFrames: opts.cameraGroup.frames, scene: `${prefix}: ${opts.cameraGroup.label}`, input: `${prefix}-src-camera-group` });
   list.push(base('brb'), base('post-match'));
   return list;
 }
@@ -178,6 +179,7 @@ function createObs(opts = {}) {
   const everyScene = () => sceneEntries(prefix, {
     includeStats: true, leagueScenes: LEAGUE_VIEWS.map((v) => v.view), neccTypes: opts.allNeccTypes || [],
     broadcastScenes: BROADCAST_VIEWS.map((v) => v.view), cameras: opts.allCameras || [],
+    cameraGroup: opts.allCameraGroup,
   });
   function staleEntries() {
     const wanted = new Set(scenes.map((s) => s.key));
@@ -201,6 +203,16 @@ function createObs(opts = {}) {
     return scenes.find((s) => s.scene === name || (s.legacy && s.legacy.some((l) => l.scene === name))) || null;
   }
   function entryForKey(key) { return scenes.find((s) => s.key === key) || null; }
+
+  // A group can own an input even when its individual camera scene is off.
+  function cameraTargets() {
+    const targets = scenes.filter((s) => s.camera);
+    const group = scenes.find((s) => s.cameraGroup);
+    if (group) group.cameraGroup.forEach((id) => {
+      if (!targets.some((s) => s.camera === id)) targets.push({ camera:id, scene:group.scene });
+    });
+    return targets;
+  }
 
   function reportProgram() {
     const t = entryForScene(currentScene);
@@ -414,6 +426,7 @@ function createObs(opts = {}) {
         await fitItem(t.scene, sceneItemId, base);
         n++;
       } catch (e) { continue; }
+      if (t.cameraGroup) await ensureCameraGroup(t, base, new Set(((await obs.call('GetInputList')).inputs || []).map((i) => i.inputName))).catch(() => {});
       if (!t.camera) continue;
       try {
         const input = cameraInput(t.camera);
@@ -755,6 +768,24 @@ function createObs(opts = {}) {
     return true;
   }
 
+  // Three existing camera inputs in one timeout scene. The browser page
+  // draws the labels and frames above these fixed, cropped camera items.
+  async function ensureCameraGroup(group, base, existingInputs) {
+    for (const [index, id] of group.cameraGroup.entries()) {
+      const input = cameraInput(id);
+      if (!existingInputs.has(input)) continue;
+      let sceneItemId;
+      try { ({ sceneItemId } = await obs.call('GetSceneItemId', { sceneName: group.scene, sourceName: input })); }
+      catch (e) { ({ sceneItemId } = await obs.call('CreateSceneItem', { sceneName: group.scene, sourceName: input, sceneItemEnabled: true })); }
+      const kx = base.w / 1920;
+      const ky = base.h / 1080;
+      const rect = group.cameraFrames[index];
+      await coverItem(group.scene, sceneItemId, { x: rect.x * kx, y: rect.y * ky, w: rect.w * kx, h: rect.h * ky });
+      try { await obs.call('SetSceneItemEnabled', { sceneName: group.scene, sceneItemId, sceneItemEnabled: true }); } catch (e) { /* non-fatal */ }
+      try { await obs.call('SetSceneItemIndex', { sceneName: group.scene, sceneItemId, sceneItemIndex: index }); } catch (e) { /* non-fatal */ }
+    }
+  }
+
   // Shows or hides a camera's window over the game. `rect` is in 1920x1080
   // stage pixels (the overlay draws its frame at the same place).
   async function setCameraWindow(id, on, rect) {
@@ -777,7 +808,7 @@ function createObs(opts = {}) {
   // camera's scene has been built.
   async function applyCamera(id) {
     if (!connected) return 'offline';
-    const t = scenes.find((s) => s.camera === id);
+    const t = cameraTargets().find((s) => s.camera === id);
     if (!t) return 'no-scene';
     const sceneNames = new Set(((await obs.call('GetSceneList')).scenes || []).map((s) => s.sceneName));
     if (!sceneNames.has(t.scene)) return 'no-scene';
@@ -785,6 +816,8 @@ function createObs(opts = {}) {
     const made = await ensureCamera(t, await videoBase(), existingInputs);
     const sb = entryForKey('scoreboard');
     if (made !== 'manual' && sb && sceneNames.has(sb.scene)) await ensureCameraWindow(sb, id, existingInputs).catch(() => {});
+    const group = scenes.find((s) => s.cameraGroup && s.cameraGroup.includes(id));
+    if (made !== 'manual' && group && sceneNames.has(group.scene)) await ensureCameraGroup(group, await videoBase(), existingInputs).catch(() => {});
     return made;
   }
 
@@ -1017,11 +1050,13 @@ function createObs(opts = {}) {
     // cameraSources: what each camera is in OBS, for the build result.
     const cameras = {};
     const cameraSources = {};
-    for (const t of scenes.filter((s) => s.camera)) {
+    for (const t of cameraTargets()) {
       cameraSources[t.camera] = { input: cameraInput(t.camera), kind: linkKind(cameraLink(t.camera)) };
       cameras[t.camera] = await ensureCamera(t, base, existingInputs).catch(() => 'manual');
       if (cameras[t.camera] !== 'manual') await ensureCameraWindow(entryForKey('scoreboard'), t.camera, existingInputs).catch(() => {});
     }
+    const group = scenes.find((s) => s.cameraGroup);
+    if (group) await ensureCameraGroup(group, base, existingInputs).catch(() => {});
 
     // The shared music source, in every app scene. Created silent;
     // applyMusic() then fades it to wherever it should be.
@@ -1061,6 +1096,11 @@ function createObs(opts = {}) {
       }
       if (existingScenes.has(t.scene)) {
         try { await obs.call('RemoveScene', { sceneName: t.scene }); removed.push(t.scene); } catch (e) { /* non-fatal */ }
+      }
+    }
+    for (const id of opts.retiredCameraIds || []) {
+      for (const input of Object.values(CAMERA_INPUTS).map((name) => name(id))) {
+        if (existingInputs.has(input)) await removeInput(input).catch(() => {});
       }
     }
     if (collection === 'created' && existingScenes.has('Scene')) {

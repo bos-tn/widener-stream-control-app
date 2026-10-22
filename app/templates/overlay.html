@@ -585,6 +585,12 @@
   .rls.on{ display:block; animation: rls-in .55s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rls-in{ from{ clip-path:inset(0 0 100% 0) } to{ clip-path:inset(0 0 0 0) } }
   .rls.on.cut{ animation:none; }
+  /* The stats rows enter with the scene (body.enter, below). Until OBS puts the
+     scene on air they are held out of sight: drawn while the scene is off air,
+     they showed for a moment and then restarted their entrance. */
+  body.rls-hold .rls .rls-pname, body.rls-hold .rls .rls-cell, body.rls-hold .rls .rls-label, body.rls-hold .rls .rls-game{ visibility:hidden; }
+  /* MVP sets its own visibility, so it must also obey the off-air hold. */
+  body.rls-hold .rls .rls-pname.mvp em{ visibility:hidden; }
   .rls::before{ content:""; position:absolute; right:-80px; bottom:-120px; width:760px; height:760px; background:#eaf2ff; opacity:.025;
     -webkit-mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat; mask:var(--brand-watermark, url(/brand/logo.png)) center / contain no-repeat; }
   .rls > *{ position:relative; }
@@ -1442,7 +1448,21 @@
     // The broadcast package's entrances run longer (a camera scene's title).
     enterTimer = setTimeout(() => document.body.classList.remove('enter'), stingerPoint + (BX ? 6500 : 3500));
   }
+  // The Rocket League stats rows wait for the entrance (rls-hold, above). Held
+  // from the page's load in OBS and whenever it goes off air; let go by the
+  // entrance. A page that has not heard from OBS yet (loaded already on air)
+  // lets go once it has been shown for RL_HOLD_MAX_MS.
+  const RL_HOLD_MAX_MS = 3000;
+  let rlHoldTimer = 0;
+  let obsToldActive = false;
+  function setRlHold(on){
+    clearTimeout(rlHoldTimer);
+    const hold = !!on && !!window.obsstudio;
+    document.body.classList.toggle('rls-hold', hold);
+    if(hold && !obsToldActive && !document.hidden) rlHoldTimer = setTimeout(() => setRlHold(false), RL_HOLD_MAX_MS);
+  }
   function replayEntrance(){
+    setRlHold(false); // before the animations take over, in the same frame
     document.body.classList.remove('enter');
     void document.body.offsetWidth; // reflow, so the animations restart
     document.body.classList.add('enter');
@@ -1450,7 +1470,14 @@
     if(BX) BX.onEnter();
   }
   endEntranceLater();
-  window.addEventListener('obsSourceActiveChanged', (e) => { if(e.detail && e.detail.active) replayEntrance(); });
+  window.addEventListener('obsSourceActiveChanged', (e) => {
+    obsToldActive = true;
+    if(e.detail && e.detail.active) replayEntrance(); else setRlHold(true);
+  });
+  // Off air the page is hidden; on its way on air it is shown before the
+  // entrance, which still has to come.
+  document.addEventListener('visibilitychange', () => { if(document.hidden || document.body.classList.contains('rls-hold')) setRlHold(true); });
+  setRlHold(true);
 
   // Social pills, built from the same socials object every other view uses so
   // there is one place to edit handles. Blank handles are skipped.

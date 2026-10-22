@@ -258,7 +258,7 @@ function createServer(port, opts = {}) {
   // The broadcast package (see broadcast.js): on for a profile with a
   // `broadcast` block.
   const BX_ON = PROFILE.broadcast.enabled;
-  const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`));
+  const BX_SCENE_KEYS = PROFILE.broadcast.scenes.concat(PROFILE.broadcast.cameras.map((c) => `cam-${c.id}`), PROFILE.broadcast.cameraGroup ? ['camera-group'] : []);
   // In dev, each league other than Widener keeps its own app/data/<id>.
   // STREAM_DATA_DIR points a dev run at another folder (the design demo).
   const dataDir = opts.dataDir || process.env.STREAM_DATA_DIR || (PROFILE.id === 'widener' ? path.join(__dirname, 'data') : path.join(__dirname, 'data', PROFILE.id));
@@ -543,20 +543,24 @@ function createServer(port, opts = {}) {
   // The LeagueOS graphics a scene can be made for, in the order their scenes
   // sit in OBS: the ones for before the match first, then the ones for
   // during it.
-  const NECC_TYPES = [
+  const ALL_NECC_TYPES = [
+    { key: 'matchPreview', label: 'Match Preview' }, // retired: kept so a build removes its old scene
     { key: 'matchRosters', label: 'Match Rosters' },
     { key: 'stageBracket', label: 'Bracket' },
     { key: 'seasonHeader', label: 'Season Header' },
     { key: 'matchProgress', label: 'Match Progress' },
     { key: 'matchActivity', label: 'Match Activity' },
   ];
+  const NECC_TYPES = ALL_NECC_TYPES.filter((t) => t.key !== 'matchPreview' && !PROFILE.leagueGraphics.exclude.includes(t.key));
   const obs = createObs({
     getOverlayBase: () => `http://localhost:${port}`,
     prefix: PROFILE.obs.prefix,
     collection: PROFILE.obs.collection || `${PROFILE.shortName} Stream`,
     stingerName: `${PROFILE.shortName} Stinger`,
-    allNeccTypes: NECC_TYPES,
-    allCameras: PROFILE.broadcast.cameras,
+    allNeccTypes: ALL_NECC_TYPES,
+    allCameras: PROFILE.broadcast.cameras.concat(PROFILE.broadcast.retiredCameras || []),
+    retiredCameraIds: (PROFILE.broadcast.retiredCameras || []).map((c) => c.id),
+    allCameraGroup: PROFILE.broadcast.cameraGroup,
     onConnected: () => { setTimeout(reloadMissingPages, PAGE_CHECK_MS).unref(); },
     onProgram: (p) => {
       if (p.key !== 'stats') autoStatsUp = false;
@@ -602,6 +606,7 @@ function createServer(port, opts = {}) {
   const onlyLeagueScenes = (list) => PROFILE.leagueScenes.filter((s) => list.includes(s));
   function panelPrefs() {
     const p = appSettings.panel || {};
+    const migrateMessiahCams = PROFILE.id === 'messiah' && Array.isArray(p.bxScenes) && p.cameraPrefsVersion !== 2;
     return {
       neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t)) : DEFAULT_NECC_TYPES.slice(),
       // The league's own scenes: all of them until the operator unticks one.
@@ -619,7 +624,8 @@ function createServer(port, opts = {}) {
       // A build puts the app's scenes in stream order in OBS's list.
       orderScenes: p.orderScenes !== false,
       // The broadcast package's scenes: all of them until one is unticked.
-      bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k)) : BX_SCENE_KEYS.slice(),
+      bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k) ||
+        (migrateMessiahCams && (k === 'camera-group' || PROFILE.broadcast.cameras.some((c) => k === `cam-${c.id}`)))) : BX_SCENE_KEYS.slice(),
     };
   }
   function savePanelPrefs(patch) {
@@ -629,7 +635,7 @@ function createServer(port, opts = {}) {
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
     if (Array.isArray(patch.bxScenes)) next.bxScenes = BX_SCENE_KEYS.filter((k) => patch.bxScenes.includes(k));
-    appSettings = { ...appSettings, panel: next };
+    appSettings = { ...appSettings, panel: { ...next, ...(PROFILE.id === 'messiah' ? { cameraPrefsVersion: 2 } : {}) } };
     writeJsonSafe(settingsFile, appSettings);
     sendToPanels({ type: 'prefs', prefs: next });
     syncLayout();
@@ -648,7 +654,10 @@ function createServer(port, opts = {}) {
       includeStats: state.scoreboard.style === 'rl',
       leagueScenes: prefs.leagueScenes,
       broadcastScenes: PROFILE.broadcast.scenes.filter((k) => prefs.bxScenes.includes(k)),
-      cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`)),
+      // Keep optional solo scenes and the group independent. Automation also
+      // needs the player sources, even when every optional camera is unticked.
+      cameras: PROFILE.broadcast.cameras.filter((c) => prefs.bxScenes.includes(`cam-${c.id}`) || (c.player && bx && bx.settings().playerCams.on)),
+      cameraGroup: PROFILE.broadcast.cameraGroup && prefs.bxScenes.includes('camera-group') ? PROFILE.broadcast.cameraGroup : null,
       // Which cameras are network cameras, and where (see broadcast.js).
       cameraLinks: bx ? bx.cameraLinks() : {},
       gameCapture: prefs.gameCapture,
@@ -669,7 +678,7 @@ function createServer(port, opts = {}) {
   let layoutKey = '';
   function syncLayout(quiet) {
     const o = buildOptions();
-    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id), o.cameraLinks]);
+    const key = JSON.stringify([o.includeStats, o.leagueScenes, o.neccTypes.map((t) => t.key), o.broadcastScenes, o.cameras.map((c) => c.id), o.cameraGroup, o.cameraLinks]);
     if (key === layoutKey) return;
     layoutKey = key;
     obs.setLayout(o);
@@ -775,6 +784,7 @@ function createServer(port, opts = {}) {
     documentsDir: opts.documentsDir,
     port: opts.rlPort || Number(process.env.WIDENER_RL_PORT) || null,
     onSnapshot: (snap) => {
+      if (bx) bx.onRl(snap);
       sendToAll({ type: 'rl', rl: snap });
       const key = snap.status + ':' + snap.inMatch;
       if (key !== lastRlMusicKey) { lastRlMusicKey = key; updateMusic(); }
@@ -1202,7 +1212,11 @@ tick(); setInterval(tick, 2000);
       reply(res, {});
     });
     app.post('/api/bx/lower', (req, res) => reply(res, bx.setLower(req.body || {})));
-    app.post('/api/bx/settings', (req, res) => reply(res, bx.setSettings(req.body || {})));
+    app.post('/api/bx/settings', (req, res) => {
+      const out = bx.setSettings(req.body || {});
+      syncLayout(); // Mark camera scenes that need a build after a setting change.
+      reply(res, out);
+    });
     app.post('/api/bx/follows', async (req, res) => {
       try { reply(res, await bx.follow(String((req.body || {}).url || ''), (req.body || {}).league, { all: !!(req.body || {}).all })); }
       catch (err) { res.status(502).json({ error: err.message || 'Could not read that link' }); }
@@ -1238,6 +1252,8 @@ tick(); setInterval(tick, 2000);
       if (out.error) return res.status(400).json(out);
       syncLayout(true);
       const applied = await obs.applyCamera(String(req.params.id)).catch((err) => 'error: ' + ((err && err.message) || 'OBS refused'));
+      // A source-kind change replaces the gameplay item; restore its window.
+      bx.applyPipRects();
       res.json({ ok: true, ...out, applied });
     });
     app.post('/api/bx/cameras/:id/device', async (req, res) => {
@@ -1425,6 +1441,7 @@ tick(); setInterval(tick, 2000);
     try {
       updateMusic();
       const out = await obs.buildScenes(buildOptions());
+      if (bx) bx.applyPipRects(); // Restore windows already requested before their sources existed.
       let stinger = null;
       try { stinger = await configureStinger(); } catch (e) { stinger = { found: false, error: e.message }; }
       res.json({ ...out, stinger });

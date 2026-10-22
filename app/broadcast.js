@@ -52,6 +52,12 @@ const STATES = ['upcoming', 'live', 'final'];
 const CORNERS = ['bottom-left', 'bottom-right', 'top-left', 'top-right'];
 const PIP_SIZES = { s: [384, 216], m: [480, 270], l: [640, 360] };
 const PIP_GAP = 18;
+// Player cameras keep to the bottom left, at the small size, so three of
+// them fit above the scoreboard's reserve.
+const PLAYER_CAM = { pos: 'bottom-left', size: 's' };
+// A change in who the camera follows, or in the replay, must hold this long
+// before the player cameras move.
+const PLAYER_CAM_SETTLE_MS = 250;
 const STAGE = { w: 1920, h: 1080 };
 
 function defaultSettings() {
@@ -63,6 +69,10 @@ function defaultSettings() {
     alerts: { auto: true, onEdit: true, series: true, gameplay: true, pos: 'top-right', seconds: 9 },
     pip: { pos: 'bottom-left', size: 'm' },
     lower: { seconds: 10 },
+    // Player cameras (a profile's cameras marked `player`): the spectated
+    // home player's camera stays up bottom left, and all of them stack on
+    // the left during a goal replay. Off until the operator turns it on.
+    playerCams: { on: false },
   };
 }
 
@@ -115,7 +125,10 @@ function createBroadcast(opts) {
     manual: Array.isArray(store.manual) ? store.manual : [],
     follows: Array.isArray(store.follows) ? store.follows : [],
     schools: Array.isArray(store.schools) ? store.schools : [],
-    defaultsDone: !!store.defaultsDone,
+    // A new feed version adds the profile's calendars once, including on
+    // installs with an imported season. Later clears stay respected.
+    defaultsDone: !!store.defaultsDone && (store.defaultsVersion || 0) >= (defaults.version || 0),
+    defaultsVersion: defaults.version || 0,
     feed: store.feed && typeof store.feed === 'object' ? store.feed : {},
     overrides: store.overrides && typeof store.overrides === 'object' ? store.overrides : {},
     hidden: Array.isArray(store.hidden) ? store.hidden : [],
@@ -137,7 +150,7 @@ function createBroadcast(opts) {
     const out = { ...base };
     const p = patch && typeof patch === 'object' ? patch : {};
     if (p.scope === 'all' || p.scope === 'home') out.scope = p.scope;
-    ['ticker', 'alerts', 'pip', 'lower'].forEach((k) => {
+    ['ticker', 'alerts', 'pip', 'lower', 'playerCams'].forEach((k) => {
       out[k] = { ...base[k] };
       const src = p[k] && typeof p[k] === 'object' ? p[k] : {};
       Object.keys(base[k]).forEach((f) => {
@@ -351,28 +364,97 @@ function createBroadcast(opts) {
     const rl = sb.style === 'rl';
     const at = (corner) => !rl && sb.position === corner;
     const topBar = !rl && sb.position === 'top';
+    const bottom = profile.broadcast.cameraWindowBottom || 40;
     return {
       'top-left': rl ? (sb.rlPlayers !== false ? 168 : 32) : at('top-left') ? 216 : topBar ? 170 : 32,
       'top-right': rl ? (sb.rlPlayers !== false ? 168 : 32) : at('top-right') ? 216 : topBar ? 170 : 32,
-      'bottom-left': at('bottom-left') ? 226 : 40,
-      'bottom-right': rl && sb.rlBoost !== false ? 236 : at('bottom-right') ? 226 : 40,
+      'bottom-left': Math.max(bottom, at('bottom-left') ? 226 : 40),
+      'bottom-right': Math.max(bottom, rl && sb.rlBoost !== false ? 236 : at('bottom-right') ? 226 : 40),
     };
   }
   function pipRects() {
     const res = reserved();
-    const [w, h] = PIP_SIZES[store.settings.pip.size];
-    const pos = store.settings.pip.pos;
     const out = {};
-    let offset = res[pos];
-    cameras.forEach((c) => {
-      if (!cams[c.id].pip) return;
+    const offsets = {};
+    const place = (c, pos, size) => {
+      const [w, h] = PIP_SIZES[size];
+      if (offsets[pos] === undefined) offsets[pos] = res[pos];
       const x = pos.endsWith('left') ? 40 : STAGE.w - 40 - w;
-      const y = pos.startsWith('top') ? offset : STAGE.h - offset - h;
-      out[c.id] = { x, y, w, h };
-      offset += h + PIP_GAP + 34; // the frame's label tab sits above each window
-    });
+      const y = pos.startsWith('top') ? offsets[pos] : STAGE.h - offsets[pos] - h;
+      out[c.id] = { x, y, w, h, pos };
+      offsets[pos] += h + PIP_GAP + 34; // the frame's label tab sits above each window
+    };
+    cameras.filter((c) => (!c.player || !store.settings.playerCams.on) && cams[c.id].pip).forEach((c) => place(c, store.settings.pip.pos, store.settings.pip.size));
+    // Stacked up from the bottom, last first: the first player is on top.
+    playerCams.filter((c) => store.settings.playerCams.on && cams[c.id].pip).slice().reverse().forEach((c) => place(c, PLAYER_CAM.pos, PLAYER_CAM.size));
     return out;
   }
+  // --- Player cameras -------------------------------------------------------
+  // The cameras marked `player` belong to the home team's players, in the
+  // order of its roster: the first camera is the first player. With the
+  // setting on, the camera of the player the game is spectating stays up
+  // while it is a home player; during a goal replay all of them are up.
+  const playerCams = cameras.filter((c) => c.player);
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  function homeRoster() {
+    const st = getState() || {};
+    const team = [st.teamA, st.teamB].find((t) => t && isHome(t) && (t.players || []).length);
+    return team ? team.players.map((p) => ({ name: cleanText(p.gamertag || p.name, 40), gamertag: norm(p.gamertag), fullName: norm(p.name) })) : [];
+  }
+  function playerSlots() {
+    const roster = homeRoster();
+    return playerCams.map((c, i) => ({ id: c.id, player: roster[i] || null })).filter((s) => s.player);
+  }
+  // The label on a player camera's frame: the player's name.
+  function playerTab(c) {
+    if (!c.player) return c.label;
+    const slot = playerSlots().find((s) => s.id === c.id);
+    return slot ? slot.player.name : c.label;
+  }
+  let rlSnap = null;
+  function wantedPlayerCams() {
+    if (!store.settings.playerCams.on || !rlSnap || !rlSnap.inMatch) return [];
+    const slots = playerSlots();
+    if (!slots.length) return [];
+    if (rlSnap.replay) return slots.map((s) => s.id);
+    const spectated = (rlSnap.players || []).find((p) => p.key === rlSnap.target);
+    const name = spectated && norm(spectated.name);
+    const slot = name && (slots.find((s) => s.player.gamertag === name) || slots.find((s) => s.player.fullName === name));
+    return slot ? [slot.id] : [];
+  }
+  let wantKey = '[]';
+  let wantTimer = null;
+  let playerObsTimer = null;
+  function syncPlayerCams(now) {
+    if (!playerCams.length) return;
+    const key = JSON.stringify(wantedPlayerCams());
+    if (key === wantKey && !now) return;
+    wantKey = key;
+    clearTimeout(wantTimer);
+    const apply = () => setPlayerPips(wantedPlayerCams());
+    if (now) apply(); else { wantTimer = setTimeout(apply, PLAYER_CAM_SETTLE_MS); if (wantTimer.unref) wantTimer.unref(); }
+  }
+  // Frames first, then OBS, as a single window does (setPip). One timer for
+  // all of them, and it sets every player camera to what is true by then.
+  function setPlayerPips(want) {
+    const changed = playerCams.filter((c) => cams[c.id].pip !== want.includes(c.id));
+    if (!changed.length) return;
+    changed.forEach((c) => { cams[c.id].pip = want.includes(c.id); });
+    broadcast();
+    clearTimeout(playerObsTimer);
+    playerObsTimer = setTimeout(() => {
+      playerObsTimer = null;
+      const rects = pipRects();
+      playerCams.forEach((c) => obs.setCameraWindow(c.id, cams[c.id].pip, cams[c.id].pip ? rects[c.id] : undefined).catch(() => {}));
+    }, PIP_SWITCH_MS);
+    if (playerObsTimer.unref) playerObsTimer.unref();
+  }
+  // The game's snapshot (rlstats.js), every time it changes.
+  function onRl(snap) {
+    rlSnap = snap;
+    if (store.settings.playerCams.on || wantKey !== '[]') syncPlayerCams();
+  }
+
   // The rectangle a camera would take if it were switched on now (OBS is
   // told before the overlay shows it).
   function pipRectFor(id) {
@@ -391,7 +473,7 @@ function createBroadcast(opts) {
       week: { from: new Date(week.from).toISOString(), to: new Date(week.to).toISOString() },
       settings: store.settings,
       lower,
-      cams: cameras.map((c) => ({ id: c.id, label: c.label, pip: cams[c.id].pip, link: camLink(c.id), defaultLink: defaultLink(c.id) })),
+      cams: cameras.map((c) => ({ id: c.id, label: c.label, player: !!c.player, tab: playerTab(c), pip: cams[c.id].pip, link: camLink(c.id), defaultLink: defaultLink(c.id) })),
       layout: { reserved: reserved(), pip: pipRects() },
       follows: store.follows.map((f) => {
         const feed = store.feed[f.id] || {};
@@ -631,6 +713,9 @@ function createBroadcast(opts) {
   // nothing is followed until the link comes back with all: true.
   async function follow(url, league, opts) {
     const r = await resolveLeagueLink(url);
+    return followResolved(r, league, opts);
+  }
+  async function followResolved(r, league, opts) {
     const label = cleanText(league, 60) || leagueName(r.hostname);
     if (r.school) return followSchool(r.hostname, r.leagueId, r.school, label, r.seasons);
     const fresh = r.seasons.filter((s) => !store.follows.some((f) => f.seasonId === s.id));
@@ -717,22 +802,24 @@ function createBroadcast(opts) {
     readNew();
     return { ok: true };
   }
-  // Back to the profile's own feed: its links, and its scope. If the league
-  // site cannot be read, what was followed before is put back.
+  // Resolve every default link before replacing the feed, so a failed
+  // league cannot leave a multi-league profile with only half its defaults.
   async function followDefault() {
+    return configureDefaults(true);
+  }
+  async function configureDefaults(replace) {
     if (!defaults.links.length) return { error: 'This profile has no default feed' };
-    const removed = clearFollows().removed;
+    const resolved = [];
+    try {
+      for (const link of defaults.links) resolved.push(await resolveLeagueLink(link));
+    } catch (err) {
+      return { error: String((err && err.message) || 'The league site did not answer') };
+    }
+    const empty = !store.follows.length && !store.schools.length;
+    const removed = replace ? clearFollows().removed : null;
     let added = 0;
-    let failed = '';
-    for (const link of defaults.links) {
-      try { added += (await follow(link, '', { all: true })).added || 0; }
-      catch (err) { failed = failed || String((err && err.message) || 'The league site did not answer'); }
-    }
-    if (failed && !store.follows.length) {
-      restoreFollows(removed);
-      return { error: failed };
-    }
-    store.settings = mergeSettings(store.settings, { scope: defaults.scope });
+    for (const r of resolved) added += (await followResolved(r, '', { all: true })).added || 0;
+    if (replace || empty) store.settings = mergeSettings(store.settings, { scope: defaults.scope });
     store.defaultsDone = true;
     save(); broadcast(true);
     return { added, removed };
@@ -795,10 +882,17 @@ function createBroadcast(opts) {
   // A camera popped up over the game. on: true, false or 'toggle'.
   function setPip(id, on) {
     if (!cams[id]) return { error: 'No such camera' };
+    if (store.settings.playerCams.on && playerCams.some((c) => c.id === id)) return { error: 'Player cameras follow the game while Player cameras is on' };
     const next = on === 'toggle' ? !cams[id].pip : !!on;
     if (next === cams[id].pip) return { pip: next };
     clearTimeout(pipTimers[id]);
     if (next) {
+      if (profile.broadcast.exclusiveWindows) cameras.forEach((other) => {
+        if (other.id === id || !cams[other.id].pip || (store.settings.playerCams.on && other.player)) return;
+        clearTimeout(pipTimers[other.id]);
+        cams[other.id].pip = false;
+        obs.setCameraWindow(other.id, false).catch(() => {});
+      });
       // The overlay draws the closed frame first; OBS shows the camera under
       // it a moment later, and the frame then opens.
       const rect = pipRectFor(id);
@@ -816,14 +910,21 @@ function createBroadcast(opts) {
   // changes corner.
   function applyPipRects(skip) {
     const rects = pipRects();
-    Object.keys(rects).forEach((id) => { if (id !== skip) obs.setCameraWindow(id, true, rects[id]).catch(() => {}); });
+    Object.keys(rects).forEach((id) => { if (id !== skip && !(playerObsTimer && playerCams.some((c) => c.id === id))) obs.setCameraWindow(id, true, rects[id]).catch(() => {}); });
   }
 
   function setSettings(patch) {
     const pipBefore = JSON.stringify(store.settings.pip);
+    const playersBefore = store.settings.playerCams.on;
     store.settings = mergeSettings(store.settings, patch);
     save(); broadcast();
     if (JSON.stringify(store.settings.pip) !== pipBefore) applyPipRects();
+    if (store.settings.playerCams.on !== playersBefore) {
+      // Cancel manual openings before automation takes ownership.
+      playerCams.forEach((c) => clearTimeout(pipTimers[c.id]));
+      wantKey = null; // Reconcile manual windows even if the wanted set is still empty.
+      syncPlayerCams(!store.settings.playerCams.on);
+    }
     return { settings: store.settings };
   }
 
@@ -833,18 +934,19 @@ function createBroadcast(opts) {
   function onState() {
     const key = JSON.stringify(reserved());
     if (key !== layoutKey) { layoutKey = key; applyPipRects(); }
+    syncPlayerCams();
     broadcast();
   }
 
-  // A new install follows the profile's own feed. One that already follows
-  // something keeps it. Until the league site has answered once this is
-  // tried again (the PC may be offline the first time the app runs).
+  // A new install follows the profile's own feed. A versioned default also
+  // adds its calendars to existing installs without clearing their matches
+  // or other follows. Failures are retried until all calendars resolve.
   let defaulting = false;
   function applyDefaults() {
     if (store.defaultsDone || defaulting) return;
-    if (store.follows.length || store.schools.length || !defaults.links.length) { store.defaultsDone = true; save(); return; }
+    if (!defaults.links.length || (!defaults.version && (store.follows.length || store.schools.length))) { store.defaultsDone = true; save(); return; }
     defaulting = true;
-    followDefault().catch(() => {}).then(() => { defaulting = false; });
+    configureDefaults(false).catch(() => {}).then(() => { defaulting = false; });
   }
 
   // Start: read every followed season once, then keep them current.
@@ -864,8 +966,8 @@ function createBroadcast(opts) {
     upsertManual, removeMatch, restoreHidden, setScore, clearCorrection, alertMatch, alert, alertSeriesFinal,
     follow, followImported, unfollow, refresh,
     unfollowSchool, clearFollows, restoreFollows, followDefault, resyncSchools,
-    setLower, setPip, setSettings,
-    cameraLinks, setCameraLink, cameraLive,
+    setLower, setPip, setSettings, onRl, settings: () => store.settings,
+    cameraLinks, setCameraLink, cameraLive, applyPipRects,
     cameras,
   };
 }

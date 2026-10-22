@@ -50,7 +50,7 @@ const BX = BRAND.broadcast || null;
 const BX_SCENES = BX ? [
   { key: 'schedule', label: 'This Week', note: 'matches this week' },
   { key: 'versus', label: 'Matchup', note: 'both teams, before the match' },
-].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' }))) : [];
+].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' })), BX.cameraGroup ? [{ key: 'camera-group', label: BX.cameraGroup.label, note: 'three player feeds together for timeouts' }] : []) : [];
 // The typefaces the scene headlines can be set in, for a league with several.
 const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
 
@@ -252,7 +252,7 @@ const NECC_TYPES = [
   { key: 'seasonHeader', label: 'Season Header' },
   { key: 'matchProgress', label: 'Match Progress' },
   { key: 'matchActivity', label: 'Match Activity' },
-];
+].filter((t) => !(BRAND.leagueGraphics && BRAND.leagueGraphics.exclude || []).includes(t.key));
 let prefs = {
   neccTypes: ['stageBracket'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
   setupDone: false, guideV2: false, gameCapture: true, gameAudio: true, casterMics: false, studioMode: false, orderScenes: true,
@@ -1696,7 +1696,7 @@ if (BX) {
 
 // The view a scene's background is kept under: every league graphic shares
 // one, and the Scoreboard has none (the game shows through it).
-function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') ? '' : key; }
+function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') || key === 'camera-group' ? '' : key; }
 function bgValue(view) {
   const ok = (id) => BACKGROUNDS.some((b) => b.id === id);
   const picked = ((state && state.backgrounds) || {})[view];
@@ -1740,6 +1740,7 @@ function sceneNote(key) {
   if (key === 'roster') return 'Source: Rosters card.';
   if (key === 'schedule') return 'Source: Broadcast, Matches this week.';
   if (key === 'versus') return 'Both teams with logos, players and the countdown.';
+  if (key === 'camera-group') return 'Three player feeds together. Sources: Broadcast, Cameras.';
   if (key.startsWith('cam-')) return 'Camera under a transparent frame. Device: Broadcast, Cameras.';
   if (key === 'scoreboard') return sb().style === 'rl' ? 'Live game data over the game capture.' : 'Manual score over the game capture.';
   if (key === 'stats') return 'Auto-cut after each game. Returns to Scoreboard at the next kickoff countdown.';
@@ -2173,6 +2174,7 @@ function connect() {
         if (!START_PAGE) setPage(state.teamA.name && state.teamB.name ? 'live' : 'match');
       }
     }
+    if (msg.type === 'error') toast(msg.error || 'Change not saved.');
     if (msg.type === 'onair') { onAir = msg.onAir || onAir; renderOnAir(); renderSceneList(); }
     // The scenes this match uses changed (another game, an extra scene
     // ticked): redraw the list and ask OBS what it has.

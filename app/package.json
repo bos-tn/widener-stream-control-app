@@ -18,7 +18,12 @@
     "stinger": "electron build/make-stinger.js",
     "design": "node dev/design-server.js",
     "test:broadcast": "node dev/test-broadcast.js",
+    "test:feed": "node dev/test-league-feed.js",
+    "test:stats-entrance": "electron dev/test-stats-entrance.js",
+    "test:playercams": "node dev/test-playercams.js",
     "test:messiah": "node dev/test-messiah.js",
+    "test:messiah:visual": "electron dev/review-messiah.js",
+    "test:headlines": "electron dev/test-headline-motion.js",
     "test:profile-lock": "electron dev/test-profile-lock.js"
   },
   "dependencies": {

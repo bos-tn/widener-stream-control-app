@@ -23,8 +23,9 @@
   if (!BRAND.broadcast) return;
 
   const CAMERAS = BRAND.broadcast.cameras || [];
+  const CAMERA_GROUP = BRAND.broadcast.cameraGroup || null;
   const FULL = ['starting-soon', 'post-match', 'roster', 'brb', 'versus', 'schedule'];
-  const VIEWS = (BRAND.broadcast.scenes || []).concat(CAMERAS.map((c) => 'cam-' + c.id));
+  const VIEWS = (BRAND.broadcast.scenes || []).concat(CAMERAS.map((c) => 'cam-' + c.id), CAMERA_GROUP ? ['camera-group'] : []);
   const STAGE = { w: 1920, h: 1080 };
 
   let O = null;       // the page's side (BX.init)
@@ -229,6 +230,12 @@
         <div class="bx-cam-sting"><i class="a"></i><i class="b"></i><b data-r="sting"></b></div>
       </section>
 
+      <section class="bx-view bx-group" data-view="camera-group">
+        <div class="bx-group-head"><div class="bx-group-mark"><img alt=""></div><div><span></span><h1></h1></div><b>Team / Timeout</b></div>
+        <div class="bx-group-cards"></div>
+        <div class="bx-group-foot"><span>Three perspectives. One team.</span><b></b></div>
+      </section>
+
       <header class="bx-mast">
         <div class="bx-mast-left" data-in="left">
           <div class="bx-mast-brand"><img class="bx-mast-logo" data-r="logo" alt=""><div class="bx-mast-name"><b data-r="brand"></b><span data-r="tagline"></span></div></div>
@@ -268,7 +275,7 @@
   const alertsBox = root.querySelector('#bx-alerts');
 
   function sectionFor(v) { return v.startsWith('cam-') ? sections.cam : sections[v] || null; }
-  function kindOf(v) { return FULL.includes(v) ? 'full' : v.startsWith('cam-') ? 'cam' : v === 'scoreboard' ? 'game' : 'pass'; }
+  function kindOf(v) { return FULL.includes(v) ? 'full' : v.startsWith('cam-') || v === 'camera-group' ? 'cam' : v === 'scoreboard' ? 'game' : 'pass'; }
 
   // --- Headlines ---------------------------------------------------------------------
   // A headline as words that rise one after another, stepped down in size
@@ -290,7 +297,9 @@
     const cs = getComputedStyle(el);
     let size = parseFloat(cs.fontSize);
     const ratio = parseFloat(cs.lineHeight) / size || 1;
-    const over = () => el.offsetHeight > size * ratio * opt.lines + 8 || el.scrollWidth > el.clientWidth + 2;
+    const lines = Number(cs.getPropertyValue('--bx-title-lines')) || opt.lines;
+    const maxHeight = parseFloat(cs.maxHeight);
+    const over = () => el.offsetHeight > size * ratio * lines + 8 || (Number.isFinite(maxHeight) && el.scrollHeight > maxHeight + 2) || el.scrollWidth > el.clientWidth + 2;
     while (size > opt.min && over()) { size -= 4; el.style.fontSize = size + 'px'; }
   }
   // Plain text stepped down until it fits `lines` lines.
@@ -299,7 +308,8 @@
     const cs = getComputedStyle(el);
     let size = parseFloat(cs.fontSize);
     const ratio = parseFloat(cs.lineHeight) / size || 1;
-    while (size > min && (el.offsetHeight > size * ratio * lines + 6 || el.scrollWidth > el.clientWidth + 2)) { size -= 2; el.style.fontSize = size + 'px'; }
+    const maxHeight = parseFloat(cs.maxHeight);
+    while (size > min && (el.offsetHeight > size * ratio * lines + 6 || (Number.isFinite(maxHeight) && el.scrollHeight > maxHeight + 2) || el.scrollWidth > el.clientWidth + 2)) { size -= 2; el.style.fontSize = size + 'px'; }
   }
 
   // --- Countdown ----------------------------------------------------------------------
@@ -572,11 +582,21 @@
     });
   }
 
+  let rosterPage = 0;
+  const rosterPageSize = BRAND.broadcast.rosterPageSize || Infinity;
   function drawRoster() {
     const { r } = sections.roster;
     r.title.textContent = viewText('roster').title || 'Starting Lineups';
     r.line.textContent = [state.team, seriesLine()].filter(Boolean).join(' · ');
     const teams = { A: teamOf('A'), B: teamOf('B') };
+    const pages = Math.max(1, Math.ceil(Math.max(teams.A.players.length, teams.B.players.length) / rosterPageSize));
+    rosterPage %= pages;
+    if (pages > 1) r.line.textContent += ` · Lineups ${rosterPage + 1} / ${pages}`;
+    const offsets = {};
+    ['A','B'].forEach((k) => {
+      offsets[k] = Number.isFinite(rosterPageSize) && teams[k].players.length > rosterPageSize ? (rosterPage % Math.ceil(teams[k].players.length / rosterPageSize)) * rosterPageSize : 0;
+      teams[k].players = teams[k].players.slice(offsets[k], offsets[k] + rosterPageSize);
+    });
     const most = Math.max(1, teams.A.players.length, teams.B.players.length);
     // Both lists share a row height: the room under the headers, split by
     // the longer roster. A short roster gets taller rows, and the two blocks
@@ -597,7 +617,7 @@
       names.push(name);
       el.querySelector('.bx-ro-tag').textContent = [t.ownTag, O.recordText(state, t.raw)].filter(Boolean).join(' · ');
       const list = el.querySelector('.bx-ro-list');
-      const sig = JSON.stringify([t.players, rh]);
+      const sig = JSON.stringify([t.players, rh, offsets[k]]);
       if (list.dataset.sig === sig) return;
       list.dataset.sig = sig;
       list.style.setProperty('--rh', rh + 'px');
@@ -607,12 +627,18 @@
         row.style.setProperty('--i', String(i));
         const tag = p.gamertag || p.name || '';
         const real = p.name && p.gamertag && p.name !== p.gamertag ? p.name : '';
-        row.append(h('span', 'n', O.pad(i + 1)), h('span', 'g', tag), h('span', 'r', real));
+        row.append(h('span', 'n', O.pad(offsets[k] + i + 1)), h('span', 'g', tag), h('span', 'r', real));
         list.appendChild(row);
       });
     });
     O.matchNameSizes(names);
   }
+
+  setInterval(() => {
+    if (view !== 'roster' || document.hidden || !Number.isFinite(rosterPageSize) || !state) return;
+    if (Math.max(teamOf('A').players.length, teamOf('B').players.length) <= rosterPageSize) return;
+    rosterPage++; drawRoster();
+  }, 11000);
 
   function drawVersus() {
     const { r } = sections.versus;
@@ -736,6 +762,49 @@
     });
     r.csGame.textContent = shortGame(state.team) || 'Series';
     r.csLine.textContent = s.decided ? 'Final' : s.unit + ' ' + Math.min(s.a + s.b + 1, s.bestOf) + ' · Bo' + s.bestOf;
+  }
+
+  function drawCameraGroup() {
+    if (!CAMERA_GROUP) return;
+    const box = sections['camera-group'].box;
+    if (!box.querySelector('.bx-group-matte')) {
+      // One opaque surface with exact, square camera apertures. A background
+      // on the section would hide the feeds; rounded frames would leak video.
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'bx-group-matte');
+      svg.setAttribute('viewBox', '0 0 1920 1080');
+      const matte = document.createElementNS(svg.namespaceURI, 'path');
+      matte.setAttribute('fill', 'currentColor');
+      matte.setAttribute('fill-rule', 'evenodd');
+      matte.setAttribute('d', 'M0 0H1920V1080H0Z ' + CAMERA_GROUP.frames.map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h-${r.w}Z`).join(' '));
+      svg.appendChild(matte);
+      box.prepend(svg);
+    }
+    setImg(box.querySelector('.bx-group-mark img'), BRAND.logo);
+    box.querySelector('.bx-group-head span').textContent = (BRAND.name || '') + ' / Team Feed';
+    box.querySelector('h1').textContent = CAMERA_GROUP.label;
+    box.querySelector('.bx-group-foot b').textContent = BRAND.tagline || BRAND.name || '';
+    const cards = box.querySelector('.bx-group-cards');
+    if (cards.children.length !== CAMERA_GROUP.cameras.length) {
+      cards.textContent = '';
+      CAMERA_GROUP.cameras.forEach((id, index) => {
+        const card = h('div', 'bx-group-card');
+        const rect = CAMERA_GROUP.frames[index];
+        card.style.left = rect.x + 'px';
+        card.style.top = rect.y + 'px';
+        card.style.width = rect.w + 'px';
+        card.style.setProperty('--feed-height', rect.h + 'px');
+        const label = h('div', 'bx-group-card-label');
+        label.append(h('small', '', String(index + 1).padStart(2, '0')), h('b'));
+        card.append(h('div', 'bx-group-frame'), label);
+        cards.appendChild(card);
+      });
+    }
+    CAMERA_GROUP.cameras.forEach((id, index) => {
+      const cam = CAMERAS.find((c) => c.id === id);
+      const title = viewText('cam-' + id).title || (cam && cam.label) || `Player ${index + 1}`;
+      cards.children[index].querySelector('b').textContent = title;
+    });
   }
 
   function drawMast() {
@@ -863,8 +932,8 @@
     return res[corner] === undefined ? 40 : res[corner];
   }
   function pipStack(corner) {
-    if (kind !== 'game' || !bx.settings || bx.settings.pip.pos !== corner) return 0;
-    const rects = Object.values((bx.layout && bx.layout.pip) || {});
+    if (kind !== 'game' || !bx.settings) return 0;
+    const rects = Object.values((bx.layout && bx.layout.pip) || {}).filter((r) => r.pos === corner);
     return rects.reduce((sum, r) => sum + r.h + 52, 0);
   }
 
@@ -1014,7 +1083,6 @@
   const pips = {};
   function drawPips() {
     const rects = (kind === 'game' && bx.layout && bx.layout.pip) || {};
-    const pos = (bx.settings && bx.settings.pip.pos) || 'bottom-left';
     (bx.cams || []).forEach((c) => {
       const rect = c.pip ? rects[c.id] : null;
       let p = pips[c.id];
@@ -1022,7 +1090,6 @@
         const el = h('div', 'bx-pip');
         el.innerHTML = '<div class="bx-pip-win"><div class="bx-pip-fill">Camera</div><i class="bx-pip-sh l"></i><i class="bx-pip-sh r"></i><div class="bx-pip-logo"><img alt=""></div></div>'
           + '<i class="bx-pip-c tr"></i><i class="bx-pip-c bl"></i><div class="bx-pip-tab"><b></b><span><i></i>Live</span></div>';
-        el.querySelector('.bx-pip-tab b').textContent = c.label;
         setImg(el.querySelector('.bx-pip-logo img'), BRAND.logo);
         pipsBox.appendChild(el);
         p = pips[c.id] = { el, timers: [] };
@@ -1031,6 +1098,8 @@
         p.timers.push(setTimeout(() => el.classList.add('open'), PIP_OPEN_MS));
       }
       if (rect && p) {
+        const pos = rect.pos || 'bottom-left';
+        p.el.querySelector('.bx-pip-tab b').textContent = c.tab || c.label;
         p.el.style.left = rect.x + 'px'; p.el.style.top = rect.y + 'px';
         p.el.style.width = rect.w + 'px'; p.el.style.height = rect.h + 'px';
         p.el.style.setProperty('--ox', pos.endsWith('left') ? 'left' : 'right');
@@ -1061,6 +1130,7 @@
     else if (view === 'versus') drawVersus();
     else if (view === 'schedule') drawSchedule();
     else if (view === 'brb') drawBrb();
+    else if (view === 'camera-group') drawCameraGroup();
     else if (kind === 'cam') drawCam();
     drawPips();
     drawLower();
@@ -1080,7 +1150,7 @@
       if (v && v !== view) {
         view = v;
         kind = kindOf(v);
-        alsoState.page = 0; schState.page = 0;
+        alsoState.page = 0; schState.page = 0; rosterPage = 0;
         forgetCounts();
       }
       drawView();

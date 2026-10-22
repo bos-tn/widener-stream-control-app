@@ -54,22 +54,37 @@ function cameraLinkKind(link) {
 // types the addresses in once (Broadcast, Cameras), and they are kept in its
 // data folder.
 function broadcastOptions(raw, local) {
-  if (!raw || typeof raw !== 'object') return { enabled: false, scenes: [], cameras: [] };
+  if (!raw || typeof raw !== 'object') return { enabled: false, scenes: [], cameras: [], cameraGroup: null };
   const cameras = (Array.isArray(raw.cameras) ? raw.cameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '')).slice(0, 4)
     // link: the camera's address on the network (local.json, else `url`
     // here). Without one the camera is a capture device on this PC.
     .map((c) => ({ id: c.id, label: String(c.label || c.id), title: String(c.title || c.label || c.id), subtitle: String(c.subtitle || ''),
       link: cameraLink(((local && local.cameras) || {})[c.id] !== undefined ? local.cameras[c.id] : c.url) }));
   const scenes = (Array.isArray(raw.scenes) ? raw.scenes : BROADCAST_SCENES).filter((x) => BROADCAST_SCENES.includes(x));
+  const group = raw.cameraGroup || {};
+  const groupIds = Array.isArray(group.cameras) ? [...new Set(group.cameras.filter((id) => cameras.some((c) => c.id === id)))].slice(0, 3) : [];
+  // The overlay and OBS must use the same stage rectangles. Keep geometry
+  // in the profile, including its orientation, rather than in shared CSS.
+  const frames = Array.isArray(group.frames) ? group.frames.map((r) => ({ x: Number(r?.x), y: Number(r?.y), w: Number(r?.w), h: Number(r?.h) })) : [];
+  const validFrames = frames.length === groupIds.length && frames.every((r) =>
+    Object.values(r).every(Number.isFinite) && r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0 && r.x + r.w <= 1920 && r.y + r.h <= 1080);
+  const cameraGroup = groupIds.length === 3 && validFrames ? { label: String(group.label || 'Player Cams'), cameras: groupIds, frames } : null;
+  // One definition of player cameras, shared by the server and panel.
+  cameras.forEach((c) => { c.player = !!cameraGroup && cameraGroup.cameras.includes(c.id); });
+  const retiredCameras = (Array.isArray(raw.retiredCameras) ? raw.retiredCameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '') && !cameras.some((active) => active.id === c.id)).map((c) => ({ id: c.id, label: String(c.label || c.id) }));
   // The league feed a new install follows: LeagueOS links (a school's page
   // follows that school's teams), and whose matches are kept: 'home' (the
-  // profile's home team) or 'all'.
+  // profile's home team) or 'all'. Bump version to add the default calendars
+  // to existing installs once; custom follows and matches are kept.
   const f = raw.follow && typeof raw.follow === 'object' ? raw.follow : {};
   const follow = {
+    version: Number.isInteger(f.version) && f.version > 0 ? f.version : 0,
     links: (Array.isArray(f.links) ? f.links : []).filter((l) => /^https:\/\/[a-z0-9.-]+\.leagueos\.gg\//i.test(String(l))).slice(0, 6),
     scope: f.scope === 'home' ? 'home' : 'all',
   };
-  return { enabled: true, scenes, cameras, follow };
+  const rosterPageSize = Number.isInteger(raw.rosterPageSize) && raw.rosterPageSize >= 3 && raw.rosterPageSize <= 8 ? raw.rosterPageSize : null;
+  const cameraWindowBottom = Number.isFinite(raw.cameraWindowBottom) ? Math.max(40, Math.min(300, raw.cameraWindowBottom)) : 40;
+  return { enabled: true, scenes, cameras, cameraGroup, retiredCameras, rosterPageSize, cameraWindowBottom, exclusiveWindows: raw.exclusiveWindows === true, follow };
 }
 
 // Headline typefaces the operator can pick between (v2.0.0, optional):
@@ -196,6 +211,7 @@ function loadProfile(id) {
     // Head), drawn from the standings kept on the panel's League page. A
     // school's own app (Widener) has none.
     leagueScenes: (Array.isArray(raw.leagueScenes) ? raw.leagueScenes : []).filter((s) => LEAGUE_SCENES.includes(s)),
+    leagueGraphics: { exclude: (Array.isArray(raw.leagueGraphics?.exclude) ? raw.leagueGraphics.exclude : []).filter((s) => /^[a-zA-Z]+$/.test(s)) },
     // Scene backgrounds the operator can pick per scene (v2.0.0, optional):
     // { list: [{ id, name }], defaults: { <view>: <id> } }. The theme draws
     // them (theme.css, and themeScript builds their layers).
@@ -249,10 +265,11 @@ function clientBrand(p) {
     stinger: p.stinger ? { name: `${p.shortName} Stinger`, transitionPoint: p.stinger.transitionPoint, trackMatte: p.stinger.trackMatte } : null,
     leagueTeams: p.teams.length,
     leagueScenes: p.leagueScenes,
+    leagueGraphics: p.leagueGraphics,
     backgrounds: p.backgrounds,
     headlineFonts: { list: p.headlineFonts.list.map(({ id, name, family }) => ({ id, name, family })), default: p.headlineFonts.default },
     hasMusicTrack: !!p.music,
-    broadcast: p.broadcast.enabled ? { scenes: p.broadcast.scenes, cameras: p.broadcast.cameras.map(({ link, ...c }) => c) } : null,
+    broadcast: p.broadcast.enabled ? { scenes: p.broadcast.scenes, cameras: p.broadcast.cameras.map(({ link, ...c }) => c), cameraGroup: p.broadcast.cameraGroup, rosterPageSize: p.broadcast.rosterPageSize } : null,
   };
 }
 
