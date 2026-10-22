@@ -123,13 +123,17 @@ function openPage(role) {
 
     check('game sound is added to the Scoreboard scene', b1.gameAudio === 'created-empty' && mock.state.inputs['WU-game-audio'].kind === 'wasapi_process_output_capture', b1.gameAudio);
     check('caster mics are off unless ticked', b1.casterMics === 'skipped' && !mock.state.inputs['WU-caster-mic-1'], b1.casterMics);
+    await send('/api/music', { volume: 50 });
+    check('music keeps its level without mics', (await j('/api/music')).db === -20, (await j('/api/music')).db);
     await send('/api/prefs', { casterMics: true });
+    check('music sits 15 dB lower with mics ticked', (await j('/api/music')).db === -35, (await j('/api/music')).db);
     const bm = await send('/api/obs/build-scenes');
     const micScenes = (n) => mock.sceneNames().filter((s) => mock.items(s).some((i) => i.sourceName === n));
     check('caster mics are built on request', bm.casterMics === 'created' && mock.state.inputs['WU-caster-mic-2'].kind === 'wasapi_input_capture', bm.casterMics);
     check('mics sit in every scene but Starting Soon and Be Right Back', micScenes('WU-caster-mic-1').length === mock.sceneNames().length - 2 && !micScenes('WU-caster-mic-1').includes('WU: Be Right Back') && !micScenes('WU-caster-mic-1').includes('WU: Starting Soon'), micScenes('WU-caster-mic-1'));
     await send('/api/prefs', { casterMics: false });
     const bn = await send('/api/obs/build-scenes');
+    check('music returns to its level when mics are unticked', (await j('/api/music')).db === -20, (await j('/api/music')).db);
     check('unticked, a build takes the mics out', bn.casterMics === 'removed' && micScenes('WU-caster-mic-1').length === 0, [bn.casterMics, micScenes('WU-caster-mic-1')]);
 
     let cams = await j('/api/bx/cameras');
