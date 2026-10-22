@@ -905,7 +905,8 @@ neccFetchBtn.addEventListener('click', async () => {
     renderRosterEditor('B');
     const patch = { teamA: rosterPayload(rosters.A), teamB: rosterPayload(rosters.B), neccUrls: data.overlayUrls || {} };
     // The game, if it is one of this league's, with its scoreboard preset.
-    const g = data.game && games.find((x) => x.name.toLowerCase() === String(data.game).toLowerCase());
+    const g = games.find((x) => (x.leagueActivity || []).includes(String(data.activity || '').toLowerCase()) || x.name.toLowerCase() === String(data.game || '').toLowerCase());
+    patch.leagueMatch = data.standings || null;
     importedBestOf = data.bestOf || null;
     if (g && (!state || state.game !== g.id)) {
       patch.game = g.id;
@@ -1184,7 +1185,7 @@ function matchData() {
   const out = {
     game: s.game, team: s.team, next: s.next, teamA: s.teamA, teamB: s.teamB, views: s.views, scoreboard: sb,
     countdownMode: s.countdownMode, logo: s.logo, clip: s.clip, montage: s.montage, layout: s.layout,
-    postMatchSec: s.postMatchSec, neccUrls: s.neccUrls, neccLink: neccUrlInput.value.trim(),
+    postMatchSec: s.postMatchSec, neccUrls: s.neccUrls, leagueMatch: s.leagueMatch || null, neccLink: neccUrlInput.value.trim(),
   };
   if (s.countdownMode === 'at') out.end = s.end; else out.durationSec = s.durationSec;
   return out;
@@ -2094,13 +2095,13 @@ function renderLeague() {
   if (document.activeElement !== lgGame) lgGame.value = list.some(([id]) => id === want) ? want : (list[0] || [''])[0];
   const key = lgGame.value;
   const s = league.standings[key] || { rows: [] };
-  $id('lgSource').textContent = league.site || '';
+  $id('lgSource').textContent = s.sourceUrl || s.site || league.site || '';
   const status = $id('lgStatus');
   const at = (iso) => clockTime(new Date(iso));
   status.classList.toggle('error', !!s.error);
   if (lgBusy) status.textContent = `Reading ${league.site || 'the league site'}…`;
   else if (s.error) status.textContent = `Read failed: ${s.error}.${s.updatedAt ? ` Table from ${at(s.updatedAt)}.` : ''}`;
-  else if (s.updatedAt) status.textContent = `${s.seasonName || 'Season'} · read ${at(s.updatedAt)}`;
+  else if (s.updatedAt) status.textContent = `${[s.leagueName, s.seasonName, s.stageName, s.week].filter(Boolean).join(' · ')} · read ${at(s.updatedAt)}${s.playoffs ? ` · Top ${s.playoffs.spots}: playoff positions` : ' · Playoff cutoff unverified'}`;
   else status.textContent = 'Not read.';
   $id('lgRefresh').disabled = lgBusy || !key;
   $id('lgShow').disabled = !(obsStatus && obsStatus.connected) || sceneExists.standings === false || !sceneList.some((x) => x.key === 'standings') || key !== matchGameKey();

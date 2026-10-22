@@ -68,7 +68,7 @@ Scenes, in the order they are created and sorted in OBS:
 | Starting Soon | Title, subtitle, badge, countdown, video panel | Always |
 | Rosters | Both lineups | Always |
 | Head to Head | Both teams compared from the standings | Profile has league scenes and it is ticked |
-| Standings | League table for the match's game | Profile has league scenes and it is ticked |
+| Standings | Imported match's league group, records and current week | On by default in every profile; optional under Match, Details |
 | League graphics | One scene per LeagueOS overlay (match preview, match rosters, bracket, season header, match progress, match activity) | Ticked under Match, Details |
 | Gameplay/Scoreboard | Scoreboard over a game capture, with the game's sound (Application Audio Capture) | Always |
 | Rocket League Stats | Per-game and series stats | Score source is live game data |
@@ -157,6 +157,21 @@ match link is the **Match link** source of the Teams step.
    can be saved here and loaded from the list at the top of the page.
 
 ## Live page
+
+The **Standings** scene follows an imported match's league, season and stage,
+including its NECC division and regional group. It shows every confirmed team,
+match and game records, differences, and the league's current named week.
+Tables over 20 teams rotate every 12 seconds. Refresh runs every five minutes;
+offline tables are retained separately for each league group and marked cached.
+Saved matches keep their standings source. Selecting a different game manually
+clears the previous match's league graphic links; import its match to select a
+division when the league publishes several for that game.
+
+Playoff markers require a verified rule for that season and stage. Ties across
+the cutoff are marked unresolved; positions are provisional. Current NECC and
+LotE cutoffs remain unverified and are not highlighted. The League page shows
+the source, week and refresh status. See [standings sources](docs/standings.md)
+for the other games' links, rulebook findings and validation.
 
 - **On air**: the scene OBS has on program.
 - **Score**: +1 series win per team, +/− corrections, Swap sides, Reset score
@@ -521,6 +536,7 @@ npm run icons         # icons from profiles/<id>/icon-source.png and build/icon-
 npm run stinger -- lote   # render a profile's stinger video (needs ffmpeg)
 npm run design        # demo server for the broadcast package, http://localhost:4313/showcase
 npm run test:broadcast    # checks against a mock OBS
+npm run test:standings    # standings API, caches, source switches and mock OBS
 ```
 
 `npm start` uses the installed app's data folders. `STREAM_APP_DATA=<folder>`
@@ -579,7 +595,8 @@ The next `npm run dist` includes it, in the installer's Profile page too.
   on-air marker.
 - **Scene set**: `buildOptions()` in `server.js`.
 - **Standings**: `league.json`; `GET /api/league`, `POST /api/league/refresh`;
-  broadcast as `{type:'league'}`. Fetch code in `necc.js`.
+  broadcast as `{type:'league'}`. Group caches and match selection in
+  `standings.js`, public stage reads in `league-standings.js`.
 - **Shared panel options**: `settings.json` under `panel`, served at
   `/api/prefs`.
 - **OBS routes**: `/api/obs/*`. **Remote routes**: `POST /api/remote/*`.

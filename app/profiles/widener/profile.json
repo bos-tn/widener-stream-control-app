@@ -10,8 +10,11 @@
   "homeTeam": "widener",
   "league": {
     "name": "NECC",
-    "importHint": "https://necc.v1.leagueos.gg/league/matches/..."
+    "importHint": "https://necc.v1.leagueos.gg/league/matches/...",
+    "site": "https://necc.v1.leagueos.gg",
+    "id": "b1q6j3ea75j6zgk1s4i79dlw7"
   },
+  "leagueScenes": ["standings"],
   "obs": {
     "prefix": "WU",
     "leagueScene": "NECC"

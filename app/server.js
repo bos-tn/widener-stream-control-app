@@ -4,11 +4,12 @@ const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
 const { WebSocketServer } = require('ws');
-const { importMatch, listSeasons, pickSeason, seasonStandings } = require('./necc');
+const { importMatch } = require('./necc');
+const { createStandings, validContext, sourceKey, matchContext } = require('./standings');
 const { createObs } = require('./obs');
 const { createMontages } = require('./montages');
 const { createRlStats } = require('./rlstats');
-const { profileId, loadProfile, loadSelectableProfile, listProfileCards, clientBrand, brandCss } = require('./profile');
+const { profileId, loadProfile, loadSelectableProfile, listProfiles, listProfileCards, clientBrand, brandCss } = require('./profile');
 const { createBroadcast } = require('./broadcast');
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
@@ -307,6 +308,9 @@ function createServer(port, opts = {}) {
   function updateState(partial) {
     const target = state;
     const next = { ...partial };
+    const gameChanged = next.game !== undefined && next.game !== target.game;
+    if ('leagueMatch' in next) next.leagueMatch = validContext(next.leagueMatch) ? { ...next.leagueMatch } : null;
+    else if (partial.neccUrls || gameChanged) next.leagueMatch = null;
     delete next.restartCountdown;
     // The countdown only restarts when it is actually changed: a new length,
     // a switch into "count down from now", or an explicit restart (the panel's
@@ -329,7 +333,7 @@ function createServer(port, opts = {}) {
       teamB: partial.teamB ? { ...emptyTeam(), ...partial.teamB } : target.teamB,
       // Merged per view key: the panel only sends the scene text it changed.
       views: partial.views ? mergeViews(target.views, partial.views) : target.views,
-      neccUrls: partial.neccUrls ? { ...partial.neccUrls } : target.neccUrls,
+      neccUrls: partial.neccUrls ? { ...partial.neccUrls } : gameChanged ? {} : target.neccUrls,
       backgrounds: partial.backgrounds ? { ...target.backgrounds, ...partial.backgrounds } : target.backgrounds,
       scoreboard: partial.scoreboard ? { ...target.scoreboard, ...partial.scoreboard } : target.scoreboard,
     };
@@ -430,69 +434,21 @@ function createServer(port, opts = {}) {
     return team;
   }
 
-  // --- League standings (v2.0.0) --------------------------------------------
-  // Each game's standings are read from the league's site (LeagueOS, see
-  // necc.js): the season for that game and its teams' records, in the
-  // league's own scoring order. Nothing is typed in. They are fetched when a
-  // game is selected, after a match import, every few minutes for the game
-  // on stream and on request, and kept in league.json so the scenes have the
-  // last table at the next start or without a connection.
-  //   standings[gameId] = { rows, seasonId, seasonName, played, scored,
-  //                         scoreName, updatedAt, checkedAt, error }
-  //   row = { name, tag, rank, w, l, gw, gl, sf, sa, color, colorAlt, logoUrl }
-  // w/l are matches, gw/gl games (or maps), sf/sa the score for and against.
+  // Each imported match selects its league, season and standings group.
   const leagueFile = path.join(dataDir, 'league.json');
-  const LEAGUE_HOST = (() => { try { return new URL(PROFILE.league.site).hostname; } catch (e) { return ''; } })();
-  const LEAGUE_ID = String(PROFILE.league.id || '');
-  const LEAGUE_ON = !!(LEAGUE_HOST && LEAGUE_ID && PROFILE.leagueScenes.length);
-  let league = readJsonSafe(leagueFile) || {};
-  // Tables typed in by hand (the betas) are dropped.
-  if (league.v !== 2 || !league.standings || typeof league.standings !== 'object') league = { v: 2, standings: {}, seasons: {} };
-  if (!league.seasons || typeof league.seasons !== 'object') league.seasons = {};
-  const STANDINGS_MIN_AGE = 60 * 1000;
+  const LEAGUE_ON = !!PROFILE.leagueScenes.length;
   const STANDINGS_EVERY = 5 * 60 * 1000;
-  const refreshing = {};
-  function leagueMessage() {
-    return { type: 'league', league: { standings: league.standings, site: LEAGUE_HOST } };
-  }
-  function refreshStandings(gameId, force) {
-    const game = PROFILE.games.find((g) => g.id === gameId);
-    if (!LEAGUE_ON || !game) return Promise.resolve(null);
-    const have = league.standings[gameId];
-    if (!force && have && Date.now() - new Date(have.checkedAt || 0).getTime() < STANDINGS_MIN_AGE) return Promise.resolve(have);
-    if (refreshing[gameId]) return refreshing[gameId];
-    refreshing[gameId] = (async () => {
-      const now = new Date().toISOString();
-      try {
-        const seasons = await listSeasons(LEAGUE_HOST, LEAGUE_ID);
-        // The season of the last imported match for this game while it is
-        // still listed and not over; otherwise the game's season by date.
-        const kept = league.seasons[gameId];
-        const season = (kept && seasons.find((x) => x.id === kept.id && (!x.end || x.end >= Date.now())))
-          || pickSeason(seasons, game.leagueActivity, game.name);
-        if (!season) throw new Error(`${LEAGUE_HOST} has no ${game.name} season`);
-        const st = await seasonStandings(LEAGUE_HOST, LEAGUE_ID, season.id);
-        const rows = await Promise.all(st.rows.map(async (r) => {
-          // A member school shows the league's own logo; any other team's is
-          // downloaded once and served from /logos.
-          const lt = leagueTeamFor(r.name) || leagueTeamFor(r.org);
-          return {
-            name: r.name, tag: r.tag || (lt ? lt.tag : ''), rank: r.rank,
-            w: r.w, l: r.l, gw: r.gw, gl: r.gl, sf: r.sf, sa: r.sa,
-            color: r.color || (lt ? lt.color : ''), colorAlt: r.colorAlt || (lt ? lt.colorAlt : ''),
-            logoUrl: lt && lt.logoUrl ? lt.logoUrl : await cacheLogo(r.logoUrl),
-          };
-        }));
-        league.standings[gameId] = { rows, seasonId: st.seasonId, seasonName: st.seasonName, played: st.played, scored: st.scored, scoreName: game.scoreName || '', updatedAt: now, checkedAt: now, error: '' };
-      } catch (err) {
-        league.standings[gameId] = { rows: [], ...(have || {}), checkedAt: now, error: String((err && err.message) || 'The league site did not answer').slice(0, 200) };
-      }
-      writeJsonSafe(leagueFile, league);
-      sendToAll(leagueMessage());
-      return league.standings[gameId];
-    })().finally(() => { delete refreshing[gameId]; });
-    return refreshing[gameId];
-  }
+  const standings = createStandings({ profile: PROFILE, profiles: listProfiles().map(loadProfile),
+    read: () => readJsonSafe(leagueFile), write: (data) => writeJsonSafe(leagueFile, data),
+    getState: () => state, publish: (league) => sendToAll({ type: 'league', league }),
+    cacheRow: async (r) => {
+      const lt = leagueTeamFor(r.name) || leagueTeamFor(r.org);
+      return { ...r, tag: r.tag || lt?.tag || '', color: r.color || lt?.color || '',
+        colorAlt: r.colorAlt || lt?.colorAlt || '', logoUrl: lt?.logoUrl || await cacheLogo(r.logoUrl) };
+    },
+  });
+  function leagueMessage() { return { type: 'league', league: standings.snapshot() }; }
+  const refreshStandings = (game, force) => standings.refresh(game, force);
 
   // --- NECC logo cache (v0.9.0) -------------------------------------------
   // Team logos from a NECC import are downloaded once and served locally from
@@ -609,8 +565,9 @@ function createServer(port, opts = {}) {
     const migrateMessiahCams = PROFILE.id === 'messiah' && Array.isArray(p.bxScenes) && p.cameraPrefsVersion !== 2;
     return {
       neccTypes: Array.isArray(p.neccTypes) ? p.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t)) : DEFAULT_NECC_TYPES.slice(),
+      standingsV3: p.standingsV3 === true,
       // The league's own scenes: all of them until the operator unticks one.
-      leagueScenes: Array.isArray(p.leagueScenes) ? onlyLeagueScenes(p.leagueScenes) : PROFILE.leagueScenes.slice(),
+      leagueScenes: Array.isArray(p.leagueScenes) ? onlyLeagueScenes(p.leagueScenes).concat(!p.standingsV3 && PROFILE.leagueScenes.includes('standings') && !p.leagueScenes.includes('standings') ? ['standings'] : []) : PROFILE.leagueScenes.slice(),
       setupDone: p.setupDone === true,
       // The v2 setup guide (OBS scenes and the stinger) has run on this PC.
       guideV2: p.guideV2 === true,
@@ -633,7 +590,7 @@ function createServer(port, opts = {}) {
     const micsBefore = next.casterMics;
     PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
-    if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
+    if (Array.isArray(patch.leagueScenes)) { next.leagueScenes = onlyLeagueScenes(patch.leagueScenes); next.standingsV3 = true; }
     if (Array.isArray(patch.bxScenes)) next.bxScenes = BX_SCENE_KEYS.filter((k) => patch.bxScenes.includes(k));
     appSettings = { ...appSettings, panel: { ...next, ...(PROFILE.id === 'messiah' ? { cameraPrefsVersion: 2 } : {}) } };
     writeJsonSafe(settingsFile, appSettings);
@@ -1062,6 +1019,7 @@ tick(); setInterval(tick, 2000);
     if (!url) return res.status(400).json({ error: 'url is required' });
     try {
       const data = await importMatch(url);
+      data.standings = matchContext(data, PROFILE.games);
       await Promise.all((data.teams || []).map(async (t) => {
         // A member school shows the league's own logo, and its colours when
         // LeagueOS has none.
@@ -1085,16 +1043,6 @@ tick(); setInterval(tick, 2000);
       if (changed) { saveLibrary(); broadcastLibrary(); }
       // The season this match belongs to joins the match centre's feed.
       if (bx) bx.followImported(data);
-      // A match from this league's own site names the season its game's
-      // standings come from.
-      if (LEAGUE_ON && data.hostname === LEAGUE_HOST && data.seasonId) {
-        const name = String(data.game || '').toLowerCase();
-        const g = PROFILE.games.find((x) => x.name.toLowerCase() === name || (x.leagueActivity || []).includes(String(data.activity || '').toLowerCase()));
-        if (g) {
-          league.seasons[g.id] = { id: data.seasonId, at: new Date().toISOString() };
-          refreshStandings(g.id, true).catch(() => {});
-        }
-      }
       res.json(data);
     } catch (err) {
       res.status(502).json({ error: err.message || 'Failed to import match' });
@@ -1610,9 +1558,13 @@ tick(); setInterval(tick, 2000);
       if (msg.type === 'update' && ws.role === 'panel') {
         const data = { ...(msg.data || {}) };
         PROGRAM_FIELDS.forEach((k) => delete data[k]);
+        const standingsBefore = sourceKey(standings.context(state.game));
         const gameBefore = state.game;
         updateState(data);
-        if (state.game !== gameBefore) refreshStandings(state.game).catch(() => {});
+        if (state.game !== gameBefore || sourceKey(standings.context(state.game)) !== standingsBefore) {
+          sendToAll(leagueMessage());
+          refreshStandings(state.game, true).catch(() => {});
+        }
         wantMontage(state.game);
         updateRlActive();
         syncLayout();

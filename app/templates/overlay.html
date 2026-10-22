@@ -757,6 +757,7 @@
   /* Said only on a page opened outside OBS, when there is nothing to draw. */
   .lg-empty{ display:none; position:absolute; left:0; right:0; top:480px; text-align:center; font-weight:600; font-size:28px; color:var(--muted); }
   body[data-backdrop="1"] .lg-empty:not(:empty){ display:block; }
+  .lg-view[data-view="standings"] .lg-empty:not(:empty){ display:block; padding:0 120px; }
 
   /* Standings: one column up to ten schools, two beyond that. --st-h is the
      row height, set from the number of rows so the table fills its space. */
@@ -786,6 +787,16 @@
   /* The two schools in this match. */
   .st-row.playing{ background:var(--brand-primary); box-shadow:inset 0 0 0 2px rgba(255,255,255,.55); }
   .st-row.playing .st-num{ color:var(--text); }
+  .st-row.playoff .st-rank{ color:#83efb5; }
+  .st-row.playoff .st-rank::after{ content:' P'; font:800 13px 'Inter',sans-serif; }
+  .st-row.cutoff-tie .st-rank{ color:#ffcd75; }
+  .st-row.cutoff-tie .st-rank::after{ content:' T'; font:800 13px 'Inter',sans-serif; }
+  .lg-foot{ position:absolute; left:72px; right:72px; bottom:66px; display:flex; justify-content:space-between; gap:24px;
+    font:600 16px 'Inter',sans-serif; color:var(--muted); }
+  .lg-foot .st-legend{ color:#83efb5; }
+  .lg-foot .st-legend.unverified{ color:var(--muted); }
+  .lg-league{ max-width:1080px; }
+  .lg-league small{ letter-spacing:.08em; }
 
   /* Head to Head: the two teams of this match, compared from the standings. */
   .h2h{ position:absolute; left:72px; right:72px; top:176px; bottom:112px; display:none; grid-template-columns:1fr 600px 1fr; align-items:center; }
@@ -951,6 +962,7 @@
       <section class="st" id="st" aria-label="Standings"></section>
       <section class="h2h" id="h2h" aria-label="Head to head"></section>
       <div class="lg-empty" id="lg-empty"></div>
+      <div class="lg-foot" id="lg-foot"><span id="st-legend" class="st-legend"></span><span id="st-source"></span></div>
     </div>
   </div>
 
@@ -2492,29 +2504,40 @@
     const isStandings = view === 'standings';
     const vt = (state.views || {})[isStandings ? 'standings' : 'matchup'] || {};
     const sm = state.scoreboard || {};
-    $('#lg-league').textContent = state.brand || BRAND.name;
-    $('#lg-game').textContent = state.team || '';
-    $('#lg-title').textContent = vt.title || (isStandings ? 'Standings' : 'Head to Head');
     const s = standingsFor(state);
+    $('#lg-league').textContent = s.leagueName || state.brand || BRAND.name;
+    $('#lg-game').textContent = [s.seasonName || state.team, s.stageName].filter(Boolean).join(' · ');
+    $('#lg-title').textContent = vt.title || (isStandings ? 'Standings' : 'Head to Head');
     $('#lg-sub').textContent = isStandings
-      ? (state.team || '')
+      ? [state.team, s.week || 'Week unavailable'].filter(Boolean).join(' · ')
       : [sm.round, 'Best of ' + clampInt(sm.bestOf, 1, 9, 3)].filter(Boolean).join(' · ');
     renderStandings(state, s);
     renderH2h(state);
+    $('#lg-foot').hidden = !isStandings;
     $('#lg-empty').textContent = isStandings && !s.rows.length
-      ? 'No standings for ' + (state.team || 'this game') + (s.error ? ': ' + s.error : '') : '';
+      ? (s.error || 'Import a match to load its league standings.') : '';
   }
 
   // Row height from the row count, so six schools and sixteen both fill the
   // table's space: 742px tall, less the heading row and the gaps.
   // Both league scenes are redrawn only when what they show has changed, so
   // a score update elsewhere doesn't rebuild a table that is on air.
-  let stShown = '', h2hShown = '';
+  let stShown = '', h2hShown = '', stPage = 0, stPageSource = '';
   function scoreLabel(s){ return (s.scoreName || 'Score') + ' diff'; }
   function renderStandings(state, s){
     const box = $('#st');
-    const rows = s.rows;
-    const sig = JSON.stringify([rows, s.played, s.scored, s.scoreName, unitWord(state), (state.teamA || {}).name, (state.teamB || {}).name,
+    const all = s.rows;
+    if(stPageSource !== s.sourceKey){ stPageSource = s.sourceKey; stPage = 0; }
+    const pages = Math.max(1, Math.ceil(all.length / 20));
+    stPage %= pages;
+    const rows = all.slice(stPage * 20, (stPage + 1) * 20);
+    const spots = s.playoffs && s.playoffs.spots || 0;
+    const boundary = spots && all[spots - 1] && all[spots] && all[spots - 1].rank === all[spots].rank ? all[spots].rank : 0;
+    $('#st-legend').textContent = spots ? 'P · Top ' + spots + ' playoff positions' + (boundary ? '   T · Tied at cutoff' : '') + ' · Provisional' : 'Playoff cutoff unverified';
+    $('#st-legend').classList.toggle('unverified', !spots);
+    $('#st-source').textContent = [pages > 1 ? 'Page ' + (stPage + 1) + ' / ' + pages : all.length + ' teams', s.site,
+      s.error ? 'Cached · refresh failed' : s.updatedAt ? 'Updated ' + new Date(s.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''].filter(Boolean).join(' · ');
+    const sig = JSON.stringify([rows, stPage, spots, boundary, s.played, s.scored, s.scoreName, unitWord(state), (state.teamA || {}).name, (state.teamB || {}).name,
       (state.teamA || {}).tag, (state.teamB || {}).tag, lgView.classList.contains('active'), !!(document.fonts && document.fonts.status === 'loaded')]);
     if(sig === stShown) return;
     stShown = sig;
@@ -2526,25 +2549,27 @@
     const perCol = two ? Math.ceil(rows.length / 2) : rows.length;
     const room = 742 - 40 - 6 * (perCol - 1);
     box.style.setProperty('--st-h', Math.max(40, Math.min(84, Math.floor(room / perCol))) + 'px');
-    const playing = [rowIndex(rows, state.teamA || {}), rowIndex(rows, state.teamB || {})];
+    const playing = [rowIndex(all, state.teamA || {}), rowIndex(all, state.teamB || {})];
     for(let c = 0; c * perCol < rows.length; c++){
       const col = mk('div', 'st-col');
       // In the page before its rows are filled: names are measured to fit.
       box.appendChild(col);
       const heads = mk('div', 'st-heads');
-      heads.append(mk('span', '', '#'), mk('span', 'l', 'School'), mk('span', '', 'Record'), mk('span', '', unitWord(state)), mk('span', '', 'Diff'));
+      heads.append(mk('span', '', '#'), mk('span', 'l', 'Team'), mk('span', '', 'Record'), mk('span', '', unitWord(state)), mk('span', '', 'Diff'));
       if(s.scored) heads.append(mk('span', '', scoreLabel(s)));
       col.appendChild(heads);
       rows.slice(c * perCol, (c + 1) * perCol).forEach((r, j) => {
-        const i = c * perCol + j;
-        const row = mk('div', 'st-row' + (playing.includes(i) ? ' playing' : ''));
+        const i = c * perCol + j + stPage * 20;
+        const tied = s.played && boundary && r.rank === boundary;
+        const playoff = s.played && spots && r.rank <= spots && !tied;
+        const row = mk('div', 'st-row' + (playing.includes(i) ? ' playing' : '') + (playoff ? ' playoff' : '') + (tied ? ' cutoff-tie' : ''));
         row.style.setProperty('--c', safeColor(r.color, 'var(--brand-primary)'));
         row.style.setProperty('--i', String(i));
         const logo = mk('img', 'st-logo'); logo.alt = '';
         if(r.logoUrl) logo.src = mediaUrl(r.logoUrl); else logo.hidden = true;
         const name = mk('span', 'st-name');
         row.append(mk('span', 'st-rank', s.played ? String(r.rank) : '–'), logo, name,
-          mk('span', 'st-rec', r.w + '-' + r.l), mk('span', 'st-num', r.gw + '-' + r.gl),
+          mk('span', 'st-rec', r.w + '-' + r.l + (r.d ? '-' + r.d : '')), mk('span', 'st-num', r.gw + '-' + r.gl),
           mk('span', 'st-num', signed(r.gw - r.gl)));
         if(s.scored) row.append(mk('span', 'st-num', signed(r.sf - r.sa)));
         col.appendChild(row);
@@ -2553,6 +2578,13 @@
       });
     }
   }
+
+  setInterval(() => {
+    if(lastState && (lockedView || lastState.mode) === 'standings') {
+      const s = standingsFor(lastState);
+      if(s.rows.length > 20) { stPage++; renderStandings(lastState, s); }
+    }
+  }, 12000);
 
   function renderH2h(state){
     const box = $('#h2h');
