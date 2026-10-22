@@ -118,7 +118,11 @@ function openPage(role) {
     check('camera page url', mock.state.inputs['WU-src-cam-crowd'].settings.url === `http://localhost:${PORT}/overlay?view=cam-crowd`, mock.state.inputs['WU-src-cam-crowd'].settings.url);
     check('This Week page url', mock.state.inputs['WU-src-schedule'].settings.url === `http://localhost:${PORT}/overlay?view=schedule`);
     const sb = mock.items('WU: Gameplay/Scoreboard');
-    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-audio', 'WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-src-scoreboard']), sb.map((i) => i.sourceName));
+    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-audio', 'WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-src-scoreboard', 'WU-team-logo-a', 'WU-team-logo-b']), sb.map((i) => i.sourceName));
+    const logoItems = sb.filter((i) => /team-logo/.test(i.sourceName));
+    check('team logos start hidden, above the page', logoItems.length === 2 && logoItems.every((i) => i.sceneItemEnabled === false) && sb.indexOf(logoItems[0]) > sb.findIndex((i) => i.sourceName === 'WU-src-scoreboard'), logoItems);
+    check('team logos sit near the top', mock.state.inputs['WU-team-logo-a'].settings.url.endsWith('/team-logo/a') && mock.state.inputs['WU-team-logo-b'].settings.url.endsWith('/team-logo/b') && logoItems.every((i) => i.sceneItemTransform ? i.sceneItemTransform.positionY <= 100 : true), logoItems.map((i) => i.sceneItemTransform));
+    check('team logo page is served', /team-logo|teamA/.test(await (await fetch(`http://localhost:${PORT}/team-logo/a`)).text()));
     check('camera windows start hidden', sb.filter((i) => /cam/.test(i.sourceName)).every((i) => i.sceneItemEnabled === false), sb.map((i) => i.sceneItemEnabled));
 
     check('game sound is added to the Scoreboard scene', b1.gameAudio === 'created-empty' && mock.state.inputs['WU-game-audio'].kind === 'wasapi_process_output_capture', b1.gameAudio);
@@ -195,6 +199,7 @@ function openPage(role) {
     check('re-ticked camera scene reuses its input', mock.items('WU: Crowd Cam')[0].sourceName === 'WU-cam-crowd' && mock.state.inputs['WU-cam-crowd'].settings.video_device_id === dev, mock.items('WU: Crowd Cam').map((i) => i.sourceName));
     await update({ game: 'rl', scoreboard: { style: 'rl' } });
     await send('/api/obs/build-scenes');
+    check('Rocket League has no team logo images', !mock.state.inputs['WU-team-logo-a'] && !mock.items('WU: Gameplay/Scoreboard').some((i) => /team-logo/.test(i.sourceName)), mock.items('WU: Gameplay/Scoreboard').map((i) => i.sourceName));
     const names5 = mock.sceneNames();
     check('stats scene sits after Scoreboard', names5.indexOf('WU: Rocket League Stats') === names5.indexOf('WU: Gameplay/Scoreboard') + 1 && names5.indexOf('WU: Crowd Cam') === names5.indexOf('WU: Gameplay/Scoreboard') + 2, names5);
     check('layout reserves the Rocket League corners', (await j('/api/bx')).layout.reserved['bottom-right'] === 236);

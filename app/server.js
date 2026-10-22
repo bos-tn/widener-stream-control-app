@@ -657,6 +657,9 @@ function createServer(port, opts = {}) {
       // games are picked in OBS.
       gameAudioWindow: state.scoreboard.style === 'rl' ? 'Rocket League (64-bit, DX11, Cooked):LaunchUnrealUWindowsClient:RocketLeague.exe' : '',
       casterMics: prefs.casterMics,
+      // Hidden team logos in the Scoreboard scene, for every game whose
+      // board is the plain one (Smash and Rocket League draw their own).
+      teamLogos: state.scoreboard.style !== 'rl' && !['smash', 'rl'].includes(state.game),
       studioMode: prefs.studioMode,
       orderScenes: prefs.orderScenes,
     };
@@ -961,6 +964,37 @@ function createServer(port, opts = {}) {
     res.json({ restarting: true });
     // After the reply is out: the restart closes this server.
     setTimeout(() => opts.onProfileChange(id), 200);
+  });
+
+  // One team's logo on a transparent page, for the hidden logo images in the
+  // Scoreboard scene (see obs.js). Follows the match; shows nothing until the
+  // team has a logo.
+  app.get('/team-logo/:team', (req, res) => {
+    const team = req.params.team === 'b' ? 'B' : 'A';
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Team ${team} logo</title>
+<style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}
+img{width:100%;height:100%;object-fit:contain;display:none}</style>
+<img id="l" alt="">
+<script>
+const img = document.getElementById('l');
+function src(s){
+  s = String(s || '').trim();
+  const low = s.toLowerCase();
+  if(low.startsWith('file://')){ s = s.replace(/^file:[/][/][/]?/i, ''); try { s = decodeURIComponent(s); } catch(e){} return '/media?src=' + encodeURIComponent(s); }
+  if(s.charAt(1) === ':' || s.startsWith(String.fromCharCode(92, 92))) return '/media?src=' + encodeURIComponent(s);
+  return s;
+}
+async function tick(){
+  try {
+    const st = await (await fetch('/api/state', { cache: 'no-store' })).json();
+    const url = src((st['team${team}'] || {}).logoUrl);
+    if(url){ if(img.getAttribute('src') !== url) img.src = url; img.style.display = 'block'; }
+    else { img.removeAttribute('src'); img.style.display = 'none'; }
+  } catch(e) {}
+}
+tick(); setInterval(tick, 2000);
+</script>`);
   });
 
   app.get('/overlay', (req, res) => {

@@ -150,6 +150,7 @@ function createObs(opts = {}) {
   const captureInput = `${prefix}-game-capture`;
   const gameAudioInput = `${prefix}-game-audio`;
   const micInput = (n) => `${prefix}-caster-mic-${n}`;
+  const logoInput = (side) => `${prefix}-team-logo-${side}`;
   // A camera is one input: a capture device, or with a link a browser
   // source (a page) or a media source (a stream). Each sort has its own
   // name, so changing a camera from one to another never asks OBS for a
@@ -580,6 +581,44 @@ function createObs(opts = {}) {
     return any ? 'removed' : 'skipped';
   }
 
+  // Each team's logo in the Scoreboard scene: a browser source of the app's
+  // /team-logo page, hidden, near the top of the stage and above the
+  // scoreboard page, for the broadcaster to unhide and move over the game's
+  // own scoreboard. An item that is already there is left as the operator
+  // has it. Games that draw their own board get none.
+  async function ensureTeamLogos(sceneName, existingInputs, base, overlayBase, on) {
+    let any = false;
+    for (const side of ['a', 'b']) {
+      const input = logoInput(side);
+      if (!on) {
+        if (!existingInputs.has(input)) continue;
+        await removeInput(input);
+        existingInputs.delete(input);
+        any = true;
+        continue;
+      }
+      const url = `${overlayBase}/team-logo/${side}`;
+      if (!existingInputs.has(input)) {
+        const k = base.w / 1920;
+        const size = Math.round(200 * k);
+        const created = await obs.call('CreateInput', {
+          sceneName, inputName: input, inputKind: 'browser_source',
+          inputSettings: { url, width: 256, height: 256, shutdown: false, restart_when_active: false },
+          sceneItemEnabled: false,
+        });
+        existingInputs.add(input);
+        const x = side === 'a' ? base.w / 2 - size - Math.round(60 * k) : base.w / 2 + Math.round(60 * k);
+        await coverItem(sceneName, created.sceneItemId, { x, y: Math.round(24 * (base.h / 1080)), w: size, h: size }).catch(() => {});
+        any = true;
+        continue;
+      }
+      await obs.call('SetInputSettings', { inputName: input, inputSettings: { url }, overlay: true }).catch(() => {});
+      try { await obs.call('GetSceneItemId', { sceneName, sourceName: input }); }
+      catch (e) { await obs.call('CreateSceneItem', { sceneName, sourceName: input, sceneItemEnabled: false }); }
+    }
+    return on ? (any ? 'created' : 'exists') : (any ? 'removed' : 'skipped');
+  }
+
   // --- Cameras (broadcast package) -----------------------------------------------
   // One Video Capture Device input per camera of the profile, used twice: at
   // full size in its own scene, under that scene's overlay page, and as a
@@ -971,6 +1010,9 @@ function createObs(opts = {}) {
     if (buildOpts.casterMics === true) casterMics = await ensureCasterMics(existingInputs).catch(() => 'manual');
     else casterMics = await removeCasterMics(existingInputs).catch(() => 'skipped');
 
+    // The team logo images, hidden, in the Scoreboard scene.
+    const teamLogos = await ensureTeamLogos(entryForKey('scoreboard').scene, existingInputs, await videoBase(), overlayBase, buildOpts.teamLogos === true).catch(() => 'manual');
+
     // Each camera: its input in its own scene, and its window over the game.
     // cameraSources: what each camera is in OBS, for the build result.
     const cameras = {};
@@ -1031,7 +1073,7 @@ function createObs(opts = {}) {
       try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
     }
     await refreshProgram();
-    return { built, removed, reloaded, ordering, moved, gameCapture, gameAudio, casterMics, cameras, cameraSources, collection, collectionName };
+    return { built, removed, reloaded, ordering, moved, gameCapture, gameAudio, casterMics, teamLogos, cameras, cameraSources, collection, collectionName };
   }
 
   // The league's stinger. obs-websocket can't create a transition, so the
