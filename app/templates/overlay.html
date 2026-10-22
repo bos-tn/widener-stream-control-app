@@ -789,6 +789,7 @@
   .st-row.playing .st-num{ color:var(--text); }
   .st-row.playoff .st-rank{ color:#83efb5; }
   .st-row.playoff .st-rank::after{ content:' P'; font:800 13px 'Inter',sans-serif; }
+  .st-row.playoff-cut::after{ content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:#83efb5; }
   .st-row.cutoff-tie .st-rank{ color:#ffcd75; }
   .st-row.cutoff-tie .st-rank::after{ content:' T'; font:800 13px 'Inter',sans-serif; }
   .lg-foot{ position:absolute; left:72px; right:72px; bottom:66px; display:flex; justify-content:space-between; gap:24px;
@@ -2562,7 +2563,7 @@
         const i = c * perCol + j + stPage * 20;
         const tied = s.played && boundary && r.rank === boundary;
         const playoff = s.played && spots && r.rank <= spots && !tied;
-        const row = mk('div', 'st-row' + (playing.includes(i) ? ' playing' : '') + (playoff ? ' playoff' : '') + (tied ? ' cutoff-tie' : ''));
+        const row = mk('div', 'st-row' + (playing.includes(i) ? ' playing' : '') + (playoff ? ' playoff' : '') + (tied ? ' cutoff-tie' : '') + (playoff && i === spots - 1 && !boundary ? ' playoff-cut' : ''));
         row.style.setProperty('--c', safeColor(r.color, 'var(--brand-primary)'));
         row.style.setProperty('--i', String(i));
         const logo = mk('img', 'st-logo'); logo.alt = '';

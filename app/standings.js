@@ -41,6 +41,13 @@ function currentWeek(rounds, now = Date.now()) {
 
 function sourceKey(c) { return [c.hostname, c.leagueId, c.seasonId || c.gameId || '', c.stageId || ''].join('/'); }
 
+function playoffRule(profiles, leagueId, seasonId, stageId, activity, format) {
+  if (format !== 0) return null;
+  return (profiles.find((p) => p.league.id === leagueId)?.league.playoffs || []).find((r) =>
+    r.seasonId === seasonId && (r.stageId === stageId || r.stageIds?.includes(stageId)) && (!r.activity || r.activity === activity)
+    && Number.isInteger(r.spots) && r.spots > 0 && /^https:\/\//.test(r.source || '')) || null;
+}
+
 function createStandings({ profile, profiles, read, write, getState, publish, cacheRow }) {
   const stored = read() || {};
   const tables = stored.v === 3 ? stored.tables || {} : {};
@@ -66,7 +73,8 @@ function createStandings({ profile, profiles, read, write, getState, publish, ca
   function table(gameId) {
     const c = context(gameId);
     const t = tables[sourceKey(c)];
-    return t ? { ...t, week: currentWeek(t.rounds) } : { rows: [], site: c.hostname, leagueName: c.leagueName || profile.league.name };
+    return t ? { ...t, week: currentWeek(t.rounds), playoffs: playoffRule(known, c.leagueId, t.seasonId, t.stageId, t.activity, t.format) }
+      : { rows: [], site: c.hostname, leagueName: c.leagueName || profile.league.name };
   }
   function snapshot() {
     return { standings: Object.fromEntries(profile.games.map((g) => [g.id, table(g.id)])), site: table(getState().game).site || '' };
@@ -105,7 +113,7 @@ function createStandings({ profile, profiles, read, write, getState, publish, ca
         const named = known.find((p) => p.league.id === c.leagueId);
         // Only verified, stage-specific rules may mark the playoff line. A
         // default bracketSize in LeagueOS is not a qualification rule.
-        const rule = (named?.league.playoffs || []).find((r) => r.stageId === stageId && r.seasonId === seasonId && Number.isInteger(r.spots) && r.spots > 0 && /^https:\/\//.test(r.source || ''));
+        const rule = playoffRule(known, c.leagueId, seasonId, stageId, st.activity, st.format);
         tables[key] = { ...st, rows: await Promise.all(st.rows.map(cacheRow)), seasonName: seasonName || c.seasonName || '',
           site: c.hostname, leagueName: c.leagueName || named?.league.name || c.hostname.split('.')[0].toUpperCase(),
           sourceKey: key, sourceUrl: `https://${c.hostname}/league/stages/${stageId}/standings`,
@@ -124,4 +132,4 @@ function createStandings({ profile, profiles, read, write, getState, publish, ca
   return { snapshot, refresh, context };
 }
 
-module.exports = { createStandings, currentWeek, sourceKey, validContext, matchGame, matchContext };
+module.exports = { createStandings, currentWeek, sourceKey, validContext, matchGame, matchContext, playoffRule };

@@ -53,7 +53,9 @@ app.whenReady().then(async () => {
           footer: document.getElementById('st-source').textContent, playoff: document.querySelectorAll('.st-row.playoff').length,
           width: innerWidth, height: innerHeight }))()`);
         assert(measured.rows.every((r) => r.left >= 0 && r.right <= w + 1 && r.top >= 0 && r.bottom <= h - 50), 'rows fit canvas');
-        assert.match(measured.title, /Week/); assert.equal(measured.playoff, 0, 'no guessed cutoff');
+        assert.match(measured.title, /Week/);
+        assert.equal(measured.playoff, league === 'necc' ? live ? 4 : 3 : 0, 'NECC Rocket League cutoff applies across profiles; LotE stays unmarked');
+        if (league === 'necc') assert.match(await js("document.getElementById('st-legend').textContent"), /Top 4/);
         assert(measured.names.every((n) => n.text && n.width > 30 && parseFloat(n.font) >= 16), 'team names remain readable');
         fs.writeFileSync(path.join(output, `${id}-${h}.png`), (await win.webContents.capturePage()).toPNG());
         report.push({ id, w, h, ...measured });
@@ -64,7 +66,6 @@ app.whenReady().then(async () => {
         fixture = synthetic(league);
         await fetch('http://127.0.0.1:4388/api/league/refresh', { method: 'POST' });
         await until(() => js("document.querySelectorAll('.st-row').length === 20"));
-        await js(`leagueData.standings.rl.playoffs={spots:4};stShown='';renderStandings(lastState,standingsFor(lastState))`);
         assert.equal(await js("document.querySelectorAll('.st-row.playoff').length"), 3);
         assert.equal(await js("document.querySelectorAll('.st-row.cutoff-tie').length"), 2);
         await js('stPage++;renderStandings(lastState,standingsFor(lastState))');

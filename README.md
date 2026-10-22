@@ -168,8 +168,9 @@ clears the previous match's league graphic links; import its match to select a
 division when the league publishes several for that game.
 
 Playoff markers require a verified rule for that season and stage. Ties across
-the cutoff are marked unresolved; positions are provisional. Current NECC and
-LotE cutoffs remain unverified and are not highlighted. The League page shows
+the cutoff are marked unresolved; positions are provisional. NECC Rocket League
+marks the top four per group using the supplied rulebook. LotE's cutoff remains
+unverified. The League page shows
 the source, week and refresh status. See [standings sources](docs/standings.md)
 for the other games' links, rulebook findings and validation.
 

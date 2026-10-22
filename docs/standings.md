@@ -43,9 +43,19 @@ Tables have one column up to ten teams, two up to twenty, and pages beyond twent
 
 ## Playoff rules
 
-The [NECC public rulebook page](https://necc.gg/pages/rulebooks) currently contains placeholder questions and answers. No current rulebook or qualification cutoff could be verified there. The supplied LotE v1 page redirects an unauthenticated browser to login; its public API exposes standings but no qualification rule. No public current LotE rulebook was found. Neither league ships a guessed cutoff. LeagueOS format.bracketSize is a default format setting, not evidence that that many teams qualify.
+### Rocket League playoff cutoff
 
-A verified rule can be added in the owning profile's profile.json, under league.playoffs, with seasonId, stageId, spots, and an HTTPS source URL (plus an optional note). Rules apply only to the exact season and stage, and only to round-robin standings. Green P markers denote provisional playoff positions. Amber T markers identify every team in a tie that crosses the cutoff; none of those tied teams is awarded a position based on alphabetical order. Without a verified rule the scene reads Playoff cutoff unverified.
+NECC Rocket League marks four provisional playoff positions in each listed Fall 2026 conference group (56 groups across Divisions I–IX). A green P marks a team above the cutoff and a green divider follows fourth place. A tie crossing the cutoff uses amber T markers for every tied team. Positions follow the league's published standings order and do not assert a clinched berth.
+
+Source: the operator supplied **Rocket League Rulebook**, **Fall 2025 – Spring 2026**, last modified **March 16, 2026**, section **4.b.iii**, page **9**. That section specifies four teams from each conference group, with possible changes for participation and scheduling. Divisions I and II use double elimination; Divisions III and below use single elimination. The PDF SHA-256 is `b9b94dd560f9dde074d2243ee48862d82c9947530c8b7c652bbdad399067e53b`.
+
+The supplied edition predates Fall 2026. The operator requested its cutoff for this release; it is scoped to the explicitly listed current NECC Rocket League season and stage IDs. It is not treated as a verified rule for future seasons. The full PDF is retained locally and is not redistributed in the repository or installer.
+
+The rulebook's tiebreakers (section 4.b.iii.1, pages 9–10) are match win percentage, overall game differential, head-to-head record, differential against common opponents, then a coin flip. The app retains LeagueOS's published sorting and flags unresolved ties at the cutoff; it never simulates a coin flip or resolves a tie alphabetically.
+
+LotE and other games have no cutoff configured. This NECC rulebook does not establish their qualification rules. The [NECC public rulebook page](https://necc.gg/pages/rulebooks) still contains placeholders; the supplied document is the source for this change.
+
+Rules are stored in the owning profile's profile.json, under league.playoffs, with seasonId, stageId or stageIds, optional activity, spots, and an HTTPS source URL. They apply only to the listed season/stage/game and round-robin format. Any profile can display the NECC rule when importing a NECC match. Cached standings recalculate the configured cutoff immediately after an app update.
 
 ## Checks
 

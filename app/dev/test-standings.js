@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 process.env.STREAM_NO_LOCAL = '1';
 const necc = require('../necc');
 const source = require('../league-standings');
-const { createStandings, currentWeek, matchGame, matchContext } = require('../standings');
+const { createStandings, currentWeek, matchGame, matchContext, playoffRule, sourceKey } = require('../standings');
 const { loadProfile } = require('../profile');
 const ids = { leagueId: 'league00000000001', seasonId: 'season00000000001', stageId: 'stage000000000001' };
 const ctx = (host = 'necc.v1.leagueos.gg', stageId = ids.stageId) => ({ ...ids, hostname: host, stageId, gameId: 'rl', leagueName: host.split('.')[0] });
@@ -42,6 +42,26 @@ async function unit() {
   assert(!calls.some((p) => /seasons.*rosters/.test(p)), 'stage table never fetches season totals');
   global.fetch = originalFetch;
   assert.equal(matchGame({ game: 'Super Smash Bros. Ultimate', activity: 'ssbu' }, loadProfile('lote').games).id, 'smash');
+
+  const shipped = [loadProfile('widener'), loadProfile('lote')];
+  const lid = shipped[0].league.id;
+  let checked = 0;
+  for (const rule of shipped[0].league.playoffs) for (const sid of rule.stageIds) {
+    assert.equal(playoffRule(shipped, lid, rule.seasonId, sid, 'rl', 0)?.spots, 4);
+    assert.equal(playoffRule(shipped, lid, rule.seasonId, sid, 'valorant', 0), null);
+    assert.equal(playoffRule(shipped, lid, rule.seasonId, sid, 'rl', 1), null);
+    checked++;
+  }
+  assert.equal(checked, 56, 'all listed Fall 2026 NECC Rocket League groups have the supplied top-four rule');
+  const rule = shipped[0].league.playoffs[0];
+  assert.equal(playoffRule(shipped, shipped[1].league.id, rule.seasonId, rule.stageIds[0], 'rl', 0), null);
+  assert.equal(playoffRule(shipped, lid, 'futureseason00001', rule.stageIds[0], 'rl', 0), null);
+  assert.equal(playoffRule(shipped, lid, rule.seasonId, 'unknownstage0001', 'rl', 0), null);
+  const existing = { hostname: 'necc.v1.leagueos.gg', leagueId: lid, seasonId: rule.seasonId, stageId: rule.stageIds[0], gameId: 'rl' };
+  const cached = createStandings({ profile: shipped[0], profiles: shipped, read: () => ({ v: 3, tables: {
+    [sourceKey(existing)]: { ...sample(), seasonId: existing.seasonId, stageId: existing.stageId, playoffs: null },
+  } }), write() {}, getState: () => ({ game: 'rl', leagueMatch: existing }), publish() {}, cacheRow: async (r) => r });
+  assert.equal(cached.snapshot().standings.rl.playoffs?.spots, 4, 'cached tables receive the new cutoff without a network refresh');
 
   let state = { game: 'rl', leagueMatch: ctx() }, saved, fail = false, release;
   const profile = loadProfile('widener'), lote = loadProfile('lote');

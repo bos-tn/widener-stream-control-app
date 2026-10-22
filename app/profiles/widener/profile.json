@@ -12,7 +12,146 @@
     "name": "NECC",
     "importHint": "https://necc.v1.leagueos.gg/league/matches/...",
     "site": "https://necc.v1.leagueos.gg",
-    "id": "b1q6j3ea75j6zgk1s4i79dlw7"
+    "id": "b1q6j3ea75j6zgk1s4i79dlw7",
+    "playoffs": [
+      {
+        "seasonId": "074pxj8z8k1s12hwpt2o1z2au",
+        "stageIds": [
+          "96lcam52jb7gq3ou0ax5acook",
+          "9crzza2exlpm32bmpxf8d7qsa"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "1bt1dcjhhp1hg1bg5x6gyuuq3",
+        "stageIds": [
+          "0rdmalxim5eyrz7glqlvikpqu",
+          "eojmu1d5ibba65t0ar6gexfrl",
+          "2h907ql8syc4pmvxpmjyq2ckf",
+          "55gi4sy0b0rggjkcig7yd63k6"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "65emcmbcbon2rip7m924fxp9s",
+        "stageIds": [
+          "8ywz9lxoalwpndwskchon9btp",
+          "bj2coxhbnr9xtni8sp361wye0",
+          "354912bh2hj18b8f7vfyvgex3",
+          "99h1qgoyoytafxn5jat94g2h7",
+          "ejn88ywcj30zrg8hmfajkr3z5",
+          "2zrc204kmms9kotzxs33go9lz",
+          "021icumgsiqhr8phbeab6gm47",
+          "ddooi05r9htev7zv78ggvt1kl"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "74kn1zaa4gqdmiczp5t43hj49",
+        "stageIds": [
+          "a54xiedrg6szbt17b71roaqxm",
+          "a3rj5gbyujg41kbw8umwbthrn",
+          "9pz3f2975zwdqh2311syyj6mm",
+          "ekf3v9l758rjl1r9dqa320s8s",
+          "6b61l1xelxnlz1estxe0htbnk",
+          "cb9054aj5v31njwdbtrmf7jlp",
+          "3fldsq5gy7rfpvxv7luk9dt0y",
+          "831rxjipblikoo42m0roibu3f",
+          "4bojhvgdwpq3s6oh8dbj1ovgh",
+          "cw60p8z7kc0hl31sw950n7rho"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "e5vvmdv2l4ug34ggefer15r7z",
+        "stageIds": [
+          "anvlzqorsfvp4zjmg0r7vy9wi",
+          "aulwumz4d91yfiupm8ejqa11s"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "8qnzymqxxyp567ibmv6enxgat",
+        "stageIds": [
+          "3jh2n76vc5jmx1f5k0ktg2izc",
+          "1x006r68xqzh1y6p3hxbbu589",
+          "e0qideslblw8p2066d4qvv250",
+          "cyptzcws653kg16o5up7i920v",
+          "9upy2pkcvt1dx5e08qk9zw6av",
+          "e3c1rp94wx5g68sferdg9y70w",
+          "ezvma7vim38rdudb1oul62ts1",
+          "1kgf402x3khxo4ke3uva3mvsw",
+          "6h2oen6dlmvuujoujcr92ep01",
+          "3lto08s97oqo4bkwtf515exd7"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "brxgdslfxccfoxebrwzw2dhtw",
+        "stageIds": [
+          "0syj78966yzuxukv0urh7qzfu",
+          "2hlv7nk6q1ee28azsuj9b113m",
+          "5l2ibi10o8yqw30keq16jrpwm",
+          "9jp5wp8rlweb76bfxxdvqpu0l",
+          "8a5tipg3qeq4pa75x7m1k33zy",
+          "8oje0hf0dseedw5kxdqtx55bm",
+          "aek5l8biu0rt18gbozfg7p2n4",
+          "cqezonj8iqphi8oaurw13pk69"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "bsh2vzs9uxdzhca9ndpnc1c8f",
+        "stageIds": [
+          "77tzl60xc5iak9xw37nt7arx3",
+          "58xfmtrp6w314yervo1lwuh8l",
+          "cjk54n838tfiyihm4t5cmbh69",
+          "0fqlwm56h1sciz3grvt7kdwh3",
+          "d9k30zvbtd6jfwr6g89j7ldon",
+          "470kd4d827y65rptwo37cjnhs",
+          "926dagb5hshxtjlgj7c9tflgt",
+          "b5trkgryi8yd7cya2i3d9ko4f"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      },
+      {
+        "seasonId": "e4udi4g9plz2bolwi4hbco0hs",
+        "stageIds": [
+          "eo7kr8cu8t6qofsxcg2h5kdud",
+          "cvkhu8p9q6ll4ckx671huiskt",
+          "c52opfxq458vhcgtzycxp5zb3",
+          "5vf25v8apmc2zg1ojbl9dcgg1"
+        ],
+        "activity": "rl",
+        "spots": 4,
+        "source": "https://github.com/bos-tn/widener-stream-control-app/blob/v2.5.1/docs/standings.md#rocket-league-playoff-cutoff",
+        "note": "NECC Rocket League Rulebook, Fall 2025 - Spring 2026, section 4.b.iii, page 9; supplied rule applied to the listed Fall 2026 groups by operator request."
+      }
+    ]
   },
   "leagueScenes": ["standings"],
   "obs": {
