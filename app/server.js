@@ -625,6 +625,7 @@ function createServer(port, opts = {}) {
   }
   function savePanelPrefs(patch) {
     const next = panelPrefs();
+    const micsBefore = next.casterMics;
     PREF_FLAGS.forEach((k) => { if (typeof patch[k] === 'boolean') next[k] = patch[k]; });
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     if (Array.isArray(patch.leagueScenes)) next.leagueScenes = onlyLeagueScenes(patch.leagueScenes);
@@ -633,6 +634,7 @@ function createServer(port, opts = {}) {
     writeJsonSafe(settingsFile, appSettings);
     sendToPanels({ type: 'prefs', prefs: next });
     syncLayout();
+    if (next.casterMics !== micsBefore) updateMusic(1000);
     return next;
   }
   // What a scene build makes: the base scenes, the stats scene when this
@@ -699,7 +701,12 @@ function createServer(port, opts = {}) {
     return musicTrack.has('music') ? DEFAULT_MUSIC : '';
   }
   // The volume slider is 0-100; 100 is OBS's 0 dB, 0 is -40 dB.
-  function musicDb(volume) { return -40 + 40 * (volume / 100); }
+  // With caster microphones in the scenes the music sits well under the
+  // voices: this many dB below the slider's level.
+  const CASTER_MIC_DUCK_DB = 15;
+  function musicDb(volume) {
+    return -40 + 40 * (volume / 100) - (panelPrefs().casterMics ? CASTER_MIC_DUCK_DB : 0);
+  }
   function musicStatus() {
     const m = musicConfig();
     return {
