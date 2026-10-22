@@ -97,7 +97,7 @@ function openPage(role) {
     check('connects to the mock', st.connected === true, st);
     const b1 = await send('/api/obs/build-scenes');
     check('build succeeds', !b1.error, b1);
-    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Match Preview', 'WU: Bracket', 'WU: Gameplay/Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Be Right Back', 'WU: Post-Match'];
+    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Bracket', 'WU: Gameplay/Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Be Right Back', 'WU: Post-Match'];
     check('scenes in stream order', JSON.stringify(mock.sceneNames()) === JSON.stringify(want), mock.sceneNames());
     check('collection created', b1.collection === 'created' && mock.state.current === 'Widener Stream', [b1.collection, mock.state.current]);
     check('cameras reported created', b1.cameras && b1.cameras.crowd === 'created' && b1.cameras.room === 'created', b1.cameras);

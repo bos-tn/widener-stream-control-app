@@ -447,6 +447,11 @@
   .sb-view.compact .sbc{ display:block; }
   .sbc.pos-top-left{ top:36px; left:40px; }
   .sbc.pos-top-right{ top:36px; right:40px; }
+  .sbc.pos-middle-left{ top:50%; left:40px; animation-name:sbc-in-mid; }
+  .sbc.pos-middle-right{ top:50%; right:40px; animation-name:sbc-in-mid; }
+  @keyframes sbc-in-mid{ from{ opacity:0; transform:translateY(-50%) translateX(-14px) } to{ opacity:1; transform:translateY(-50%) } }
+  .sbc.pos-middle-right{ animation-name:sbc-in-mid-r; }
+  @keyframes sbc-in-mid-r{ from{ opacity:0; transform:translateY(-50%) translateX(14px) } to{ opacity:1; transform:translateY(-50%) } }
   .sbc.pos-bottom-left{ bottom:40px; left:40px; }
   .sbc.pos-bottom-right{ bottom:40px; right:40px; }
   @keyframes sbc-in{ from{ opacity:0; transform:translateY(-14px) } to{ opacity:1; transform:none } }
@@ -1625,7 +1630,7 @@
       B: { team: state.teamB || {}, score: clampInt(sm.scoreB, 0, 99, 0), lost: clampInt(sm.lostB, 0, total, 0) },
     };
     const isRl = sm.style === 'rl';
-    const position = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(sm.position) ? sm.position : 'top';
+    const position = ['top-left', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-right'].includes(sm.position) ? sm.position : 'top';
     sbView.classList.toggle('rl', isRl);
     // Before the Rocket League board takes over: a corner box left showing
     // from the game before would sit on top of it.

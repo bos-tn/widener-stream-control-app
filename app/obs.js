@@ -8,7 +8,7 @@
 //   Scoreboard (with a Game Capture under it), a stats scene when the match's
 //   game has one (Rocket League), the league's own scenes (Standings, Head to
 //   Head) and one scene per league graphic the operator picked (Bracket,
-//   Match Preview...). A build also removes the app's scenes the match no
+//   Season Header...). A build also removes the app's scenes the match no
 //   longer uses, so OBS only ever lists what this match can show.
 // - The league's stinger: the app selects the operator's Stinger transition
 //   and points it at the league's video with the right cut point.

@@ -31,11 +31,11 @@ const post = async (route,data={}) => (await fetch(base+route,{method:'POST',hea
     const first=await post('/api/obs/build-scenes');
     assert(!first.error,JSON.stringify(first));
     const scenes=mock.sceneNames();
-    assert(scenes.length>=9,JSON.stringify(scenes));
+    assert(scenes.length>=8,JSON.stringify(scenes));
     assert(scenes.every(n=>n.startsWith(profile.obs.prefix+': ')));
     const inputs=Object.values(mock.state.inputs);
     const pages=inputs.filter(i=>i.kind==='browser_source' && /overlay/.test(i.settings.url||''));
-    assert(pages.length>=9);
+    assert(pages.length>=8);
     assert(pages.every(i=>i.settings.url.startsWith('http://localhost:4399/')));
     await post('/api/obs/build-scenes');
     assert.deepEqual(mock.sceneNames(),scenes,'rebuild must preserve scene set and order');

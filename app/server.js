@@ -84,7 +84,7 @@ function defaultViewText(bx) {
 // game itself (see rlstats.js): live goals and clock, player boost bars, and
 // the boost meter. The rl* flags turn its parts on and off; rlHideHud has the
 // app turn the game's own HUD off for a spectator while the board is in use.
-const SCOREBOARD_POSITIONS = ['top', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
+const SCOREBOARD_POSITIONS = ['top', 'top-left', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-right'];
 const SCOREBOARD_STYLES = ['standard', 'rl'];
 function defaultScoreboard() {
   return {
@@ -168,7 +168,7 @@ const defaultState = (profile) => ({
   // Branded backdrop behind transparent league overlays (vs flat black)
   neccBg: true,
   // League graphic links from the last import, by type (stageBracket,
-  // matchPreview, ...). Each league graphic has its own OBS scene (v2.0.0).
+  // stageBracket, ...). Each league graphic has its own OBS scene (v2.0.0).
   neccUrls: {},
   // The background picked for a scene, by view (v2.0.0), for a league whose
   // profile has several. A view that isn't here uses the profile's default.
@@ -544,7 +544,6 @@ function createServer(port, opts = {}) {
   // sit in OBS: the ones for before the match first, then the ones for
   // during it.
   const NECC_TYPES = [
-    { key: 'matchPreview', label: 'Match Preview' },
     { key: 'matchRosters', label: 'Match Rosters' },
     { key: 'stageBracket', label: 'Bracket' },
     { key: 'seasonHeader', label: 'Season Header' },
@@ -598,7 +597,7 @@ function createServer(port, opts = {}) {
   // which league graphics and league scenes get an OBS scene, whether the
   // Scoreboard scene gets a game capture, whether setup turns on OBS Studio
   // Mode, and whether the setup guide has run.
-  const DEFAULT_NECC_TYPES = ['stageBracket', 'matchPreview'];
+  const DEFAULT_NECC_TYPES = ['stageBracket'];
   const PREF_FLAGS = ['setupDone', 'guideV2', 'gameCapture', 'gameAudio', 'casterMics', 'studioMode', 'orderScenes'];
   const onlyLeagueScenes = (list) => PROFILE.leagueScenes.filter((s) => list.includes(s));
   function panelPrefs() {

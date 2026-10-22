@@ -247,7 +247,6 @@ function afterLocalChange() { renderAll(); }
 // In the order their scenes sit in OBS (the server's list): before the
 // match, then during it.
 const NECC_TYPES = [
-  { key: 'matchPreview', label: 'Match Preview' },
   { key: 'matchRosters', label: 'Match Rosters' },
   { key: 'stageBracket', label: 'Bracket' },
   { key: 'seasonHeader', label: 'Season Header' },
@@ -255,7 +254,7 @@ const NECC_TYPES = [
   { key: 'matchActivity', label: 'Match Activity' },
 ];
 let prefs = {
-  neccTypes: ['stageBracket', 'matchPreview'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
+  neccTypes: ['stageBracket'], leagueScenes: LEAGUE_SCENES.map((s) => s.key), bxScenes: BX_SCENES.map((s) => s.key),
   setupDone: false, guideV2: false, gameCapture: true, gameAudio: true, casterMics: false, studioMode: false, orderScenes: true,
 };
 let prefsLoaded = false;
