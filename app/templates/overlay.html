@@ -2057,7 +2057,15 @@
   }
 
   // The stats table. L and R are { players, col }; mvp is one player or null.
+  // Rebuilt only when what it shows changes. Every state push redraws the
+  // screens, and OBS reports a scene change only once the stinger has ended,
+  // so the push that follows a cut to the Stats scene came mid-entrance: new
+  // rows started their entrance (bx.css) again, and the table vanished for
+  // a second.
   function renderRlsGrid(grid, L, R, mvp, top){
+    const sig = JSON.stringify([top, L.col, R.col, L.players, R.players, L.players.indexOf(mvp), R.players.indexOf(mvp)]);
+    if(grid.dataset.sig === sig) return;
+    grid.dataset.sig = sig;
     grid.innerHTML = '';
     grid.style.top = top + 'px';
     const n = L.players.length + R.players.length;
@@ -2150,22 +2158,27 @@
       small: 'Series', big: decided ? 'Final' : games.length ? 'Game ' + (won[0] + won[1]) : 'Up next',
     });
 
-    // One card per game: score from the left team's point of view.
+    // One card per game: score from the left team's point of view. Rebuilt
+    // only when the games change, like the table (renderRlsGrid).
     const strip = scr.querySelector('.rls-games');
-    strip.innerHTML = '';
-    games.forEach((g, i) => {
-      const leftIsBlue = g.blue === keys[0];
-      const goals = leftIsBlue ? [g.goals[0], g.goals[1]] : [g.goals[1], g.goals[0]];
-      const winKey = g.winner === 0 ? g.blue : rlOther(g.blue);
-      const card = mk('div', 'rls-game');
-      card.style.setProperty('--c', cols[keys.indexOf(winKey)]);
-      const score = mk('b');
-      const a = mk('u', winKey === keys[0] ? 'w' : '', String(goals[0] || 0));
-      const b = mk('u', winKey === keys[1] ? 'w' : '', String(goals[1] || 0));
-      score.append(a, ' - ', b);
-      card.append(mk('small', '', 'Game ' + (i + 1) + (g.overtime ? ' \u00b7 OT' : '')), score, mk('em', '', mapName(g.arena)));
-      strip.appendChild(card);
-    });
+    const stripSig = JSON.stringify([keys, cols, games.map((g) => [g.blue, g.winner, g.goals, g.overtime, g.arena])]);
+    if(strip.dataset.sig !== stripSig){
+      strip.dataset.sig = stripSig;
+      strip.innerHTML = '';
+      games.forEach((g, i) => {
+        const leftIsBlue = g.blue === keys[0];
+        const goals = leftIsBlue ? [g.goals[0], g.goals[1]] : [g.goals[1], g.goals[0]];
+        const winKey = g.winner === 0 ? g.blue : rlOther(g.blue);
+        const card = mk('div', 'rls-game');
+        card.style.setProperty('--c', cols[keys.indexOf(winKey)]);
+        const score = mk('b');
+        const a = mk('u', winKey === keys[0] ? 'w' : '', String(goals[0] || 0));
+        const b = mk('u', winKey === keys[1] ? 'w' : '', String(goals[1] || 0));
+        score.append(a, ' - ', b);
+        card.append(mk('small', '', 'Game ' + (i + 1) + (g.overtime ? ' \u00b7 OT' : '')), score, mk('em', '', mapName(g.arena)));
+        strip.appendChild(card);
+      });
+    }
 
     // Series totals per player, grouped by roster team.
     const totals = { A: new Map(), B: new Map() };
