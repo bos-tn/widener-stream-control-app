@@ -128,10 +128,8 @@ switches are unavailable.
 
 ## Match setup
 
-Match page, five steps. Step 1 sets up the whole match from a link; steps 2
-to 4 set the same fields by hand or correct them. A profile without the
-broadcast package (LotE) has no step 1: its four steps start at Game, and the
-match link is the **Match link** source of the Teams step.
+Match page, five steps, the same in every profile. Step 1 sets up the whole
+match from a link; steps 2 to 4 set the same fields by hand or correct them.
 
 1. **Match.** A LeagueOS match page URL and **Import**: the game with its
    scoreboard preset, both teams with rosters, the start time, the series
@@ -170,7 +168,8 @@ division when the league publishes several for that game.
 Playoff markers require a verified rule for that season and stage. Ties across
 the cutoff are marked unresolved; positions are provisional. NECC Rocket League
 marks the top four per group using the supplied rulebook. LotE's cutoff remains
-unverified. The League page shows
+unverified. A table without a playoff rule shows no cutoff legend on the scene.
+The League page shows
 the source, week and refresh status. See [standings sources](docs/standings.md)
 for the other games' links, rulebook findings and validation.
 

@@ -55,7 +55,11 @@ app.whenReady().then(async () => {
         assert(measured.rows.every((r) => r.left >= 0 && r.right <= w + 1 && r.top >= 0 && r.bottom <= h - 50), 'rows fit canvas');
         assert.match(measured.title, /Week/);
         assert.equal(measured.playoff, league === 'necc' ? live ? 4 : 3 : 0, 'NECC Rocket League cutoff applies across profiles; LotE stays unmarked');
-        if (league === 'necc') assert.match(await js("document.getElementById('st-legend').textContent"), /Top 4/);
+        const legend = await js("document.getElementById('st-legend').textContent");
+        if (league === 'necc') assert.match(legend, /Top 4/);
+        else assert.equal(legend, '', 'no cutoff legend without a playoff rule');
+        assert(await js(`(() => { const f = document.getElementById('lg-foot').getBoundingClientRect(), s = document.getElementById('st-source').getBoundingClientRect();
+          return Math.abs(f.right - s.right) < 1; })()`), 'source line stays in the right corner');
         assert(measured.names.every((n) => n.text && n.width > 30 && parseFloat(n.font) >= 16), 'team names remain readable');
         fs.writeFileSync(path.join(output, `${id}-${h}.png`), (await win.webContents.capturePage()).toPNG());
         report.push({ id, w, h, ...measured });

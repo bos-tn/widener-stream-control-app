@@ -703,20 +703,13 @@ function placeRosterEditor(page) {
 // teams (the league's schools and saved teams, or typed in), the details.
 // The last builds the scenes.
 //
-// The link step belongs to the broadcast package (its league feed offers
-// matches there). A profile without it keeps v2.1's four steps: the link is
-// one of the Teams step's sources.
-const LINK_FIRST = !!BX;
-const STEPS = LINK_FIRST ? ['link', 'game', 'teams', 'details', 'build'] : ['game', 'teams', 'details', 'build'];
-const STEP_KEY = 'stream-match-step';
+// Every profile starts with the link step. With the broadcast package its
+// league feed also offers this week's matches there.
+const STEPS = ['link', 'game', 'teams', 'details', 'build'];
+// v2.5.3 renamed the key: an install that had no link step before (LotE)
+// opens on it once instead of on its last saved step.
+const STEP_KEY = 'stream-match-step-v2';
 let currentStep = STEPS[0];
-if (!LINK_FIRST) {
-  document.querySelector('#stepper [data-step="link"]').parentElement.remove();
-  document.querySelectorAll('#stepper b').forEach((b, i) => { b.textContent = String(i + 1); });
-  $id('importPane').appendChild($id('linkField'));
-  $id('importSrcBtn').hidden = false;
-  $id('gameBackBtn').replaceWith(document.createElement('span'));
-}
 
 function showStep(step) {
   if (!STEPS.includes(step)) step = STEPS[0];
@@ -810,8 +803,8 @@ onCommit(teamInput, (el) => ({ team: el.value }));
 const SRC_KEY = 'stream-team-src';
 let pickFor = 'A';
 function showTeamSrc(src) {
-  // Link first: the match link has its own step and is not a source here.
-  if (src !== 'manual' && (LINK_FIRST || src !== 'import')) src = 'library';
+  // The match link has its own step and is not a source here.
+  if (src !== 'manual') src = 'library';
   document.querySelectorAll('#teamSrc .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.src === src));
   document.querySelectorAll('.team-pane').forEach((p) => { p.hidden = p.dataset.src !== src; });
   lsSet(SRC_KEY, src);
@@ -2956,7 +2949,7 @@ buildScoreSide('B');
 renderLibrary();
 applyCollapsed();
 setTextSize(lsGet(TEXT_KEY) || 'normal');
-showTeamSrc(lsGet(SRC_KEY) || (LINK_FIRST || BRAND.leagueTeams ? 'library' : 'import'));
+showTeamSrc(lsGet(SRC_KEY) || 'library');
 setPickFor('A');
 currentStep = [new URLSearchParams(location.search).get('step'), lsGet(STEP_KEY)].find((x) => STEPS.includes(x)) || STEPS[0];
 setPage(START_PAGE || 'live');

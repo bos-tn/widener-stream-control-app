@@ -795,7 +795,6 @@
   .lg-foot{ position:absolute; left:72px; right:72px; bottom:66px; display:flex; justify-content:space-between; gap:24px;
     font:600 16px 'Inter',sans-serif; color:var(--muted); }
   .lg-foot .st-legend{ color:#83efb5; }
-  .lg-foot .st-legend.unverified{ color:var(--muted); }
   .lg-league{ max-width:1080px; }
   .lg-league small{ letter-spacing:.08em; }
 
@@ -2547,8 +2546,9 @@
     const rows = all.slice(stPage * 20, (stPage + 1) * 20);
     const spots = s.playoffs && s.playoffs.spots || 0;
     const boundary = spots && all[spots - 1] && all[spots] && all[spots - 1].rank === all[spots].rank ? all[spots].rank : 0;
-    $('#st-legend').textContent = spots ? 'P · Top ' + spots + ' playoff positions' + (boundary ? '   T · Tied at cutoff' : '') + ' · Provisional' : 'Playoff cutoff unverified';
-    $('#st-legend').classList.toggle('unverified', !spots);
+    // No legend without a playoff rule. The empty span keeps the source line
+    // on the right.
+    $('#st-legend').textContent = spots ? 'P · Top ' + spots + ' playoff positions' + (boundary ? '   T · Tied at cutoff' : '') + ' · Provisional' : '';
     $('#st-source').textContent = [pages > 1 ? 'Page ' + (stPage + 1) + ' / ' + pages : all.length + ' teams', s.site,
       s.error ? 'Cached · refresh failed' : s.updatedAt ? 'Updated ' + new Date(s.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''].filter(Boolean).join(' · ');
     const sig = JSON.stringify([rows, stPage, spots, boundary, s.played, s.scored, s.scoreName, unitWord(state), (state.teamA || {}).name, (state.teamB || {}).name,

@@ -65,8 +65,6 @@
       <!-- Step 1: Match link -->
       <section class="card step-card" data-step="link">
         <div class="card-head"><h2>Match</h2></div>
-        <!-- Without the broadcast package this field sits in the Teams step
-             (control.js, LINK_FIRST). -->
         <div class="field" id="linkField">
           <label for="neccUrlInput"><span class="lbl">{{league}} match link (LeagueOS)
             <span class="info" tabindex="0" role="button" aria-label="More information" data-tip="Sets the game, both teams with rosters, the start time, the series length and the {{league}} graphic links.">i</span>
@@ -120,12 +118,9 @@
         </div>
 
         <div class="segmented team-src" id="teamSrc" role="tablist">
-          <button class="seg-btn" type="button" data-src="import" id="importSrcBtn" hidden>Match link</button>
           <button class="seg-btn" type="button" data-src="library" id="libSrcBtn">Team library</button>
           <button class="seg-btn" type="button" data-src="manual">Manual</button>
         </div>
-
-        <div class="team-pane" data-src="import" id="importPane" hidden></div>
 
         <div class="team-pane" data-src="library">
           <div class="pick-for">
