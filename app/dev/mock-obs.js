@@ -37,6 +37,9 @@ function createMockObs(port = 4466, opts = {}) {
     // The profile's settings a test reads: 'Category/Name' -> string.
     profile: { 'Output/Mode': 'Simple', 'SimpleOutput/VBitrate': '6000' },
     kinds:['browser_source', 'ffmpeg_source', 'game_capture', 'dshow_input', 'wasapi_input_capture', 'wasapi_process_output_capture', 'image_source', 'color_source'],
+    // Filter kinds this OBS offers. A test adds 'nv_greenscreen_filter' (NVIDIA's
+    // Video Effects runtime installed) or 'background_removal' (the plugin).
+    filterKinds: ['color_filter_v2', 'chroma_key_filter_v2', 'crop_filter'],
     calls: [],
   };
   let nextItemId = 1;
@@ -131,7 +134,7 @@ function createMockObs(port = 4466, opts = {}) {
       const sc = need(scene(sceneName), sceneName);
       if (state.inputs[inputName]) throw fail(601, 'A source already exists by that input name.');
       if (!state.kinds.includes(inputKind)) throw fail(400, 'The specified input kind is invalid.');
-      state.inputs[inputName] = { kind: inputKind, settings: { ...(inputSettings || {}) }, volumeDb: 0, pressed: [], media: 'OBS_MEDIA_STATE_NONE' };
+      state.inputs[inputName] = { kind: inputKind, settings: { ...(inputSettings || {}) }, volumeDb: 0, pressed: [], media: 'OBS_MEDIA_STATE_NONE', filters: [] };
       const id = nextItemId++;
       sc.items.push({ id, source: inputName, enabled: sceneItemEnabled !== false, locked: false, blend: 'OBS_BLEND_NORMAL', transform: {} });
       return { sceneItemId: id };
@@ -251,12 +254,17 @@ function createMockObs(port = 4466, opts = {}) {
       if (it) it.blend = sceneItemBlendMode;
     },
 
-    GetSourceFilterList: ({ sourceName }) => ({ filters: ((scene(sourceName) || {}).filters || []).map((f, i) => ({ ...f, filterIndex: i })) }),
+    // Filters belong to a source: a scene or an input.
+    GetSourceFilterKindList: () => ({ sourceFilterKinds: state.filterKinds.slice() }),
+    GetSourceFilterList: ({ sourceName }) => ({ filters: ((scene(sourceName) || state.inputs[sourceName] || {}).filters || []).map((f, i) => ({ ...f, filterIndex: i })) }),
     CreateSourceFilter: ({ sourceName, filterName, filterKind, filterSettings }) => {
-      need(scene(sourceName), sourceName).filters.push({ filterName, filterKind, filterSettings: filterSettings || {}, filterEnabled: true });
+      const src = need(scene(sourceName) || state.inputs[sourceName], sourceName);
+      if (state.inputs[sourceName] && !state.filterKinds.includes(filterKind)) throw fail(400, 'The specified filter kind is invalid.');
+      if (src.filters.some((x) => x.filterName === filterName)) throw fail(601, 'A filter already exists by that name.');
+      src.filters.push({ filterName, filterKind, filterSettings: filterSettings || {}, filterEnabled: true });
     },
     SetSourceFilterEnabled: ({ sourceName, filterName, filterEnabled }) => {
-      const f = need(scene(sourceName), sourceName).filters.find((x) => x.filterName === filterName);
+      const f = need(scene(sourceName) || state.inputs[sourceName], sourceName).filters.find((x) => x.filterName === filterName);
       if (f) f.filterEnabled = !!filterEnabled;
     },
     GetSceneSceneTransitionOverride: ({ sceneName }) => ({ transitionName: need(scene(sceneName), sceneName).override || null, transitionDuration: null }),

@@ -581,8 +581,11 @@ function createServer(port, opts = {}) {
       // A build puts the app's scenes in stream order in OBS's list.
       orderScenes: p.orderScenes !== false,
       // The broadcast package's scenes: all of them until one is unticked.
+      // Cut-out camera scenes (v2.5.4) are ticked once on an install that
+      // saved its picks before they existed.
       bxScenes: Array.isArray(p.bxScenes) ? BX_SCENE_KEYS.filter((k) => p.bxScenes.includes(k) ||
-        (migrateMessiahCams && (k === 'camera-group' || PROFILE.broadcast.cameras.some((c) => k === `cam-${c.id}`)))) : BX_SCENE_KEYS.slice(),
+        (migrateMessiahCams && (k === 'camera-group' || PROFILE.broadcast.cameras.some((c) => k === `cam-${c.id}`))) ||
+        (p.cutoutScenesV1 !== true && PROFILE.broadcast.cameras.some((c) => c.cutout && k === `cam-${c.id}`))) : BX_SCENE_KEYS.slice(),
     };
   }
   function savePanelPrefs(patch) {
@@ -592,7 +595,7 @@ function createServer(port, opts = {}) {
     if (Array.isArray(patch.neccTypes)) next.neccTypes = patch.neccTypes.filter((t) => NECC_TYPES.some((x) => x.key === t));
     if (Array.isArray(patch.leagueScenes)) { next.leagueScenes = onlyLeagueScenes(patch.leagueScenes); next.standingsV3 = true; }
     if (Array.isArray(patch.bxScenes)) next.bxScenes = BX_SCENE_KEYS.filter((k) => patch.bxScenes.includes(k));
-    appSettings = { ...appSettings, panel: { ...next, ...(PROFILE.id === 'messiah' ? { cameraPrefsVersion: 2 } : {}) } };
+    appSettings = { ...appSettings, panel: { ...next, cutoutScenesV1: true, ...(PROFILE.id === 'messiah' ? { cameraPrefsVersion: 2 } : {}) } };
     writeJsonSafe(settingsFile, appSettings);
     sendToPanels({ type: 'prefs', prefs: next });
     syncLayout();
@@ -1485,7 +1488,10 @@ tick(); setInterval(tick, 2000);
     const loaded = new Set();
     wss.clients.forEach((c) => { if (c.readyState === 1 && c.role === 'overlay' && c.pageKey) loaded.add(c.pageKey); });
     const now = Date.now();
-    const missing = obs.status().scenes.map((s) => s.key).filter((k) => !loaded.has(k) && now - (pageReloadedAt[k] || 0) > 20000);
+    // A scene with a background page needs both pages; reloading the scene
+    // reloads both.
+    const missing = obs.status().scenes.filter((s) => !loaded.has(s.key) || (s.back && !loaded.has(s.key + ':back')))
+      .map((s) => s.key).filter((k) => now - (pageReloadedAt[k] || 0) > 20000);
     if (!missing.length) return;
     missing.forEach((k) => { pageReloadedAt[k] = now; });
     obs.reloadPages(missing).then((done) => {
@@ -1533,7 +1539,8 @@ tick(); setInterval(tick, 2000);
         // v1 pages subscribed to a channel: 'draft' was a panel.
         ws.role = msg.role === 'panel' || msg.channel === 'draft' ? 'panel' : 'overlay';
         // A scene's page names its scene (see reloadMissingPages).
-        if (ws.role === 'overlay') ws.pageKey = msg.view === 'necc' && msg.necc ? 'necc:' + String(msg.necc) : String(msg.view || '');
+        // A cut-out camera's background page (layer 'back') counts on its own.
+        if (ws.role === 'overlay') ws.pageKey = (msg.view === 'necc' && msg.necc ? 'necc:' + String(msg.necc) : String(msg.view || '')) + (msg.layer === 'back' ? ':back' : '');
         // First, so a page from an older version reloads before anything else.
         ws.send(JSON.stringify({ type: 'hello', version: APP_VERSION, stamp: PAGE_STAMPS[ws.role] }));
         // Montage status first, so an overlay's first render already knows

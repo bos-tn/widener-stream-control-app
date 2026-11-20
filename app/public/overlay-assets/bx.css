@@ -38,10 +38,14 @@ html.bx .bx-root{ display:block; }
 /* The frame scenes and Be Right Back are drawn here instead. */
 html.bx #widener-frame, html.bx #brb-view{ display:none !important; }
 /* A camera scene is see-through: OBS has the camera under this page. */
-html.bx body[data-mode^="cam-"]{ background:transparent; }
-html.bx body[data-mode^="cam-"] .stripes,
-html.bx body[data-mode^="cam-"] .bg-gradient,
-html.bx body[data-mode^="cam-"] .brand-bg{ display:none !important; }
+html.bx body[data-mode^="cam-"]:not([data-layer="back"]){ background:transparent; }
+html.bx body[data-mode^="cam-"]:not([data-layer="back"]) .stripes,
+html.bx body[data-mode^="cam-"]:not([data-layer="back"]) .bg-gradient,
+html.bx body[data-mode^="cam-"]:not([data-layer="back"]) .brand-bg{ display:none !important; }
+/* The page under a cut-out camera (layer=back, v2.5.4) is the other way
+   round: the scene's background as a full scene shows it, and none of the
+   camera scene's graphics, which the page above the camera draws. */
+html.bx body[data-layer="back"] .bx-root{ display:none !important; }
 
 /* --- Entrances ----------------------------------------------------------- */
 body.enter .bx-root [data-in]{

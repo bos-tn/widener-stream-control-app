@@ -41,6 +41,9 @@ const INFER_AFTER_END_MS = 10000;
 // long without the spectator-only fields. Not at once: a few states without
 // them must not flash the game's HUD back on.
 const SPECTATOR_LOST_MS = 3000;
+// MatchInitialized and CountdownBegin both mark the first kickoff's
+// countdown. A second one within this long is the same countdown.
+const COUNTDOWN_SAME_MS = 2500;
 // Ball speed in the feed is in Unreal units/s (1 uu = 1 cm).
 const UU_TO_KPH = 0.036;
 
@@ -290,6 +293,19 @@ function createRlStats(opts = {}) {
     emit();
   }
 
+  // Each kickoff countdown, as { type: 'countdown', hudHidden }, and its end
+  // as { type: 'roundStarted' }. The game's own 3-2-1 is part of its HUD, so
+  // while the HUD is hidden the board draws the countdown. hudHidden rides
+  // on the event because the snapshot carrying a fresh hide can still be
+  // waiting in the emit throttle.
+  let countdownAt = 0;
+  function countdown() {
+    const now = Date.now();
+    if (now - countdownAt < COUNTDOWN_SAME_MS) return;
+    countdownAt = now;
+    onEvent({ type: 'countdown', hudHidden });
+  }
+
   function setStatus(status) {
     if (snap.status === status) return;
     // Not connected: no game to be spectating, and no HUD of ours to undo.
@@ -376,8 +392,8 @@ function createRlStats(opts = {}) {
         if (t > clockMax) clockMax = t;
         break;
       }
-      case 'CountdownBegin': starting('countdown'); syncHud(true); break;
-      case 'RoundStarted': starting('round'); break;
+      case 'CountdownBegin': starting('countdown'); syncHud(true); countdown(); break;
+      case 'RoundStarted': starting('round'); onEvent({ type: 'roundStarted' }); break;
       case 'GoalScored': {
         const scorer = ref(d.Scorer);
         onEvent({
@@ -419,6 +435,7 @@ function createRlStats(opts = {}) {
         started = false; clockMax = 0;
         if (msg.event === 'MatchInitialized') starting('countdown');
         syncHud(true);
+        if (msg.event === 'MatchInitialized') countdown();
         break;
       default: break;
     }

@@ -495,9 +495,11 @@
   .rl-only{ display:none; }
   .sb-view.rl .sb{ display:none; }
   .sb-view.rl .rl-only{ display:block; }
-  .rl-only{ --rl-ink:var(--brand-ink-dark, #071022); --rl-white:#f3f6fb; }
+  /* --rl-gap: space above the board and the team boost rows, half the other
+     boards' --sb-gap (v2.5.4). */
+  .rl-only{ --rl-ink:var(--brand-ink-dark, #071022); --rl-white:#f3f6fb; --rl-gap:8px; }
 
-  .rlb{ position:absolute; top:var(--sb-gap); left:50%; transform:translateX(-50%); width:640px;
+  .rlb{ position:absolute; top:var(--rl-gap); left:50%; transform:translateX(-50%); width:640px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); animation: rlb-in .5s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rlb-in{ from{ opacity:0; transform:translate(-50%,-24px) } to{ opacity:1; transform:translate(-50%,0) } }
   .rlb-top{ height:34px; display:flex; align-items:center; justify-content:center; gap:14px;
@@ -531,7 +533,7 @@
 
   /* Each team's players on its screen edge: name, boost number, boost bar.
      The player the camera follows is filled with the team colour. */
-  .rl-team{ position:absolute; top:0; width:330px; display:flex; flex-direction:column; gap:3px;
+  .rl-team{ position:absolute; top:var(--rl-gap); width:330px; display:flex; flex-direction:column; gap:3px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,.4)); transition:opacity .3s, transform .35s cubic-bezier(.22,1,.36,1); }
   .rl-team.left{ left:0; }
   .rl-team.right{ right:0; }
@@ -557,7 +559,7 @@
   .rl-p.dead{ opacity:.4; }
 
   /* Goal banner under the board. */
-  .rl-goal{ position:absolute; top:calc(168px + var(--sb-gap)); left:50%; display:flex; align-items:stretch; height:50px;
+  .rl-goal{ position:absolute; top:calc(168px + var(--rl-gap)); left:50%; display:flex; align-items:stretch; height:50px;
     transform:translateX(-50%); filter:drop-shadow(0 4px 10px rgba(0,0,0,.45));
     opacity:0; transition:opacity .3s, transform .4s cubic-bezier(.22,1,.36,1); pointer-events:none; }
   .rl-goal.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -571,9 +573,21 @@
   .rl-goal-meta b{ color:var(--text); }
   .rl-goal-meta:empty{ display:none; }
 
+  /* Kickoff countdown (v2.5.4): 3, 2, 1, GO in the middle of the screen,
+     drawn only while the game's HUD, which carries the game's own
+     countdown, is hidden. Styled like the board's clock. */
+  .rl-count{ position:absolute; left:50%; top:420px; transform:translate(-50%,-50%); pointer-events:none;
+    opacity:0; transition:opacity .3s; }
+  .rl-count.show{ opacity:1; transition:none; }
+  .rl-count b{ display:grid; place-items:center; min-width:180px; height:180px; padding:0 34px; box-sizing:border-box;
+    background:var(--rl-white); color:var(--rl-ink); border-bottom:8px solid var(--brand-accent);
+    font-family:'Kanit', system-ui, sans-serif; font-weight:800; font-size:138px; line-height:1; font-variant-numeric:tabular-nums;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
+  .rl-count.go b{ background:var(--brand-accent); border-bottom-color:var(--rl-ink); font-size:112px; letter-spacing:.06em; }
+
   /* While a stats screen is up, the in-game parts step aside. */
   .sb-view.rls-on .rlb, .sb-view.rls-on .rl-team, .sb-view.rls-on .rl-goal,
-  .sb-view.rls-on .rl-boost, .sb-view.rls-on .rl-sample{ visibility:hidden; }
+  .sb-view.rls-on .rl-boost, .sb-view.rls-on .rl-sample, .sb-view.rls-on .rl-count{ visibility:hidden; }
 
   /* Full-screen stats screens: one game's stats, and the series overview.
      Opaque, so they cover the game capture. The brand background and a big faint
@@ -910,6 +924,7 @@
           <div class="rl-goal-tag">GOAL</div>
           <div class="rl-goal-body"><span class="rl-goal-name" id="rl-goal-name"></span><span class="rl-goal-meta" id="rl-goal-meta"></span></div>
         </div>
+        <div class="rl-count" id="rl-count" aria-hidden="true"><b id="rl-count-num"></b></div>
         <div class="rl-boost off" id="rl-boost">
           <div class="rl-card">
             <div class="rl-card-name"><span id="rlb-name"></span></div>
@@ -1987,6 +2002,39 @@
     rlGoalTimer = setTimeout(() => banner.classList.remove('show'), 5500);
   }
 
+  // Kickoff countdown (v2.5.4). The game's own 3-2-1 goes with its HUD,
+  // which the app hides while spectating, so the board draws it: the
+  // countdown event (CountdownBegin) starts it and roundStarted is GO. The
+  // game counts down for three seconds; GO also comes on its own a little
+  // after that if roundStarted is missed. Not drawn when the game's HUD is
+  // showing, since the game draws its own.
+  const RL_COUNT_MS = 1000;
+  let rlCountTimers = [];
+  function clearRlCount(){ rlCountTimers.forEach(clearTimeout); rlCountTimers = []; }
+  function hideRlCount(){ clearRlCount(); $('#rl-count').classList.remove('show'); }
+  function showRlCountStep(text, go){
+    const box = $('#rl-count');
+    const num = $('#rl-count-num');
+    num.textContent = text;
+    box.classList.toggle('go', !!go);
+    box.classList.add('show');
+    num.animate([{ transform:'scale(1.35)', opacity:0 }, { transform:'none', opacity:1 }],
+      { duration:420, easing:'cubic-bezier(.22,1,.36,1)' });
+  }
+  function startRlCount(ev){
+    if(!lastState || (lastState.scoreboard || {}).style !== 'rl' || !ev.hudHidden){ hideRlCount(); return; }
+    clearRlCount();
+    [3, 2, 1].forEach((n, i) => rlCountTimers.push(setTimeout(() => showRlCountStep(String(n)), i * RL_COUNT_MS)));
+    rlCountTimers.push(setTimeout(rlCountGo, 3 * RL_COUNT_MS + 400));
+  }
+  function rlCountGo(){
+    // GO only ends a countdown that is on screen.
+    if(!$('#rl-count').classList.contains('show')) return;
+    clearRlCount();
+    showRlCountStep('GO', true);
+    rlCountTimers.push(setTimeout(hideRlCount, 900));
+  }
+
   // --- Rocket League stats screens ------------------------------------------
   // The server records every finished game (rl-series.json) and decides which
   // screen is up: it cuts to a game's stats a few seconds after it ends, to
@@ -2685,6 +2733,10 @@
     document.body.dataset.view = lockedView;
     if(lockedNeccType) document.body.dataset.neccType = lockedNeccType;
   }
+  // layer=back (v2.5.4): the page under a cut-out camera in OBS. It draws
+  // the scene's background and nothing else (bx.css).
+  const pageLayer = lockedView && lockedView.startsWith('cam-') && params.get('layer') === 'back' ? 'back' : '';
+  if(pageLayer) document.body.dataset.layer = pageLayer;
 
   // After an app update OBS still holds this page as the old version served
   // it. The server says which build it is each time the page connects; if
@@ -2720,7 +2772,7 @@
   (function connect(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     // A scene's page names its scene, so the server knows which ones are loaded.
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', role: 'overlay', view: lockedView || '', necc: lockedNeccType })));
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'subscribe', role: 'overlay', view: lockedView || '', necc: lockedNeccType, layer: pageLayer })));
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -2742,6 +2794,8 @@
           renderRlScreens(false);
         }
         if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'goal') showRlGoal(msg.event);
+        if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'countdown') startRlCount(msg.event);
+        if (msg.type === 'rlEvent' && msg.event && msg.event.type === 'roundStarted') rlCountGo();
         if (msg.type === 'league') {
           leagueData = msg.league && msg.league.standings ? msg.league : { standings: {} };
           // Records show on the rosters and the matchup row as well.

@@ -227,14 +227,16 @@
       "necc": "pride-lions",
       "stats": "stripes",
       "schedule": "floodlights",
-      "versus": "speed-lines"
+      "versus": "speed-lines",
+      "cam-caster": "w-shine"
     }
   },
   "broadcast": {
     "scenes": ["schedule", "versus"],
     "cameras": [
       {"id": "crowd", "label": "Crowd Cam", "title": "Crowd Cam", "subtitle": "Widener Esports Arena"},
-      {"id": "room", "label": "Comp Room", "title": "Comp Room", "subtitle": "Widener Esports Arena"}
+      {"id": "room", "label": "Comp Room", "title": "Comp Room", "subtitle": "Widener Esports Arena"},
+      {"id": "caster", "label": "Caster Cam", "title": "Caster Cam", "subtitle": "Widener Esports Arena", "cutout": true}
     ],
     "follow": {
       "links": ["https://necc.v1.leagueos.gg/league/groups/0vzi57y2uxge8qs2vuuvgccvw"],

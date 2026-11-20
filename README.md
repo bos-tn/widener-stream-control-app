@@ -227,6 +227,7 @@ no `broadcast` block and is unchanged.
 | Scoreboard | Same boards. Added: team colour wash, "Match point" when a team is one win from the series |
 | Rocket League Stats | Same screens. Rows enter in turn |
 | Crowd Cam, Comp Room (new) | Transparent page over the camera: title on entry, label, badge, location line, series score |
+| Caster Cam (v2.5.4) | The caster cut out of the camera picture over the scene's background (default W Shine, picked under the scene like other backgrounds), with the camera scene's graphics on top. See Cut-out camera below |
 | Be Right Back | Headline, series score, mascot, three other matches |
 | Post-Match | With a series score: result with the winner marked, game scores for a Rocket League series, sign-off, countdown, video. Without: the Starting Soon layout |
 
@@ -308,12 +309,43 @@ the overlay draws the frame. The source depends on the camera's address
   `url` on a camera in `profile.json` is a default that ships, for an address
   that may be public. **Default link** on a camera goes back to its default.
 
+### Cut-out camera (Caster Cam)
+
+A camera with `"cutout": true` in `profile.json` (Widener's `caster`) is
+connected like the others: a network address or a device, Broadcast,
+Cameras. Its scene has three layers, bottom to top:
+
+| Layer | OBS source |
+| --- | --- |
+| The scene's background | Browser source `WU-src-cam-caster-back`, `/overlay?view=cam-caster&layer=back` |
+| The camera, background removed | The camera's source (`WU-netcam-caster`, `WU-stream-caster` or `WU-cam-caster`) with a filter named `Background Removal` |
+| Camera scene graphics | Browser source `WU-src-cam-caster` |
+
+OBS has no background removal of its own until one of these is installed.
+A build adds the first one OBS offers to the camera's source:
+
+1. **NVIDIA Background Removal** (`nv_greenscreen_filter`), part of OBS on
+   Windows. It needs an NVIDIA RTX card and NVIDIA's Video Effects SDK
+   redistributable for that card (nvidia.com, Broadcast SDK resources;
+   RTX 40 series: the Ada package). The NVIDIA Broadcast app does not
+   provide it. OBS lists the filter after a restart.
+2. **Background Removal** plugin (`background_removal`,
+   locaal-ai/obs-backgroundremoval), any PC.
+
+The build result says which was added. With neither, the whole camera
+picture covers the background, and the build result says how to add one. A
+filter already on the source is left as it is, so its threshold and other
+settings can be tuned in OBS. The filter is on the source, so the camera's
+window over the game shows the caster cut out too. Edges are not as clean as
+a green screen: plain, well-lit space behind the casters helps, and
+NVIDIA's Quality mode is cleaner than Performance.
+
 ### Review without OBS
 
 ```bash
 cd app
 npm run design          # demo data, http://localhost:4313/showcase
-npm run test:broadcast  # 55 checks against a mock OBS
+npm run test:broadcast  # checks against a mock OBS
 ```
 
 The showcase page shows every scene as a live tile, with buttons for pop-ups,
@@ -387,12 +419,13 @@ With the Rocket League preset the scoreboard reads live data from the game's
 Stats API (no BakkesMod):
 
 - centre board: round, game number, logos, goals, match clock (overtime,
-  replay)
+  replay), 8 px from the top of the screen
 - series score as pips, counted when a game ends (best of 7 by default; a
   LeagueOS import sets the length)
-- per-player boost bars
+- per-player boost bars on the screen edges, 8 px from the top
 - goal banner with scorer and assist
 - boost meter and stats for the spectated player
+- kickoff countdown (3, 2, 1, GO) while the game's HUD is hidden
 
 The **Rocket League Stats** scene exists only while the score source is live
 game data. It shows one game's player stats with MVP, or the series overview.
@@ -426,6 +459,13 @@ spectating, and again at each new match and kickoff countdown. Needs game
 v2.72 or later. A client that is playing is left alone. The HUD is turned
 back on when the setting is off, the score source is Manual, or the app
 closes. On an older game version, hide the HUD in the game (default key H).
+
+The game's own kickoff countdown is part of its HUD, so the board draws one
+while the HUD is hidden: `CountdownBegin` (or `MatchInitialized` for the
+first kickoff) shows 3, then 2 and 1 a second apart, and `RoundStarted` shows
+GO. If `RoundStarted` is missed, GO follows 3.4 s after the countdown began.
+When the HUD is left on, the board draws no countdown. A HUD hidden by hand in
+the game (key H) is not known to the app, so no countdown is drawn then.
 
 Blue is the left side. **Swap sides** when Team A is on orange; the panel
 offers it when roster gamertags match the blue team. Auto-count stops once the

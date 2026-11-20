@@ -79,6 +79,16 @@ const NET_CAMERA_CSS = [
   '#message { display: none !important; }',
 ].join('\n');
 const CAMERA_DEVICE_PROP = { dshow_input: 'video_device_id', av_capture_input_v2: 'device', av_capture_input: 'device', v4l2_input: 'device_id' };
+// AI background removal for a cut-out camera (v2.5.4), best first: OBS's own
+// NVIDIA Background Removal (RTX cards; OBS lists it only once NVIDIA's Video
+// Effects runtime is installed) and the Background Removal plugin
+// (locaal-ai/obs-backgroundremoval, any PC). The first one this OBS offers
+// goes on the camera's input.
+const CUTOUT_FILTERS = [
+  { kind: 'nv_greenscreen_filter', source: 'nvidia' },
+  { kind: 'background_removal', source: 'plugin' },
+];
+const CUTOUT_FILTER_NAME = 'Background Removal';
 
 // The scenes this match uses, in the order a stream runs through them, which
 // is the order they sit in OBS from top to bottom (and in the panel's list):
@@ -112,9 +122,14 @@ function sceneEntries(prefix, opts) {
   if (opts.includeStats) {
     list.push({ key: 'stats', view: 'stats', scene: `${prefix}: ${STATS_VIEW.label}`, input: `${prefix}-src-stats` });
   }
-  // A camera scene: the camera under a transparent overlay page.
+  // A camera scene: the camera under a transparent overlay page. A cut-out
+  // camera also has a page under the camera that draws the scene's
+  // background (`back`).
   (opts.cameras || []).forEach((c) => {
-    list.push({ key: `cam-${c.id}`, view: `cam-${c.id}`, camera: c.id, scene: `${prefix}: ${c.label}`, input: `${prefix}-src-cam-${c.id}` });
+    list.push({
+      key: `cam-${c.id}`, view: `cam-${c.id}`, camera: c.id, scene: `${prefix}: ${c.label}`, input: `${prefix}-src-cam-${c.id}`,
+      cutout: !!c.cutout, back: c.cutout ? `${prefix}-src-cam-${c.id}-back` : '',
+    });
   });
   if (opts.cameraGroup) list.push({ key: 'camera-group', view: 'camera-group', cameraGroup: opts.cameraGroup.cameras, cameraFrames: opts.cameraGroup.frames, scene: `${prefix}: ${opts.cameraGroup.label}`, input: `${prefix}-src-camera-group` });
   list.push(base('brb'), base('post-match'));
@@ -255,7 +270,7 @@ function createObs(opts = {}) {
     return {
       connected, reconnecting: !connected && reconnecting, currentScene, onAir: onAir(),
       collection: collectionName, stingerName, error: lastError,
-      scenes: scenes.map((s) => ({ key: s.key, scene: s.scene })),
+      scenes: scenes.map((s) => ({ key: s.key, scene: s.scene, ...(s.back ? { back: true } : {}) })),
     };
   }
 
@@ -426,6 +441,14 @@ function createObs(opts = {}) {
         await fitItem(t.scene, sceneItemId, base);
         n++;
       } catch (e) { continue; }
+      if (t.back) {
+        try {
+          const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: t.back });
+          await obs.call('SetInputSettings', { inputName: t.back, inputSettings: size, overlay: true });
+          await fitItem(t.scene, sceneItemId, base);
+          n++;
+        } catch (e) { /* no background page yet */ }
+      }
       if (t.cameraGroup) await ensureCameraGroup(t, base, new Set(((await obs.call('GetInputList')).inputs || []).map((i) => i.inputName))).catch(() => {});
       if (!t.camera) continue;
       try {
@@ -749,7 +772,42 @@ function createObs(opts = {}) {
     }
     await coverItem(t.scene, sceneItemId, { x: 0, y: 0, w: base.w, h: base.h }).catch(() => {});
     try { await obs.call('SetSceneItemIndex', { sceneName: t.scene, sceneItemId, sceneItemIndex: 0 }); } catch (e) { /* non-fatal */ }
+    // A cut-out camera's background page stays under it.
+    if (t.back) await backPageToBottom(t);
     return made;
+  }
+
+  // --- Cut-out cameras (v2.5.4) ----------------------------------------------------
+  // The scene, bottom to top: a page drawing the scene's background
+  // (/overlay?view=cam-<id>&layer=back), the camera with its background
+  // removed, the scene's overlay page. The filter is on the camera's input,
+  // so the person is cut out wherever the camera shows, its window over the
+  // game included.
+  async function backPageToBottom(t) {
+    try {
+      const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: t.scene, sourceName: t.back });
+      await obs.call('SetSceneItemIndex', { sceneName: t.scene, sceneItemId, sceneItemIndex: 0 });
+    } catch (e) { /* not built yet */ }
+  }
+  async function ensureBackPage(t, base, existingInputs, overlayBase) {
+    await ensureBrowserSource({ scene: t.scene, input: t.back }, base, `${overlayBase}/overlay?view=${t.view}&layer=back`, existingInputs);
+    await backPageToBottom(t);
+  }
+  // 'nvidia' or 'plugin' (the filter added), 'kept' (one was already on the
+  // input, left as the operator has tuned it), or 'none' (this OBS offers
+  // neither, and the camera's whole picture covers the background).
+  async function ensureCutoutFilter(input) {
+    const have = (await obs.call('GetSourceFilterList', { sourceName: input }).catch(() => ({}))).filters || [];
+    if (have.some((f) => CUTOUT_FILTERS.some((c) => c.kind === f.filterKind))) return 'kept';
+    const kinds = (await obs.call('GetSourceFilterKindList').catch(() => ({}))).sourceFilterKinds || [];
+    const pick = CUTOUT_FILTERS.find((c) => kinds.includes(c.kind));
+    if (!pick) return 'none';
+    try {
+      await obs.call('CreateSourceFilter', { sourceName: input, filterName: CUTOUT_FILTER_NAME, filterKind: pick.kind, filterSettings: {} });
+    } catch (e) {
+      return 'none';
+    }
+    return pick.source;
   }
 
   // The camera's window in the Scoreboard scene: a second scene item of the
@@ -814,6 +872,9 @@ function createObs(opts = {}) {
     if (!sceneNames.has(t.scene)) return 'no-scene';
     const existingInputs = new Set(((await obs.call('GetInputList')).inputs || []).map((i) => i.inputName));
     const made = await ensureCamera(t, await videoBase(), existingInputs);
+    // A new link can mean a new input (device, page and stream inputs have
+    // their own names), which needs the filter again.
+    if (t.cutout && made !== 'manual') await ensureCutoutFilter(cameraInput(id)).catch(() => {});
     const sb = entryForKey('scoreboard');
     if (made !== 'manual' && sb && sceneNames.has(sb.scene)) await ensureCameraWindow(sb, id, existingInputs).catch(() => {});
     const group = scenes.find((s) => s.cameraGroup && s.cameraGroup.includes(id));
@@ -1048,12 +1109,19 @@ function createObs(opts = {}) {
 
     // Each camera: its input in its own scene, and its window over the game.
     // cameraSources: what each camera is in OBS, for the build result.
+    // cutouts: each cut-out camera's background removal (ensureCutoutFilter),
+    // or 'manual' when its camera input could not be made.
     const cameras = {};
     const cameraSources = {};
+    const cutouts = {};
     for (const t of cameraTargets()) {
       cameraSources[t.camera] = { input: cameraInput(t.camera), kind: linkKind(cameraLink(t.camera)) };
       cameras[t.camera] = await ensureCamera(t, base, existingInputs).catch(() => 'manual');
       if (cameras[t.camera] !== 'manual') await ensureCameraWindow(entryForKey('scoreboard'), t.camera, existingInputs).catch(() => {});
+      if (t.cutout) {
+        await ensureBackPage(t, base, existingInputs, overlayBase).catch(() => {});
+        cutouts[t.camera] = cameras[t.camera] === 'manual' ? 'manual' : await ensureCutoutFilter(cameraInput(t.camera)).catch(() => 'none');
+      }
     }
     const group = scenes.find((s) => s.cameraGroup);
     if (group) await ensureCameraGroup(group, base, existingInputs).catch(() => {});
@@ -1091,8 +1159,8 @@ function createObs(opts = {}) {
     // first, so nothing keeps loading a page nobody can see.
     const removed = [];
     for (const t of stale) {
-      if (existingInputs.has(t.input)) {
-        try { await obs.call('RemoveInput', { inputName: t.input }); } catch (e) { /* non-fatal */ }
+      for (const input of [t.input, t.back].filter((n) => n && existingInputs.has(n))) {
+        try { await obs.call('RemoveInput', { inputName: input }); } catch (e) { /* non-fatal */ }
       }
       if (existingScenes.has(t.scene)) {
         try { await obs.call('RemoveScene', { sceneName: t.scene }); removed.push(t.scene); } catch (e) { /* non-fatal */ }
@@ -1113,7 +1181,7 @@ function createObs(opts = {}) {
       try { await obs.call('SetStudioModeEnabled', { studioModeEnabled: true }); } catch (e) { /* non-fatal */ }
     }
     await refreshProgram();
-    return { built, removed, reloaded, ordering, moved, gameCapture, gameAudio, casterMics, teamLogos, cameras, cameraSources, collection, collectionName };
+    return { built, removed, reloaded, ordering, moved, gameCapture, gameAudio, casterMics, teamLogos, cameras, cameraSources, cutouts, collection, collectionName };
   }
 
   // The league's stinger. obs-websocket can't create a transition, so the
@@ -1258,10 +1326,12 @@ function createObs(opts = {}) {
     if (!connected) return [];
     const done = [];
     for (const t of scenes.filter((s) => (keys || []).includes(s.key))) {
-      try {
-        await obs.call('PressInputPropertiesButton', { inputName: t.input, propertyName: 'refreshnocache' });
-        done.push(t.input);
-      } catch (e) { /* the scene has not been built */ }
+      for (const input of [t.input, t.back].filter(Boolean)) {
+        try {
+          await obs.call('PressInputPropertiesButton', { inputName: input, propertyName: 'refreshnocache' });
+          done.push(input);
+        } catch (e) { /* the scene has not been built */ }
+      }
     }
     return done;
   }

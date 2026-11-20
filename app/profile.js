@@ -58,8 +58,10 @@ function broadcastOptions(raw, local) {
   const cameras = (Array.isArray(raw.cameras) ? raw.cameras : []).filter((c) => c && /^[a-z0-9]+$/.test(c.id || '')).slice(0, 4)
     // link: the camera's address on the network (local.json, else `url`
     // here). Without one the camera is a capture device on this PC.
+    // cutout (v2.5.4): the scene shows the person cut out of the picture
+    // (OBS's AI background removal) over the scene's background.
     .map((c) => ({ id: c.id, label: String(c.label || c.id), title: String(c.title || c.label || c.id), subtitle: String(c.subtitle || ''),
-      link: cameraLink(((local && local.cameras) || {})[c.id] !== undefined ? local.cameras[c.id] : c.url) }));
+      link: cameraLink(((local && local.cameras) || {})[c.id] !== undefined ? local.cameras[c.id] : c.url), cutout: c.cutout === true }));
   const scenes = (Array.isArray(raw.scenes) ? raw.scenes : BROADCAST_SCENES).filter((x) => BROADCAST_SCENES.includes(x));
   const group = raw.cameraGroup || {};
   const groupIds = Array.isArray(group.cameras) ? [...new Set(group.cameras.filter((id) => cameras.some((c) => c.id === id)))].slice(0, 3) : [];

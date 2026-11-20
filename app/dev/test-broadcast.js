@@ -26,7 +26,9 @@ process.env.WIDENER_MUSIC_DIR = path.join(dataDir, 'music');
 process.env.WIDENER_MONTAGE_DIR = path.join(dataDir, 'montages');
 fs.mkdirSync(dataDir, { recursive: true });
 // No music or video downloads in a test.
-fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ music: { enabled: false }, panel: { setupDone: true, guideV2: true } }));
+// The scene picks are saved as an install before v2.5.4 had them: without
+// the Caster Cam, which is ticked once (cutoutScenesV1).
+fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ music: { enabled: false }, panel: { setupDone: true, guideV2: true, bxScenes: ['schedule', 'versus', 'cam-crowd', 'cam-room'] } }));
 // The profile's default feed is asked for further down, not at start.
 fs.writeFileSync(path.join(dataDir, 'broadcast.json'), JSON.stringify({ v: 1, defaultsDone: true }));
 
@@ -97,7 +99,7 @@ function openPage(role) {
     check('connects to the mock', st.connected === true, st);
     const b1 = await send('/api/obs/build-scenes');
     check('build succeeds', !b1.error, b1);
-    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Standings', 'WU: Bracket', 'WU: Gameplay/Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Be Right Back', 'WU: Post-Match'];
+    const want = ['WU: Starting Soon', 'WU: This Week', 'WU: Matchup', 'WU: Rosters', 'WU: Standings', 'WU: Bracket', 'WU: Gameplay/Scoreboard', 'WU: Crowd Cam', 'WU: Comp Room', 'WU: Caster Cam', 'WU: Be Right Back', 'WU: Post-Match'];
     check('scenes in stream order', JSON.stringify(mock.sceneNames()) === JSON.stringify(want), mock.sceneNames());
     check('collection created', b1.collection === 'created' && mock.state.current === 'Widener Stream', [b1.collection, mock.state.current]);
     check('cameras reported created', b1.cameras && b1.cameras.crowd === 'created' && b1.cameras.room === 'created', b1.cameras);
@@ -118,12 +120,33 @@ function openPage(role) {
     check('camera page url', mock.state.inputs['WU-src-cam-crowd'].settings.url === `http://localhost:${PORT}/overlay?view=cam-crowd`, mock.state.inputs['WU-src-cam-crowd'].settings.url);
     check('This Week page url', mock.state.inputs['WU-src-schedule'].settings.url === `http://localhost:${PORT}/overlay?view=schedule`);
     const sb = mock.items('WU: Gameplay/Scoreboard');
-    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-audio', 'WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-src-scoreboard', 'WU-team-logo-a', 'WU-team-logo-b']), sb.map((i) => i.sourceName));
+    check('scoreboard: capture, cameras, page', JSON.stringify(sb.map((i) => i.sourceName)) === JSON.stringify(['WU-game-audio', 'WU-game-capture', 'WU-cam-crowd', 'WU-cam-room', 'WU-cam-caster', 'WU-src-scoreboard', 'WU-team-logo-a', 'WU-team-logo-b']), sb.map((i) => i.sourceName));
     const logoItems = sb.filter((i) => /team-logo/.test(i.sourceName));
     check('team logos start hidden, above the page', logoItems.length === 2 && logoItems.every((i) => i.sceneItemEnabled === false) && sb.indexOf(logoItems[0]) > sb.findIndex((i) => i.sourceName === 'WU-src-scoreboard'), logoItems);
     check('team logos sit near the top', mock.state.inputs['WU-team-logo-a'].settings.url.endsWith('/team-logo/a') && mock.state.inputs['WU-team-logo-b'].settings.url.endsWith('/team-logo/b') && logoItems.every((i) => i.sceneItemTransform ? i.sceneItemTransform.positionY <= 100 : true), logoItems.map((i) => i.sceneItemTransform));
     check('team logo page is served', /team-logo|teamA/.test(await (await fetch(`http://localhost:${PORT}/team-logo/a`)).text()));
     check('camera windows start hidden', sb.filter((i) => /cam/.test(i.sourceName)).every((i) => i.sceneItemEnabled === false), sb.map((i) => i.sceneItemEnabled));
+
+    // --- Caster Cam: cut out over the scene's background (v2.5.4) -----------------
+    const CASTER_ORDER = JSON.stringify(['WU-src-cam-caster-back', 'WU-cam-caster', 'WU-src-cam-caster']);
+    const casterItems = () => mock.items('WU: Caster Cam').map((i) => i.sourceName);
+    const casterFilters = () => mock.state.inputs['WU-cam-caster'].filters.map((f) => f.filterKind);
+    check('saved picks from before 2.5.4 get the Caster Cam', (await j('/api/prefs')).prefs.bxScenes.includes('cam-caster'), (await j('/api/prefs')).prefs.bxScenes);
+    check('caster scene: background page, camera, page', JSON.stringify(casterItems()) === CASTER_ORDER, casterItems());
+    check('caster background page url', mock.state.inputs['WU-src-cam-caster-back'].settings.url === `http://localhost:${PORT}/overlay?view=cam-caster&layer=back`, mock.state.inputs['WU-src-cam-caster-back'].settings.url);
+    check('caster background page fills the canvas', mock.items('WU: Caster Cam')[0].sceneItemTransform.boundsWidth === 1920 && mock.items('WU: Caster Cam')[0].sceneItemTransform.boundsType === 'OBS_BOUNDS_STRETCH');
+    check('no removal filter in OBS: reported, none added', b1.cutouts && b1.cutouts.caster === 'none' && casterFilters().length === 0 && !('crowd' in b1.cutouts), [b1.cutouts, casterFilters()]);
+    mock.state.filterKinds.push('background_removal');
+    const bp = await send('/api/obs/build-scenes');
+    check('plugin filter added when OBS has only that', bp.cutouts.caster === 'plugin' && JSON.stringify(casterFilters()) === '["background_removal"]', [bp.cutouts, casterFilters()]);
+    mock.state.inputs['WU-cam-caster'].filters = [];
+    mock.state.filterKinds.push('nv_greenscreen_filter');
+    const bnv = await send('/api/obs/build-scenes');
+    check('NVIDIA filter preferred over the plugin', bnv.cutouts.caster === 'nvidia' && JSON.stringify(casterFilters()) === '["nv_greenscreen_filter"]' && mock.state.inputs['WU-cam-caster'].filters[0].filterName === 'Background Removal', [bnv.cutouts, mock.state.inputs['WU-cam-caster'].filters]);
+    const bkeep = await send('/api/obs/build-scenes');
+    check('a filter already there is kept, not doubled', bkeep.cutouts.caster === 'kept' && casterFilters().length === 1, [bkeep.cutouts, casterFilters()]);
+    check('other cameras get no filter', mock.state.inputs['WU-cam-crowd'].filters.length === 0 && mock.state.inputs['WU-cam-room'].filters.length === 0);
+    check('caster scene order survives rebuilds', JSON.stringify(casterItems()) === CASTER_ORDER, casterItems());
 
     check('game sound is added to the Scoreboard scene', b1.gameAudio === 'created-empty' && mock.state.inputs['WU-game-audio'].kind === 'wasapi_process_output_capture', b1.gameAudio);
     check('caster mics are off unless ticked', b1.casterMics === 'skipped' && !mock.state.inputs['WU-caster-mic-1'], b1.casterMics);
@@ -193,10 +216,13 @@ function openPage(role) {
     const b3 = await send('/api/obs/build-scenes');
     check('unticked scene removed', b3.removed.includes('WU: Crowd Cam') && !mock.sceneNames().includes('WU: Crowd Cam'), b3.removed);
     check('its camera input is kept', !!mock.state.inputs['WU-cam-crowd']);
-    await send('/api/prefs', { bxScenes: ['schedule', 'versus', 'cam-crowd', 'cam-room'] });
+    const backLeft = mock.state.inputs['WU-src-cam-caster-back'];
+    check('an unticked caster scene takes its background page', b3.removed.includes('WU: Caster Cam') && (!backLeft || backLeft.removed === true), [b3.removed, backLeft]);
+    await send('/api/prefs', { bxScenes: ['schedule', 'versus', 'cam-crowd', 'cam-room', 'cam-caster'] });
     const b4 = await send('/api/obs/build-scenes');
     check('re-ticked scene returns in order', JSON.stringify(mock.sceneNames()) === JSON.stringify(want), [mock.sceneNames(), b4.ordering, b4.moved]);
     check('re-ticked camera scene reuses its input', mock.items('WU: Crowd Cam')[0].sourceName === 'WU-cam-crowd' && mock.state.inputs['WU-cam-crowd'].settings.video_device_id === dev, mock.items('WU: Crowd Cam').map((i) => i.sourceName));
+    check('re-ticked caster scene is whole again', JSON.stringify(casterItems()) === CASTER_ORDER && casterFilters().length === 1, [casterItems(), casterFilters()]);
     await update({ game: 'rl', scoreboard: { style: 'rl' } });
     await send('/api/obs/build-scenes');
     check('Rocket League has no team logo images', !mock.state.inputs['WU-team-logo-a'] && !mock.items('WU: Gameplay/Scoreboard').some((i) => /team-logo/.test(i.sourceName)), mock.items('WU: Gameplay/Scoreboard').map((i) => i.sourceName));
@@ -224,9 +250,11 @@ function openPage(role) {
     const raised = await send('/api/obs/video');
     check('raised to 1080p60', raised.changed && raised.video.ok && JSON.stringify(mock.state.video) === JSON.stringify({ baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 }), [raised, mock.state.video]);
     const brb = pageOf('WU: Be Right Back', 'WU-src-brb').sceneItemTransform;
-    check('pages follow the canvas', raised.refitted === mock.sceneNames().length && mock.state.inputs['WU-src-brb'].settings.width === 1920 && mock.state.inputs['WU-src-brb'].settings.height === 1080 && brb.boundsWidth === 1920 && brb.boundsHeight === 1080, [raised.refitted, brb]);
+    // Every scene's page, and the Caster Cam's background page.
+    check('pages follow the canvas', raised.refitted === mock.sceneNames().length + 1 && mock.state.inputs['WU-src-brb'].settings.width === 1920 && mock.state.inputs['WU-src-brb'].settings.height === 1080 && brb.boundsWidth === 1920 && brb.boundsHeight === 1080, [raised.refitted, brb]);
     check('a page keeps its address', mock.state.inputs['WU-src-brb'].settings.url === `http://localhost:${PORT}/overlay?view=brb`);
     check('cameras follow the canvas', pageOf('WU: Crowd Cam', 'WU-cam-crowd').sceneItemTransform.boundsWidth === 1920 && pageOf('WU: Crowd Cam', 'WU-cam-crowd').sceneItemTransform.boundsHeight === 1080, pageOf('WU: Crowd Cam', 'WU-cam-crowd').sceneItemTransform);
+    check('caster background page follows the canvas', mock.state.inputs['WU-src-cam-caster-back'].settings.width === 1920 && pageOf('WU: Caster Cam', 'WU-src-cam-caster-back').sceneItemTransform.boundsHeight === 1080);
     // A larger canvas scaled down: only the output size is under.
     Object.assign(mock.state.video, { baseWidth: 2560, baseHeight: 1440, outputWidth: 1280, outputHeight: 720, fpsNumerator: 60000, fpsDenominator: 1001 });
     v = await video();
@@ -367,6 +395,15 @@ function openPage(role) {
     check('a stream with no camera on it', (await camRow('room')).live.state === 'idle');
     const bare = await send('/api/bx/cameras/room/link', { url: '127.0.0.1:8554/cam1' });
     check('an address with an RTSP port and no scheme is RTSP', bare.link === 'rtsp://127.0.0.1:8554/cam1' && mock.state.inputs['WU-stream-room'].settings.input === bare.link, bare);
+    // The Caster Cam takes a network address the same way; its new source
+    // gets the removal filter and stays above the background page.
+    const lc = await send('/api/bx/cameras/caster/link', { url: rtspUrl('live') });
+    const casterStream = mock.state.inputs['WU-stream-caster'] || { filters: [] };
+    check('caster stream: same media source as the other cameras', lc.applied === 'created' && kindOf('WU-stream-caster') === 'ffmpeg_source' && casterStream.settings.ffmpeg_options === 'rtsp_transport=tcp' && !mock.state.inputs['WU-cam-caster'], Object.keys(mock.state.inputs).filter((n) => /caster/.test(n)));
+    check('caster stream: background page, camera, page', JSON.stringify(sceneItems('WU: Caster Cam')) === JSON.stringify(['WU-src-cam-caster-back', 'WU-stream-caster', 'WU-src-cam-caster']), sceneItems('WU: Caster Cam'));
+    check('caster stream: removal filter on the new source', casterStream.filters.length === 1 && casterStream.filters[0].filterKind === 'nv_greenscreen_filter', casterStream.filters);
+    await send('/api/bx/cameras/caster/link', { default: true });
+    check('caster back to a device: filter on that source again', ((mock.state.inputs['WU-cam-caster'] || {}).filters || []).length === 1 && JSON.stringify(sceneItems('WU: Caster Cam')) === JSON.stringify(['WU-src-cam-caster-back', 'WU-cam-caster', 'WU-src-cam-caster']), sceneItems('WU: Caster Cam'));
     const bad = await send('/api/bx/cameras/room/link', { url: 'not an address' });
     check('something that is not an address is refused', !!bad.error && (await j('/api/bx')).cams.find((c) => c.id === 'room').link === bare.link, bad);
 

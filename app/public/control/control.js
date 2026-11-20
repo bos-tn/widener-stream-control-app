@@ -50,7 +50,9 @@ const BX = BRAND.broadcast || null;
 const BX_SCENES = BX ? [
   { key: 'schedule', label: 'This Week', note: 'matches this week' },
   { key: 'versus', label: 'Matchup', note: 'both teams, before the match' },
-].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: 'camera scene and window over the game' })), BX.cameraGroup ? [{ key: 'camera-group', label: BX.cameraGroup.label, note: 'three player feeds together for timeouts' }] : []) : [];
+].filter((s) => BX.scenes.includes(s.key)).concat(BX.cameras.map((c) => ({ key: `cam-${c.id}`, label: c.label, note: c.cutout ? 'person cut out over a background, and window over the game' : 'camera scene and window over the game' })), BX.cameraGroup ? [{ key: 'camera-group', label: BX.cameraGroup.label, note: 'three player feeds together for timeouts' }] : []) : [];
+// Camera scenes whose person is cut out over a background (v2.5.4).
+const CUTOUT_SCENES = new Set(BX ? BX.cameras.filter((c) => c.cutout).map((c) => `cam-${c.id}`) : []);
 // The typefaces the scene headlines can be set in, for a league with several.
 const HEAD_FONTS = (BRAND.headlineFonts && BRAND.headlineFonts.list) || [];
 
@@ -1142,6 +1144,17 @@ function buildResultHtml(res) {
     } else if (made === 'created') lines.push(`<li class="warn">Camera source added: <b>${esc(input)}</b>. No device selected: Broadcast &gt; Cameras.</li>`);
     else lines.push(`<li class="warn">No Video Capture Device source type in this OBS. Add a camera source named <b>${esc(input)}</b> manually.</li>`);
   });
+  // Cut-out cameras: which background removal OBS put on the camera.
+  Object.keys(res.cutouts || {}).forEach((id) => {
+    const cam = (BX && BX.cameras.find((c) => c.id === id)) || { label: id };
+    const how = res.cutouts[id];
+    if (how === 'nvidia') lines.push(`<li class="ok">${esc(cam.label)}: NVIDIA Background Removal added to the camera.</li>`);
+    else if (how === 'plugin') lines.push(`<li class="ok">${esc(cam.label)}: Background Removal (plugin) added to the camera.</li>`);
+    else if (how === 'kept') lines.push(`<li class="ok">${esc(cam.label)}: background removal present.</li>`);
+    else if (how === 'none') lines.push(`<li class="warn">${esc(cam.label)}: no background removal filter in this OBS, so the whole camera picture covers the background. Install one, restart OBS, then build scenes again:
+      <ul><li>NVIDIA RTX card: NVIDIA's Video Effects SDK for your card (nvidia.com, Broadcast SDK resources). OBS then offers <b>NVIDIA Background Removal</b>.</li>
+      <li>Any PC: the <b>Background Removal</b> plugin (obs-backgroundremoval).</li></ul></li>`);
+  });
   if ((res.removed || []).length) {
     lines.push(`<li class="ok">Removed unused scenes: ${esc(listText(res.removed.map(shortScene)))}.</li>`);
   }
@@ -1689,8 +1702,9 @@ if (BX) {
 }
 
 // The view a scene's background is kept under: every league graphic shares
-// one, and the Scoreboard has none (the game shows through it).
-function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || key.startsWith('cam-') || key === 'camera-group' ? '' : key; }
+// one, and the Scoreboard and camera scenes have none (the game or the
+// camera fills them), except a cut-out camera's.
+function bgView(key) { return key.startsWith('necc:') ? 'necc' : key === 'scoreboard' || (key.startsWith('cam-') && !CUTOUT_SCENES.has(key)) || key === 'camera-group' ? '' : key; }
 function bgValue(view) {
   const ok = (id) => BACKGROUNDS.some((b) => b.id === id);
   const picked = ((state && state.backgrounds) || {})[view];
